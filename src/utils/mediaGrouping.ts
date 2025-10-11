@@ -13,11 +13,13 @@ export interface MediaAsset {
 
 export interface GroupedMedia {
   albumMedia: (InputMediaPhoto | InputMediaVideo)[];
+  albumAssets: MediaAsset[];
   audios: MediaAsset[];
 }
 
 export function groupMediaForSending(mediaAssets: MediaAsset[]): GroupedMedia {
   const albumMedia: (InputMediaPhoto | InputMediaVideo)[] = [];
+  const albumAssets: MediaAsset[] = [];
   const audios: MediaAsset[] = [];
 
   for (const asset of mediaAssets) {
@@ -26,6 +28,7 @@ export function groupMediaForSending(mediaAssets: MediaAsset[]): GroupedMedia {
         type: 'photo',
         media: asset.file_id || asset.source_url || '',
       });
+      albumAssets.push(asset);
     } else if (asset.kind === 'video') {
       albumMedia.push({
         type: 'video',
@@ -34,10 +37,11 @@ export function groupMediaForSending(mediaAssets: MediaAsset[]): GroupedMedia {
         height: asset.height || undefined,
         duration: asset.duration || undefined,
       });
+      albumAssets.push(asset);
     } else if (asset.kind === 'audio') {
       audios.push(asset);
     }
   }
 
-  return { albumMedia, audios };
+  return { albumMedia, albumAssets, audios };
 }
