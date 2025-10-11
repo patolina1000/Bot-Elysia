@@ -21,6 +21,12 @@ export interface StartTemplateResponse {
   prices?: unknown;
 }
 
+export interface AdminBotFeatures {
+  id: string;
+  slug: string;
+  features: Record<string, boolean>;
+}
+
 async function listBotsMinimal(): Promise<AdminBotMinimal[]> {
   const result = await pool.query(
     `SELECT
@@ -77,9 +83,40 @@ async function getStartTemplate(botId: string): Promise<StartTemplateResponse | 
   };
 }
 
+async function getBotFeaturesBySlug(slug: string): Promise<AdminBotFeatures | null> {
+  const result = await pool.query(
+    `SELECT b.id, b.slug,
+            COALESCE(
+              (SELECT json_object_agg(bf.key, bf.enabled)
+               FROM bot_features bf
+               WHERE bf.bot_id = b.id),
+              '{}'::json
+            ) AS features
+       FROM bots b
+       WHERE b.slug = $1
+       LIMIT 1`,
+    [slug]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  const features =
+    typeof row.features === 'object' && row.features !== null ? (row.features as Record<string, boolean>) : {};
+
+  return {
+    id: row.id,
+    slug: row.slug,
+    features,
+  };
+}
+
 export const adminBotsDb = {
   listBotsMinimal,
   getStartTemplate,
+  getBotFeaturesBySlug,
 };
 
 export type AdminBotsDb = typeof adminBotsDb;
