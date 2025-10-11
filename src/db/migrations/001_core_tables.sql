@@ -1,4 +1,4 @@
-CREATE TABLE bots (
+CREATE TABLE IF NOT EXISTS bots (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
@@ -8,22 +8,21 @@ CREATE TABLE bots (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE bot_features (
+CREATE TABLE IF NOT EXISTS bot_features (
   bot_id UUID REFERENCES bots(id) ON DELETE CASCADE,
   key TEXT NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   PRIMARY KEY (bot_id, key)
 );
 
-CREATE TABLE templates_start (
+CREATE TABLE IF NOT EXISTS templates_start (
   bot_id UUID PRIMARY KEY REFERENCES bots(id) ON DELETE CASCADE,
   text TEXT NOT NULL,
   parse_mode TEXT DEFAULT 'Markdown',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- kind: 'photo' | 'video' | 'audio'
-CREATE TABLE media_assets (
+CREATE TABLE IF NOT EXISTS media_assets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   bot_id UUID REFERENCES bots(id) ON DELETE CASCADE,
   kind TEXT NOT NULL,
@@ -36,7 +35,7 @@ CREATE TABLE media_assets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE offers (
+CREATE TABLE IF NOT EXISTS offers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   bot_id UUID REFERENCES bots(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -45,16 +44,15 @@ CREATE TABLE offers (
   metadata JSONB
 );
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   bot_id UUID REFERENCES bots(id) ON DELETE CASCADE,
   tg_user_id BIGINT NOT NULL,
   first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (bot_id, tg_user_id)
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE funnel_events (
+CREATE TABLE IF NOT EXISTS funnel_events (
   id BIGSERIAL PRIMARY KEY,
   bot_id UUID REFERENCES bots(id) ON DELETE CASCADE,
   tg_user_id BIGINT,
@@ -66,7 +64,7 @@ CREATE TABLE funnel_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE campaigns (
+CREATE TABLE IF NOT EXISTS campaigns (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   bot_id UUID REFERENCES bots(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -76,7 +74,7 @@ CREATE TABLE campaigns (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE app_logs (
+CREATE TABLE IF NOT EXISTS app_logs (
   id BIGSERIAL PRIMARY KEY,
   bot_id UUID,
   level TEXT NOT NULL,
