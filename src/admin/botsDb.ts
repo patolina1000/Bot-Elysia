@@ -7,6 +7,7 @@ export interface AdminBotMinimal {
   name: string | null;
   created_at: string;
   token?: string | null;
+  warmup_chat_id?: string | null;
 }
 
 export interface StartTemplateMedia {
@@ -34,8 +35,10 @@ async function listBotsMinimal(): Promise<AdminBotMinimal[]> {
        b.slug,
        b.name,
        b.created_at,
-       pgp_sym_decrypt(b.token_encrypted, $1)::text AS token
+       pgp_sym_decrypt(b.token_encrypted, $1)::text AS token,
+       settings.warmup_chat_id
      FROM bots b
+     LEFT JOIN public.tg_bot_settings settings ON settings.bot_slug = b.slug
      ORDER BY b.created_at ASC`,
     [getEncryptionKey()]
   );
@@ -46,6 +49,7 @@ async function listBotsMinimal(): Promise<AdminBotMinimal[]> {
     name: row.name,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
     token: row.token,
+    warmup_chat_id: row.warmup_chat_id ? String(row.warmup_chat_id) : null,
   }));
 }
 
@@ -113,10 +117,27 @@ async function getBotFeaturesBySlug(slug: string): Promise<AdminBotFeatures | nu
   };
 }
 
+async function getBotIdBySlug(slug: string): Promise<string | null> {
+  const result = await pool.query(`SELECT id FROM bots WHERE slug = $1 LIMIT 1`, [slug]);
+  const row = result.rows[0];
+  return row ? (row.id as string) : null;
+}
+
+async function upsertWarmupChatId(slug: string, warmupChatId: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO public.tg_bot_settings (bot_slug, warmup_chat_id)
+     VALUES ($1, $2)
+     ON CONFLICT (bot_slug) DO UPDATE SET warmup_chat_id = EXCLUDED.warmup_chat_id`,
+    [slug, warmupChatId]
+  );
+}
+
 export const adminBotsDb = {
   listBotsMinimal,
   getStartTemplate,
   getBotFeaturesBySlug,
+  getBotIdBySlug,
+  upsertWarmupChatId,
 };
 
 export type AdminBotsDb = typeof adminBotsDb;

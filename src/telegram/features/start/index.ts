@@ -1,9 +1,10 @@
-import { Composer, InputFile } from 'grammy';
+import { Composer } from 'grammy';
 import { MyContext } from '../../grammYContext.js';
 import { funnelService } from '../../../services/FunnelService.js';
 import { mediaService } from '../../../services/MediaService.js';
 import { startService } from './startService.js';
 import { groupMediaForSending, type MediaAsset } from '../../../utils/mediaGrouping.js';
+import { telegramMediaCache } from '../../../services/TelegramMediaCache.js';
 
 export const startFeature = new Composer<MyContext>();
 
@@ -39,58 +40,9 @@ startFeature.command('start', async (ctx) => {
 
     const mediaAssets = await mediaService.getMediaByBotId(botId);
 
-    const getFilenameFromUrl = (url: string | null, fallback: string) => {
-      if (!url) {
-        return fallback;
-      }
-
-      try {
-        const parsed = new URL(url);
-        const segments = parsed.pathname.split('/').filter(Boolean);
-        if (segments.length > 0) {
-          return decodeURIComponent(segments[segments.length - 1]);
-        }
-      } catch (error) {
-        ctx.logger.debug({ error, url }, 'Failed to derive filename from url');
-      }
-
-      return fallback;
-    };
-
-    const toInputFile = async (assetUrl: string, fallbackName: string) => {
-      const response = await fetch(assetUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch media ${assetUrl}: ${response.status}`);
-      }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const filename = getFilenameFromUrl(assetUrl, fallbackName);
-      return new InputFile(buffer, filename);
-    };
-
-    const resolveMediaInput = async (
-      asset: MediaAsset,
-      fallbackName: string
-    ) => {
-      if (asset.file_id) {
-        return asset.file_id;
-      }
-
-      if (asset.source_url) {
-        return toInputFile(asset.source_url, fallbackName);
-      }
-
-      throw new Error(`Media asset ${asset.id} missing file_id and source_url`);
-    };
-
-    const mediaItems: StartMediaItem[] = mediaAssets.map((asset) => ({
-      kind: asset.kind,
-      url: asset.source_url,
-      asset,
-    }));
-
-    if (mediaItems.length > 0) {
-      ctx.logger.info({ tgUserId, count: mediaItems.length }, '[START][media] sending');
-      await sendStartMediasFirst(ctx, mediaItems, resolveMediaInput);
+    if (mediaAssets.length > 0) {
+      ctx.logger.info({ tgUserId, count: mediaAssets.length }, '[START][media] sending');
+      await sendStartMediasFirst(ctx, mediaAssets, template.parse_mode ?? null);
     }
 
     const parseMode = template.parse_mode === 'HTML' ? 'HTML' : 'Markdown';
@@ -106,23 +58,14 @@ startFeature.command('start', async (ctx) => {
   }
 });
 
-type StartMediaItem = {
-  kind: 'photo' | 'video' | 'audio';
-  url: string | null;
-  asset: MediaAsset;
-};
-
 const VISUAL_SEND_DELAY_MS = 150;
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function sendStartMediasFirst(
   ctx: MyContext,
-  mediaItems: StartMediaItem[],
-  resolveMediaInput: (
-    asset: MediaAsset,
-    fallbackName: string
-  ) => Promise<string | InputFile>
+  mediaAssets: MediaAsset[],
+  templateParseMode: string | null
 ) {
   const chatId = ctx.chat?.id;
   if (!chatId) {
@@ -130,7 +73,6 @@ async function sendStartMediasFirst(
     return;
   }
 
-  const mediaAssets = mediaItems.map((item) => item.asset);
   const { albumAssets, audios } = groupMediaForSending(mediaAssets);
 
   if (audios.length > 0) {
@@ -139,19 +81,9 @@ async function sendStartMediasFirst(
     for (let index = 0; index < audios.length; index++) {
       const audio = audios[index];
       try {
-        const fallbackName = `start-audio-${index + 1}.mp3`;
-        const mediaInput = await resolveMediaInput(audio, fallbackName);
-
-        const sentMsg = await ctx.api.sendAudio(chatId, mediaInput, {
-          duration: audio.duration || undefined,
-        });
-
-        if (!audio.file_id && sentMsg.audio) {
-          await mediaService.updateFileId(
-            audio.id,
-            sentMsg.audio.file_id,
-            sentMsg.audio.file_unique_id
-          );
+        const sentMsg = await sendMediaWithCache(ctx, audio, chatId, templateParseMode ?? undefined);
+        if (!audio.file_id && sentMsg?.audio) {
+          await mediaService.updateFileId(audio.id, sentMsg.audio.file_id, sentMsg.audio.file_unique_id);
         }
       } catch (audioError) {
         ctx.logger.error({ err: audioError, tgUserId: ctx.from?.id, audioId: audio.id }, 'Error sending start audio');
@@ -169,38 +101,20 @@ async function sendStartMediasFirst(
           continue;
         }
 
-        const fallbackExtension = asset.kind === 'photo'
-          ? 'jpg'
-          : asset.kind === 'video'
-          ? 'mp4'
-          : 'dat';
-        const fallbackName = `start-${asset.kind}-${index + 1}.${fallbackExtension}`;
-
         try {
-          const mediaInput = await resolveMediaInput(asset, fallbackName);
+          const sentMessage = await sendMediaWithCache(ctx, asset, chatId, templateParseMode ?? undefined);
 
-          if (asset.kind === 'photo') {
-            const sentMessage = await ctx.api.sendPhoto(chatId, mediaInput);
-
-            if (!asset.file_id && sentMessage.photo) {
-              const photo = sentMessage.photo[sentMessage.photo.length - 1];
+          if (!asset.file_id && asset.kind === 'photo' && sentMessage?.photo) {
+            const photo = sentMessage.photo[sentMessage.photo.length - 1];
+            if (photo) {
               await mediaService.updateFileId(asset.id, photo.file_id, photo.file_unique_id);
             }
-          } else if (asset.kind === 'video') {
-            const sentMessage = await ctx.api.sendVideo(chatId, mediaInput, {
-              duration: asset.duration || undefined,
-              width: asset.width || undefined,
-              height: asset.height || undefined,
-              supports_streaming: true,
-            });
-
-            if (!asset.file_id && sentMessage.video) {
-              await mediaService.updateFileId(
-                asset.id,
-                sentMessage.video.file_id,
-                sentMessage.video.file_unique_id
-              );
-            }
+          } else if (!asset.file_id && asset.kind === 'video' && sentMessage?.video) {
+            await mediaService.updateFileId(
+              asset.id,
+              sentMessage.video.file_id,
+              sentMessage.video.file_unique_id
+            );
           }
         } catch (visualError) {
           ctx.logger.error({ err: visualError, tgUserId: ctx.from?.id, assetId: asset.id }, 'Error sending start visual');
@@ -213,4 +127,31 @@ async function sendStartMediasFirst(
       await ctx.reply('⚠️ Não consegui carregar as mídias agora. Tente novamente em instantes.');
     }
   }
+}
+
+async function sendMediaWithCache(
+  ctx: MyContext,
+  asset: MediaAsset,
+  chatId: number,
+  parseMode?: string
+) {
+  const message = await telegramMediaCache.sendCached({
+    token: ctx.bot_token,
+    bot_slug: ctx.bot_slug,
+    chat_id: chatId,
+    item: {
+      key: asset.id,
+      type: asset.kind,
+      source_url: asset.source_url,
+      caption: null,
+      parse_mode: parseMode ?? null,
+      file_id: asset.file_id ?? undefined,
+      file_unique_id: asset.file_unique_id ?? undefined,
+      width: asset.width ?? undefined,
+      height: asset.height ?? undefined,
+      duration: asset.duration ?? undefined,
+    },
+  });
+
+  return message as any;
 }

@@ -90,13 +90,14 @@ async function decryptBotToken(tokenEncrypted: Buffer, slug: string): Promise<st
   }
 }
 
-function registerBotFeatures(bot: Bot<MyContext>, config: BotRow) {
+function registerBotFeatures(bot: Bot<MyContext>, config: BotRow, token: string) {
   const features = config.features ?? {};
   const botLogger = rootLogger.child({ bot_id: config.id, bot_slug: config.slug });
 
   bot.use(async (ctx, next) => {
     ctx.bot_id = config.id;
     ctx.bot_slug = config.slug;
+    ctx.bot_token = token;
     ctx.logger = botLogger;
     ctx.db = pool;
     await next();
@@ -145,7 +146,7 @@ export async function getOrCreateBotBySlug(slug: string): Promise<Bot<MyContext>
 
   const bot = new Bot<MyContext>(token);
 
-  registerBotFeatures(bot, botRow);
+  registerBotFeatures(bot, botRow, token);
 
   logger.info({ botId: botRow.id, botSlug: slug }, 'Creating new bot instance');
 
