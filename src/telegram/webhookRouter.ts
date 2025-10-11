@@ -41,7 +41,7 @@ webhookRouter.post('/tg/:botSlug/webhook', async (req: Request, res: Response): 
     let botInstance = botInstances.get(botConfig.id);
     if (!botInstance) {
       logger.info({ botId: botConfig.id, botSlug }, 'Creating new bot instance');
-      botInstance = createBot(botConfig);
+      botInstance = await createBot(botConfig);
       botInstances.set(botConfig.id, botInstance);
     }
 

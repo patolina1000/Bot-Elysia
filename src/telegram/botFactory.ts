@@ -8,8 +8,11 @@ import { funnelsFeature } from './features/funnels/index.js';
 import { broadcastFeature } from './features/broadcast/index.js';
 import { paymentsFeature } from './features/payments/index.js';
 
-export function createBot(config: BotConfig): Bot<MyContext> {
+export async function createBot(config: BotConfig): Promise<Bot<MyContext>> {
   const bot = new Bot<MyContext>(config.token);
+
+  // Initialize the bot - ESSENTIAL for grammY
+  await bot.init();
 
   // Inject custom context
   bot.use(async (ctx, next) => {
