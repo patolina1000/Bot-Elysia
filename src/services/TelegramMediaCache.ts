@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { pool } from '../db/pool.js';
 import { getEncryptionKey } from '../utils/crypto.js';
+import { profileSend } from './TelegramSendProfiler.js';
 
 export type TelegramMediaType = 'photo' | 'video' | 'audio' | 'document' | 'voice';
 
@@ -248,7 +249,15 @@ export class TelegramMediaCache {
       { bot_slug, key: item.key, type: item.type, method: mapping.method, chat_id: warmup_chat_id },
       '[warmup] sending to Telegram'
     );
-    const res = await this.tg(mapping.method, token, payload);
+    const res = await profileSend(
+      {
+        bot_slug,
+        chat_id: String(warmup_chat_id),
+        media_key: item.key,
+        route: 'warmup_to_channel',
+      },
+      () => this.tg(mapping.method, token, payload)
+    );
     log.info?.(
       { bot_slug, key: item.key, type: item.type, ok: res.ok, error_code: res.error_code },
       '[warmup] telegram response received'
@@ -309,14 +318,37 @@ export class TelegramMediaCache {
       parse_mode: item.parse_mode ?? undefined,
     };
 
-    const sendBy = async (value: string) => {
+    type SendRoute = 'file_id' | 'url_fallback' | 'file_id_after_warm';
+    const chatIdStr = String(chat_id);
+
+    const sendBy = async (value: string, route: SendRoute) => {
       const payload = { ...basePayload, [mapping.field]: value };
       if (item.type === 'video') {
         payload['supports_streaming'] = true;
       }
-      const res = await this.tg(mapping.method, token, payload);
+      const res = await profileSend(
+        {
+          bot_slug,
+          chat_id: chatIdStr,
+          media_key: item.key,
+          route,
+        },
+        () => this.tg(mapping.method, token, payload)
+      );
       if (!res.ok) {
-        throw new Error(res.description || 'telegram send error');
+        const description = res.description || 'telegram send error';
+        console.warn(
+          {
+            bot_slug,
+            chat_id: chatIdStr,
+            key: item.key,
+            route,
+            error_code: res.error_code,
+            description,
+          },
+          '[SEND] telegram returned error'
+        );
+        throw new Error(description);
       }
       const info = extractFileInfo(res.result, item.type);
       if (info.file_id) {
@@ -333,25 +365,34 @@ export class TelegramMediaCache {
           status: 'warm',
         });
       }
+      console.info({ bot_slug, chat_id: chatIdStr, key: item.key, route }, '[SEND] ok');
       return res.result;
     };
 
-    const fileIdsToTry: (string | null | undefined)[] = [
-      item.file_id,
+    const fileIdsToTry: Array<{ value: string | null | undefined; route: SendRoute }> = [
+      { value: item.file_id, route: 'file_id' },
     ];
 
     const cache = await this.getCache(bot_slug, item.key);
     if (cache?.file_id) {
-      fileIdsToTry.push(cache.file_id);
+      fileIdsToTry.push({ value: cache.file_id, route: 'file_id' });
     }
 
     for (const candidate of fileIdsToTry) {
-      if (!candidate) {
+      if (!candidate?.value) {
         continue;
       }
       try {
-        return await sendBy(candidate);
+        return await sendBy(candidate.value, candidate.route);
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const label = candidate.route === 'file_id'
+          ? '[SEND] file_id failed, will warm & retry'
+          : '[SEND] route failed, trying next option';
+        console.warn(
+          { bot_slug, chat_id: chatIdStr, key: item.key, route: candidate.route, err: errMsg },
+          label
+        );
         // continue to next candidate
       }
     }
@@ -376,7 +417,7 @@ export class TelegramMediaCache {
       throw new Error(`Falha ao aquecer mídia ${bot_slug}/${item.key}`);
     }
 
-    return await sendBy(warmed.file_id);
+    return await sendBy(warmed.file_id, 'file_id_after_warm');
   }
 
   async warmAllForBot(bot: BotMediaCacheConfig, logger: LoggerLike = console) {

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { authAdminMiddleware } from '../http/middleware/authAdmin.js';
 import { adminBotsDb } from './botsDb.js';
 import { telegramMediaCache } from '../services/TelegramMediaCache.js';
+import { getRecentSends, getSendStats } from '../services/TelegramSendProfiler.js';
 
 export const adminBotsRouter = Router();
 
@@ -170,6 +171,26 @@ adminBotsRouter.get(
       req.log?.error({ error, slug: req.params.slug }, 'Failed to fetch media cache');
       res.status(500).json({ error: 'failed_to_fetch_media_cache' });
     }
+  }
+);
+
+adminBotsRouter.get(
+  '/admin/api/metrics/telegram-sends',
+  authAdminMiddleware,
+  (req: Request, res: Response) => {
+    const rawLimit = Number.parseInt(String(req.query.limit ?? ''), 10);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(400, rawLimit)) : 120;
+    const items = getRecentSends(limit);
+    res.json({ ok: true, items });
+  }
+);
+
+adminBotsRouter.get(
+  '/admin/api/metrics/telegram-sends/stats',
+  authAdminMiddleware,
+  (_req: Request, res: Response) => {
+    const stats = getSendStats();
+    res.json({ ok: true, stats });
   }
 );
 
