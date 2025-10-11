@@ -1,0 +1,91 @@
+# Render Blueprint
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: telegram-multi-bot-service
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: npm install && npm run build && npm run migrate
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: NODE_ENV
+        value: production
+      - key: APP_BASE_URL
+        sync: false
+        description: "Base URL do seu serviço (ex: https://seu-servico.onrender.com)"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: telegram-bots-db
+          property: connectionString
+      - key: ENCRYPTION_KEY
+        generateValue: true
+        description: "Chave para criptografar tokens (gerada automaticamente)"
+      - key: ADMIN_API_TOKEN
+        generateValue: true
+        description: "Token para acessar admin APIs (gerado automaticamente)"
+    healthCheckPath: /health
+
+databases:
+  - name: telegram-bots-db
+    region: oregon
+    plan: starter
+    databaseName: telegram_bots
+    user: telegram_user
+
+# Configuração de Cron Jobs (opcional)
+# https://render.com/docs/cronjobs
+# 
+# jobs:
+#   - type: cron
+#     name: run-campaigns
+#     env: node
+#     schedule: "0 */4 * * *"  # A cada 4 horas
+#     buildCommand: npm install && npm run build
+#     startCommand: npm run jobs:campaigns
+#     envVars: <referência ao serviço principal>
+# 
+#   - type: cron
+#     name: housekeeping
+#     env: node
+#     schedule: "0 2 * * *"  # Todo dia às 2h
+#     buildCommand: npm install && npm run build
+#     startCommand: npm run jobs:housekeeping
+#     envVars: <referência ao serviço principal>
+
+# Instruções de Deploy:
+#
+# 1. Crie uma conta no Render: https://render.com
+#
+# 2. Conecte seu repositório GitHub/GitLab
+#
+# 3. Crie um novo Web Service:
+#    - Nome: telegram-multi-bot-service
+#    - Environment: Node
+#    - Build Command: npm install && npm run build && npm run migrate
+#    - Start Command: npm start
+#
+# 4. Configure as variáveis de ambiente:
+#    - PORT: 8080
+#    - APP_BASE_URL: https://seu-servico.onrender.com (URL fornecida pelo Render)
+#    - DATABASE_URL: (criar PostgreSQL database no Render)
+#    - ENCRYPTION_KEY: (gerar uma senha forte)
+#    - ADMIN_API_TOKEN: (gerar um token seguro)
+#    - NODE_ENV: production
+#
+# 5. Criar PostgreSQL Database:
+#    - No dashboard do Render, vá em "New +" > "PostgreSQL"
+#    - Nome: telegram-bots-db
+#    - Copie a "Internal Database URL" e cole em DATABASE_URL
+#
+# 6. Deploy!
+#    - O Render vai fazer build, rodar migrations e iniciar o serviço
+#    - Acesse https://seu-servico.onrender.com/health para verificar
+#    - Acesse https://seu-servico.onrender.com/admin-wizard.html para criar bots
+#
+# 7. (Opcional) Configure Cron Jobs para campanhas e housekeeping
+#
+# Pronto! Seu serviço multi-bot está no ar 🚀
