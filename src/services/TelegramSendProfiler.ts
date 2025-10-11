@@ -1,6 +1,11 @@
 const MAX_ENTRIES = 400;
 
-export type TelegramSendRoute = 'file_id' | 'url_fallback' | 'file_id_after_warm' | 'warmup_to_channel';
+export type TelegramSendRoute =
+  | 'file_id'
+  | 'url_fallback'
+  | 'file_id_after_warm'
+  | 'warmup_to_channel'
+  | 'keepalive_ping';
 
 export interface TelegramSendProfileMeta {
   bot_slug: string;
@@ -24,6 +29,7 @@ export interface TelegramSendProfileEntry {
 
 let lastGlobalSentAt = 0;
 const lastSentByChat = new Map<string, number>();
+const lastSentByBot = new Map<string, number>();
 const entries: TelegramSendProfileEntry[] = [];
 
 function pushEntry(entry: TelegramSendProfileEntry) {
@@ -65,7 +71,7 @@ export async function profileSend<T>(meta: TelegramSendProfileMeta, fn: () => Pr
     lastGlobalSentAt = endWall;
     lastSentByChat.set(meta.chat_id, endWall);
 
-    pushEntry({
+    const entry: TelegramSendProfileEntry = {
       ts: timestamp,
       bot_slug: meta.bot_slug,
       chat_id: meta.chat_id,
@@ -76,7 +82,10 @@ export async function profileSend<T>(meta: TelegramSendProfileMeta, fn: () => Pr
       gapGlobal_ms: gapGlobal,
       gapChat_ms: gapChat,
       error: error ? String(error) : null,
-    });
+    };
+
+    pushEntry(entry);
+    lastSentByBot.set(meta.bot_slug, endWall);
   }
 }
 
@@ -120,5 +129,9 @@ export function getSendStats() {
     routes,
     lastGlobalSentAt,
   };
+}
+
+export function getLastSentByBot() {
+  return new Map(lastSentByBot.entries());
 }
 
