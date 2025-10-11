@@ -141,6 +141,32 @@ async function sendStartMediasFirst(
   const mediaAssets = mediaItems.map((item) => item.asset);
   const { albumMedia, albumAssets, audios } = groupMediaForSending(mediaAssets);
 
+  if (audios.length > 0) {
+    ctx.logger.info({ tgUserId: ctx.from?.id, count: audios.length }, '[START][media] audios');
+
+    for (let index = 0; index < audios.length; index++) {
+      const audio = audios[index];
+      try {
+        const fallbackName = `start-audio-${index + 1}.mp3`;
+        const mediaInput = await resolveMediaInput(audio, fallbackName);
+
+        const sentMsg = await ctx.api.sendAudio(chatId, mediaInput, {
+          duration: audio.duration || undefined,
+        });
+
+        if (!audio.file_id && sentMsg.audio) {
+          await mediaService.updateFileId(
+            audio.id,
+            sentMsg.audio.file_id,
+            sentMsg.audio.file_unique_id
+          );
+        }
+      } catch (audioError) {
+        ctx.logger.error({ err: audioError, tgUserId: ctx.from?.id, audioId: audio.id }, 'Error sending start audio');
+      }
+    }
+  }
+
   if (albumMedia.length > 0) {
     ctx.logger.info({ tgUserId: ctx.from?.id, count: albumMedia.length }, '[START][media] visuals');
 
@@ -261,32 +287,6 @@ async function sendStartMediasFirst(
     } catch (mediaError) {
       ctx.logger.error({ err: mediaError, tgUserId: ctx.from?.id }, 'Error sending start media');
       await ctx.reply('⚠️ Não consegui carregar as mídias agora. Tente novamente em instantes.');
-    }
-  }
-
-  if (audios.length > 0) {
-    ctx.logger.info({ tgUserId: ctx.from?.id, count: audios.length }, '[START][media] audios');
-
-    for (let index = 0; index < audios.length; index++) {
-      const audio = audios[index];
-      try {
-        const fallbackName = `start-audio-${index + 1}.mp3`;
-        const mediaInput = await resolveMediaInput(audio, fallbackName);
-
-        const sentMsg = await ctx.api.sendAudio(chatId, mediaInput, {
-          duration: audio.duration || undefined,
-        });
-
-        if (!audio.file_id && sentMsg.audio) {
-          await mediaService.updateFileId(
-            audio.id,
-            sentMsg.audio.file_id,
-            sentMsg.audio.file_unique_id
-          );
-        }
-      } catch (audioError) {
-        ctx.logger.error({ err: audioError, tgUserId: ctx.from?.id, audioId: audio.id }, 'Error sending start audio');
-      }
     }
   }
 }
