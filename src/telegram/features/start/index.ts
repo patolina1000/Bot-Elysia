@@ -15,7 +15,7 @@ startFeature.command('start', async (ctx) => {
     return;
   }
 
-  ctx.logger.info({ tgUserId }, 'Received /start command');
+  ctx.logger.info({ botSlug: ctx.bot_slug, tgUserId }, 'Received /start');
 
   try {
     // Upsert user
