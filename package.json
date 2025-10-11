@@ -1,0 +1,45 @@
+{
+  "name": "telegram-multi-bot-service",
+  "version": "1.0.0",
+  "description": "Multi-bot Telegram service with admin APIs and funnel analytics",
+  "main": "dist/server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "migrate": "tsx src/db/runMigrations.ts",
+    "jobs:campaigns": "tsx src/jobs/runCampaigns.ts",
+    "jobs:housekeeping": "tsx src/jobs/housekeeping.ts"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "grammy",
+    "multi-bot",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "grammy": "^1.21.1",
+    "pg": "^8.11.3",
+    "pino": "^8.19.0",
+    "pino-http": "^9.0.0",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.19",
+    "@types/pg": "^8.11.0",
+    "@types/uuid": "^9.0.8",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}

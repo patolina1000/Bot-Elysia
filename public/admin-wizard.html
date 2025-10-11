@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Wizard - Multi-Bot Telegram</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 32px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 16px;
+    }
+    .section {
+      margin-bottom: 30px;
+    }
+    .section h2 {
+      color: #667eea;
+      font-size: 20px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      color: #555;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+      font-family: inherit;
+    }
+    .media-list {
+      border: 2px dashed #e0e0e0;
+      border-radius: 6px;
+      padding: 15px;
+      min-height: 100px;
+    }
+    .media-item {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    .media-item select {
+      width: 120px;
+    }
+    .media-item input {
+      flex: 1;
+    }
+    .btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .btn:hover {
+      background: #5568d3;
+    }
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+    .btn-secondary:hover {
+      background: #d0d0d0;
+    }
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 14px;
+    }
+    .response {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 6px;
+      display: none;
+    }
+    .response.success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      display: block;
+    }
+    .response.error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+      display: block;
+    }
+    .response pre {
+      margin-top: 10px;
+      background: rgba(0,0,0,0.05);
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    .config-display {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    .config-display label {
+      font-weight: 600;
+      color: #667eea;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🤖 Admin Wizard</h1>
+    <p class="subtitle">Crie e configure bots do Telegram sem escrever código</p>
+
+    <div class="config-display">
+      <label>API Base URL:</label>
+      <input type="text" id="apiBaseUrl" value="http://localhost:8080" placeholder="https://seu-servico.onrender.com">
+      <label style="margin-top: 10px;">Admin Token:</label>
+      <input type="password" id="adminToken" placeholder="seu-admin-token">
+    </div>
+
+    <!-- Step 1: Create Bot -->
+    <div class="section">
+      <h2>1️⃣ Criar Bot</h2>
+      <div class="form-group">
+        <label>Nome do Bot</label>
+        <input type="text" id="botName" placeholder="Bot Curso X">
+      </div>
+      <div class="form-group">
+        <label>Slug (URL amigável)</label>
+        <input type="text" id="botSlug" placeholder="curso-x">
+      </div>
+      <div class="form-group">
+        <label>Token do Telegram</label>
+        <input type="text" id="botToken" placeholder="123456:ABC-DEF1234ghIkl...">
+      </div>
+      <div class="form-group">
+        <label>Webhook Secret</label>
+        <input type="text" id="webhookSecret" placeholder="segredo-super-secreto-123">
+      </div>
+      <button class="btn" onclick="createBot()">Criar Bot</button>
+      <div id="createBotResponse" class="response"></div>
+    </div>
+
+    <!-- Step 2: Configure /start -->
+    <div class="section">
+      <h2>2️⃣ Configurar /start</h2>
+      <div class="form-group">
+        <label>Bot ID (do passo anterior)</label>
+        <input type="text" id="startBotId" placeholder="uuid-do-bot">
+      </div>
+      <div class="form-group">
+        <label>Texto de Boas-vindas</label>
+        <textarea id="startText" placeholder="👋 Bem-vindo ao *Curso X*!&#10;&#10;Aqui você vai aprender..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Parse Mode</label>
+        <select id="parseMode">
+          <option value="Markdown">Markdown</option>
+          <option value="HTML">HTML</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Mídias (Fotos, Vídeos, Áudios)</label>
+        <div class="media-list" id="mediaList">
+          <p style="color: #999; font-size: 14px;">Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios</p>
+        </div>
+        <button class="btn btn-secondary btn-small" onclick="addMedia()">➕ Adicionar Mídia</button>
+      </div>
+      <button class="btn" onclick="saveStartTemplate()">Salvar Template /start</button>
+      <div id="startTemplateResponse" class="response"></div>
+    </div>
+
+    <!-- Step 3: Create Offer -->
+    <div class="section">
+      <h2>3️⃣ Criar Oferta</h2>
+      <div class="form-group">
+        <label>Bot ID</label>
+        <input type="text" id="offerBotId" placeholder="uuid-do-bot">
+      </div>
+      <div class="form-group">
+        <label>Nome da Oferta</label>
+        <input type="text" id="offerName" placeholder="Plano Completo">
+      </div>
+      <div class="form-group">
+        <label>Preço (em centavos)</label>
+        <input type="number" id="offerPrice" placeholder="9900" value="9900">
+      </div>
+      <div class="form-group">
+        <label>Moeda</label>
+        <input type="text" id="offerCurrency" placeholder="BRL" value="BRL">
+      </div>
+      <button class="btn" onclick="createOffer()">Criar Oferta</button>
+      <div id="offerResponse" class="response"></div>
+    </div>
+  </div>
+
+  <script>
+    function getHeaders() {
+      const token = document.getElementById('adminToken').value;
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+    }
+
+    function getApiUrl() {
+      return document.getElementById('apiBaseUrl').value;
+    }
+
+    function showResponse(elementId, success, message, data = null) {
+      const el = document.getElementById(elementId);
+      el.className = `response ${success ? 'success' : 'error'}`;
+      el.innerHTML = `<strong>${success ? '✅ Sucesso!' : '❌ Erro!'}</strong><br>${message}`;
+      if (data) {
+        el.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+      }
+    }
+
+    async function createBot() {
+      const name = document.getElementById('botName').value;
+      const slug = document.getElementById('botSlug').value;
+      const token = document.getElementById('botToken').value;
+      const webhookSecret = document.getElementById('webhookSecret').value;
+
+      if (!name || !slug || !token || !webhookSecret) {
+        showResponse('createBotResponse', false, 'Preencha todos os campos!');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${getApiUrl()}/admin/bots`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            name,
+            slug,
+            token,
+            webhook_secret: webhookSecret,
+            features: {
+              'core-start': true,
+              'funnels': true,
+              'broadcast': true,
+              'payments': true
+            }
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showResponse('createBotResponse', true, 'Bot criado com sucesso!', data);
+          document.getElementById('startBotId').value = data.bot_id;
+          document.getElementById('offerBotId').value = data.bot_id;
+        } else {
+          showResponse('createBotResponse', false, 'Erro ao criar bot', data);
+        }
+      } catch (err) {
+        showResponse('createBotResponse', false, `Erro: ${err.message}`);
+      }
+    }
+
+    function addMedia() {
+      const list = document.getElementById('mediaList');
+      if (list.querySelector('p')) {
+        list.innerHTML = '';
+      }
+
+      const item = document.createElement('div');
+      item.className = 'media-item';
+      item.innerHTML = `
+        <select class="media-type">
+          <option value="photo">Foto</option>
+          <option value="video">Vídeo</option>
+          <option value="audio">Áudio</option>
+        </select>
+        <input type="url" class="media-url" placeholder="https://...">
+        <button class="btn btn-secondary btn-small" onclick="this.parentElement.remove()">🗑️</button>
+      `;
+      list.appendChild(item);
+    }
+
+    async function saveStartTemplate() {
+      const botId = document.getElementById('startBotId').value;
+      const text = document.getElementById('startText').value;
+      const parseMode = document.getElementById('parseMode').value;
+
+      if (!botId || !text) {
+        showResponse('startTemplateResponse', false, 'Preencha Bot ID e Texto!');
+        return;
+      }
+
+      const mediaItems = [];
+      document.querySelectorAll('.media-item').forEach(item => {
+        const type = item.querySelector('.media-type').value;
+        const url = item.querySelector('.media-url').value;
+        if (url) {
+          mediaItems.push({ type, media: url });
+        }
+      });
+
+      try {
+        const response = await fetch(`${getApiUrl()}/admin/bots/${botId}/templates/start`, {
+          method: 'PUT',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            text,
+            parse_mode: parseMode,
+            media: mediaItems
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showResponse('startTemplateResponse', true, 'Template /start salvo com sucesso!', data);
+        } else {
+          showResponse('startTemplateResponse', false, 'Erro ao salvar template', data);
+        }
+      } catch (err) {
+        showResponse('startTemplateResponse', false, `Erro: ${err.message}`);
+      }
+    }
+
+    async function createOffer() {
+      const botId = document.getElementById('offerBotId').value;
+      const name = document.getElementById('offerName').value;
+      const price = parseInt(document.getElementById('offerPrice').value);
+      const currency = document.getElementById('offerCurrency').value;
+
+      if (!botId || !name || !price) {
+        showResponse('offerResponse', false, 'Preencha todos os campos!');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${getApiUrl()}/admin/offers`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            bot_id: botId,
+            name,
+            price_cents: price,
+            currency
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showResponse('offerResponse', true, 'Oferta criada com sucesso!', data);
+        } else {
+          showResponse('offerResponse', false, 'Erro ao criar oferta', data);
+        }
+      } catch (err) {
+        showResponse('offerResponse', false, `Erro: ${err.message}`);
+      }
+    }
+  </script>
+</body>
+</html>
