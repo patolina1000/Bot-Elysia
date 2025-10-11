@@ -114,6 +114,43 @@
       cursor: not-allowed;
     }
 
+    #media-cache-table {
+      margin-top: 8px;
+      font-size: 13px;
+      overflow-x: auto;
+    }
+
+    #media-cache-table table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 420px;
+    }
+
+    #media-cache-table th,
+    #media-cache-table td {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      vertical-align: top;
+      word-break: break-all;
+    }
+
+    #media-cache-table th {
+      background: #f9fafb;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    #media-cache-table tbody tr:nth-child(even) td {
+      background: #f3f4f6;
+    }
+
+    #media-cache-table .placeholder {
+      color: #6b7280;
+      font-style: italic;
+      padding: 8px 4px;
+    }
+
     main.card {
       background: #ffffff;
       border-radius: 12px;
@@ -621,6 +658,13 @@
         </div>
 
         <div class="form-section">
+          <div style="font-weight:600; color:#1f2937;">Cache de mídias (diagnóstico)</div>
+          <div id="media-cache-table">
+            <div class="placeholder">Selecione um bot para visualizar o cache.</div>
+          </div>
+        </div>
+
+        <div class="form-section">
           <label for="parse-mode">Parse Mode</label>
           <select id="parse-mode">
             <option value="Markdown">Markdown</option>
@@ -693,6 +737,8 @@
       const warmupChatInput = document.getElementById('warmup-chat-id');
       const saveWarmupBtn = document.getElementById('save-warmup');
       const doWarmupBtn = document.getElementById('do-warmup');
+      const mediaCacheTable = document.getElementById('media-cache-table');
+      let mediaCacheRequestId = 0;
       const nbSlugInput = document.getElementById('nb-slug');
       const nbTokenInput = document.getElementById('nb-token');
       const nbTitleInput = document.getElementById('nb-title');
@@ -736,6 +782,91 @@
         }, 3000);
       }
 
+      function renderMediaCachePlaceholder(message) {
+        if (!mediaCacheTable) {
+          return;
+        }
+        mediaCacheTable.innerHTML = '';
+        const placeholder = document.createElement('div');
+        placeholder.className = 'placeholder';
+        placeholder.textContent = message;
+        mediaCacheTable.appendChild(placeholder);
+      }
+
+      async function refreshMediaCache(slug) {
+        if (!mediaCacheTable) {
+          return;
+        }
+        if (!slug) {
+          renderMediaCachePlaceholder('Configure o slug do bot para visualizar o cache.');
+          return;
+        }
+
+        const requestId = ++mediaCacheRequestId;
+        renderMediaCachePlaceholder('Carregando cache…');
+
+        try {
+          const data = await fetchJSON(`/admin/api/bots/${encodeURIComponent(slug)}/media-cache`);
+          if (requestId !== mediaCacheRequestId) {
+            return;
+          }
+          const items = Array.isArray(data?.items) ? data.items : [];
+          if (items.length === 0) {
+            renderMediaCachePlaceholder('Nenhum item no cache ainda.');
+            return;
+          }
+
+          const table = document.createElement('table');
+          const thead = document.createElement('thead');
+          const headRow = document.createElement('tr');
+          ['key', 'type', 'status', 'file_id', 'last_warmed'].forEach((label) => {
+            const th = document.createElement('th');
+            th.textContent = label;
+            headRow.appendChild(th);
+          });
+          thead.appendChild(headRow);
+          table.appendChild(thead);
+
+          const tbody = document.createElement('tbody');
+          items.forEach((item) => {
+            const row = document.createElement('tr');
+
+            const keyCell = document.createElement('td');
+            keyCell.textContent = item.media_key || '';
+            row.appendChild(keyCell);
+
+            const typeCell = document.createElement('td');
+            typeCell.textContent = item.media_type || '';
+            row.appendChild(typeCell);
+
+            const statusCell = document.createElement('td');
+            statusCell.textContent = item.status || '';
+            row.appendChild(statusCell);
+
+            const fileCell = document.createElement('td');
+            fileCell.textContent = item.file_id || '';
+            row.appendChild(fileCell);
+
+            const warmedCell = document.createElement('td');
+            const warmedValue = item.last_warmed_at ? String(item.last_warmed_at) : '';
+            warmedCell.textContent = warmedValue;
+            row.appendChild(warmedCell);
+
+            tbody.appendChild(row);
+          });
+
+          table.appendChild(tbody);
+          mediaCacheTable.innerHTML = '';
+          mediaCacheTable.appendChild(table);
+        } catch (error) {
+          if (requestId !== mediaCacheRequestId) {
+            return;
+          }
+          const message = error instanceof Error ? error.message : 'Erro ao carregar cache.';
+          renderMediaCachePlaceholder(message);
+        }
+      }
+
       async function fetchJSON(url, opts = {}) {
         const headers = new Headers(opts.headers || {});
         const token = getAdminToken();
@@ -771,6 +902,9 @@
         }
         noBotsEl.classList.toggle('hidden', hasBots);
         paneEl.classList.toggle('hidden', !hasBots || !state.currentBotId);
+        if (!hasBots || !state.currentBotId) {
+          renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.');
+        }
       }
 
       function deepClone(value) {
@@ -1210,6 +1344,12 @@
           doWarmupBtn.disabled = !bot.warmup_chat_id;
         }
 
+        if (bot.slug) {
+          void refreshMediaCache(bot.slug);
+        } else {
+          renderMediaCachePlaceholder('Configure o slug do bot para visualizar o cache.');
+        }
+
         const origin = window.location.origin.replace(/\/$/, '');
         if (bot.slug) {
           webhookEl.textContent = `${origin}/tg/${bot.slug}/webhook`;
@@ -1232,7 +1372,7 @@
           return;
         }
         try {
-          await fetchJSON(`/admin/bots/${encodeURIComponent(bot.slug)}/warmup-chat`, {
+          await fetchJSON(`/admin/api/bots/${encodeURIComponent(bot.slug)}/warmup-chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ warmup_chat_id: value }),
@@ -1255,12 +1395,23 @@
           return;
         }
         try {
-          await fetchJSON(`/admin/bots/${encodeURIComponent(bot.slug)}/warmup`, {
+          const response = await fetchJSON(`/admin/api/bots/${encodeURIComponent(bot.slug)}/warmup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({}),
           });
-          showToast('Aquecimento iniciado!');
+          const lines = Array.isArray(response?.results)
+            ? response.results.map((item) => {
+                if (item.status === 'warm') {
+                  return `✅ ${item.key} → ${item.file_id || 'sem file_id'}`;
+                }
+                return `❌ ${item.key} → ${item.error || 'erro desconhecido'}`;
+              })
+            : [];
+          alert(`Warmup executado (${response?.count ?? 0} itens)\n${lines.join('\n')}`);
+          if (bot.slug) {
+            await refreshMediaCache(bot.slug);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Erro ao aquecer mídias.';
           alert(message);

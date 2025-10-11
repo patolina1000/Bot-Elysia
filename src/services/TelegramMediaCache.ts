@@ -57,6 +57,7 @@ interface WarmOneParams {
   token: string;
   warmup_chat_id: string;
   item: TelegramMediaRegistryItem;
+  logger?: LoggerLike;
 }
 
 interface SendCachedParams {
@@ -220,7 +221,8 @@ export class TelegramMediaCache {
     return rows[0] ?? null;
   }
 
-  async warmOne({ bot_slug, token, warmup_chat_id, item }: WarmOneParams) {
+  async warmOne({ bot_slug, token, warmup_chat_id, item, logger }: WarmOneParams) {
+    const log = logger ?? console;
     if (!item.source_url) {
       throw new Error(`[warmOne] ${bot_slug}/${item.key} missing source_url`);
     }
@@ -242,8 +244,20 @@ export class TelegramMediaCache {
       payload['supports_streaming'] = true;
     }
 
+    log.info?.(
+      { bot_slug, key: item.key, type: item.type, method: mapping.method, chat_id: warmup_chat_id },
+      '[warmup] sending to Telegram'
+    );
     const res = await this.tg(mapping.method, token, payload);
+    log.info?.(
+      { bot_slug, key: item.key, type: item.type, ok: res.ok, error_code: res.error_code },
+      '[warmup] telegram response received'
+    );
     if (!res.ok) {
+      log.error?.(
+        { bot_slug, key: item.key, method: mapping.method, error: res },
+        '[warmup] telegram returned error'
+      );
       await this.upsertCache({
         bot_slug,
         media_key: item.key,
@@ -257,10 +271,14 @@ export class TelegramMediaCache {
 
     const info = extractFileInfo(res.result, item.type);
     if (!info.file_id) {
+      log.error?.(
+        { bot_slug, key: item.key, result: res.result },
+        '[warmup] missing file_id after telegram response'
+      );
       throw new Error(`[warmOne] ${bot_slug}/${item.key} não capturou file_id`);
     }
 
-    return this.upsertCache({
+    const saved = await this.upsertCache({
       bot_slug,
       media_key: item.key,
       media_type: item.type,
@@ -272,6 +290,11 @@ export class TelegramMediaCache {
       duration: info.duration,
       status: 'warm',
     });
+    log.info?.(
+      { bot_slug, key: item.key, file_id: saved.file_id, file_unique_id: saved.file_unique_id },
+      '[warmup] cached successfully'
+    );
+    return saved;
   }
 
   async sendCached({ token, bot_slug, chat_id, item }: SendCachedParams) {
@@ -343,7 +366,12 @@ export class TelegramMediaCache {
       throw new Error(`warmup_chat_id ausente para ${bot_slug}`);
     }
 
-    const warmed = await this.warmOne({ bot_slug, token, warmup_chat_id: bot.warmup_chat_id, item });
+    const warmed = await this.warmOne({
+      bot_slug,
+      token,
+      warmup_chat_id: bot.warmup_chat_id,
+      item,
+    });
     if (!warmed?.file_id) {
       throw new Error(`Falha ao aquecer mídia ${bot_slug}/${item.key}`);
     }
@@ -371,6 +399,7 @@ export class TelegramMediaCache {
           token: bot.token,
           warmup_chat_id: bot.warmup_chat_id,
           item,
+          logger,
         });
         logger.info?.({ slug: bot.slug, key: item.key }, '[warmup] ok');
       } catch (err) {
@@ -405,6 +434,17 @@ export class TelegramMediaCache {
   async findBotConfig(slug: string): Promise<BotMediaCacheConfig | undefined> {
     const bots = await this.listBotsFn();
     return bots.find((bot) => bot.slug === slug);
+  }
+
+  async listCacheForBot(bot_slug: string) {
+    const { rows } = await this.pg.query(
+      `SELECT media_key, media_type, status, file_id, file_unique_id, width, height, duration, last_warmed_at
+       FROM public.bot_media_cache
+       WHERE bot_slug = $1
+       ORDER BY media_key ASC`,
+      [bot_slug]
+    );
+    return rows;
   }
 }
 
