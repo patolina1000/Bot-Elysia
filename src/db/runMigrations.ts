@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { pool } from "./pool.js";
+import { pool } from "./pool";
 
 async function run() {
   const client = await pool.connect();

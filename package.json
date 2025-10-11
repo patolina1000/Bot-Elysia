@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Multi-bot Telegram service with admin APIs and funnel analytics",
   "main": "dist/server.js",
-  "type": "module",
+  "type": "commonjs",
   "engines": {
     "node": ">=20 <26"
   },
