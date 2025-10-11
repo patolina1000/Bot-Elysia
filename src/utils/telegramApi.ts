@@ -1,3 +1,4 @@
+import { fetch } from "undici";
 import { logger } from '../logger.js';
 
 export interface SetWebhookParams {
