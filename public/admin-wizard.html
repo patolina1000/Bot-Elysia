@@ -662,6 +662,10 @@
           <div id="media-cache-table">
             <div class="placeholder">Selecione um bot para visualizar o cache.</div>
           </div>
+          <div style="margin-top:16px; display:flex; flex-direction:column; gap:8px;">
+            <button id="btn-metrics" type="button" class="btn-secondary">Ver métricas de envio (últimos 100)</button>
+            <div id="metrics-box"></div>
+          </div>
         </div>
 
         <div class="form-section">
@@ -738,6 +742,8 @@
       const saveWarmupBtn = document.getElementById('save-warmup');
       const doWarmupBtn = document.getElementById('do-warmup');
       const mediaCacheTable = document.getElementById('media-cache-table');
+      const metricsBtn = document.getElementById('btn-metrics');
+      const metricsBox = document.getElementById('metrics-box');
       let mediaCacheRequestId = 0;
       const nbSlugInput = document.getElementById('nb-slug');
       const nbTokenInput = document.getElementById('nb-token');
@@ -780,6 +786,15 @@
         toastTimer = setTimeout(() => {
           toastEl.classList.remove('show');
         }, 3000);
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
       }
 
       function renderMediaCachePlaceholder(message) {
@@ -864,6 +879,81 @@
           }
           const message = error instanceof Error ? error.message : 'Erro ao carregar cache.';
           renderMediaCachePlaceholder(message);
+        }
+      }
+
+      metricsBtn?.addEventListener('click', loadMetrics);
+
+      async function loadMetrics() {
+        if (!metricsBox) {
+          return;
+        }
+        metricsBtn?.setAttribute('disabled', 'disabled');
+        metricsBox.innerHTML = '<div class="placeholder">Carregando métricas…</div>';
+        try {
+          const [listData, statsData] = await Promise.all([
+            fetchJSON('/admin/api/metrics/telegram-sends?limit=100'),
+            fetchJSON('/admin/api/metrics/telegram-sends/stats'),
+          ]);
+          const items = Array.isArray(listData?.items) ? listData.items : [];
+          const stats = statsData?.stats || {};
+
+          const routeStats = stats.routes || {};
+          const routesHtml = Object.keys(routeStats).length
+            ? `<ul>${Object.keys(routeStats)
+                .map((route) => {
+                  const info = routeStats[route] || {};
+                  const count = info.count ?? 0;
+                  const p50 = info.p50_ms ?? '-';
+                  const p95 = info.p95_ms ?? '-';
+                  const p99 = info.p99_ms ?? '-';
+                  return `<li><strong>${escapeHtml(route)}</strong>: count=${escapeHtml(count)} p50=${escapeHtml(p50)}ms p95=${escapeHtml(p95)}ms p99=${escapeHtml(p99)}ms</li>`;
+                })
+                .join('')}</ul>`
+            : '<div class="placeholder">Sem métricas por rota ainda.</div>';
+
+          const rows = items
+            .map((item) => {
+              return `<tr>
+                <td>${escapeHtml(item.ts)}</td>
+                <td>${escapeHtml(item.bot_slug)}</td>
+                <td>${escapeHtml(item.chat_id)}</td>
+                <td>${escapeHtml(item.media_key || '')}</td>
+                <td>${escapeHtml(item.route)}</td>
+                <td>${item.ok ? 'ok' : 'erro'}</td>
+                <td>${escapeHtml(item.tg_ms)}ms</td>
+                <td>${escapeHtml(item.gapGlobal_ms)}ms</td>
+                <td>${escapeHtml(item.gapChat_ms)}ms</td>
+                <td>${escapeHtml(item.error || '')}</td>
+              </tr>`;
+            })
+            .join('');
+
+          const tableHtml = items.length
+            ? `<div style="overflow:auto; max-height:320px; border:1px solid #e5e7eb; border-radius:8px;">
+                <table class="table" style="width:100%; min-width:720px; border-collapse:collapse;">
+                  <thead>
+                    <tr>
+                      <th>ts</th><th>bot</th><th>chat</th><th>key</th><th>rota</th>
+                      <th>status</th><th>tg_ms</th><th>gapGlobal</th><th>gapChat</th><th>erro</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>`
+            : '<div class="placeholder">Nenhum envio registrado ainda.</div>';
+
+          metricsBox.innerHTML = `
+            <div><strong>Resumo:</strong> total=${escapeHtml(stats.total ?? 0)}</div>
+            ${routesHtml}
+            ${tableHtml}
+          `;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Falha ao carregar métricas.';
+          metricsBox.innerHTML = `<div class="placeholder">${escapeHtml(message)}</div>`;
+          showToast(message);
+        } finally {
+          metricsBtn?.removeAttribute('disabled');
         }
       }
 
