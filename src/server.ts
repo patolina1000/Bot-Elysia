@@ -2,8 +2,11 @@ import { createApp } from './app.js';
 import { env } from './env.js';
 import { logger } from './logger.js';
 import { pool } from './db/pool.js';
+import { telegramMediaCache } from './services/TelegramMediaCache.js';
 
 const app = createApp();
+
+telegramMediaCache.scheduleHourlyWarmup(logger);
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'Server started');

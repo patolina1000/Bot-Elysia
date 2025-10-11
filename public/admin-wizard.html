@@ -612,6 +612,12 @@
             <code id="hdr-webhook" class="mono"></code>
             <button id="copy-webhook" type="button">Copiar</button>
           </div>
+          <div>
+            <span>Warmup chat ID:</span>
+            <input id="warmup-chat-id" type="text" placeholder="-1001234567890" class="mono" />
+            <button id="save-warmup" type="button">Salvar</button>
+            <button id="do-warmup" type="button">Aquecer agora</button>
+          </div>
         </div>
 
         <div class="form-section">
@@ -684,6 +690,9 @@
       const noBotsEl = document.getElementById('no-bots');
       const tabsScroll = document.getElementById('tabs-scroll');
       const toastEl = document.getElementById('toast');
+      const warmupChatInput = document.getElementById('warmup-chat-id');
+      const saveWarmupBtn = document.getElementById('save-warmup');
+      const doWarmupBtn = document.getElementById('do-warmup');
       const nbSlugInput = document.getElementById('nb-slug');
       const nbTokenInput = document.getElementById('nb-token');
       const nbTitleInput = document.getElementById('nb-title');
@@ -766,6 +775,13 @@
 
       function deepClone(value) {
         return value == null ? value : JSON.parse(JSON.stringify(value));
+      }
+
+      function getCurrentBot() {
+        if (!state.currentBotId) {
+          return null;
+        }
+        return state.bots.find((bot) => bot.id === state.currentBotId) || null;
       }
 
       function getBotIdFromHash() {
@@ -1187,6 +1203,13 @@
           tokenEl.value = '*****';
         }
 
+        if (warmupChatInput instanceof HTMLInputElement) {
+          warmupChatInput.value = bot.warmup_chat_id || '';
+        }
+        if (doWarmupBtn instanceof HTMLButtonElement) {
+          doWarmupBtn.disabled = !bot.warmup_chat_id;
+        }
+
         const origin = window.location.origin.replace(/\/$/, '');
         if (bot.slug) {
           webhookEl.textContent = `${origin}/tg/${bot.slug}/webhook`;
@@ -1196,6 +1219,53 @@
           copyBtn.disabled = true;
         }
       }
+
+      saveWarmupBtn?.addEventListener('click', async () => {
+        const bot = getCurrentBot();
+        if (!bot || !bot.slug) {
+          alert('Selecione um bot com slug configurado.');
+          return;
+        }
+        const value = warmupChatInput instanceof HTMLInputElement ? warmupChatInput.value.trim() : '';
+        if (!value) {
+          alert('Informe o chat ID de warmup.');
+          return;
+        }
+        try {
+          await fetchJSON(`/admin/bots/${encodeURIComponent(bot.slug)}/warmup-chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ warmup_chat_id: value }),
+          });
+          bot.warmup_chat_id = value;
+          if (doWarmupBtn instanceof HTMLButtonElement) {
+            doWarmupBtn.disabled = false;
+          }
+          showToast('Warmup chat salvo!');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao salvar warmup chat.';
+          alert(message);
+        }
+      });
+
+      doWarmupBtn?.addEventListener('click', async () => {
+        const bot = getCurrentBot();
+        if (!bot || !bot.slug) {
+          alert('Selecione um bot com slug configurado.');
+          return;
+        }
+        try {
+          await fetchJSON(`/admin/bots/${encodeURIComponent(bot.slug)}/warmup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          showToast('Aquecimento iniciado!');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao aquecer mídias.';
+          alert(message);
+        }
+      });
 
       if (newBotBtn && newBotModal && typeof newBotModal.showModal === 'function') {
         newBotBtn.addEventListener('click', () => {
