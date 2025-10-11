@@ -82,12 +82,47 @@
       gap: 10px;
       margin-bottom: 10px;
       align-items: center;
+      flex-wrap: wrap;
     }
     .media-item select {
       width: 120px;
     }
     .media-item input {
       flex: 1;
+    }
+    .media-file-btn {
+      background: #eef;
+      border: 1px solid #99c;
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 14px;
+      color: #334;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 140px;
+    }
+    .media-file-btn:hover {
+      background: #e6efff;
+    }
+    .media-dropzone {
+      border: 1px dashed #bbb;
+      border-radius: 6px;
+      padding: 12px;
+      color: #666;
+      text-align: center;
+      margin-top: 8px;
+      font-size: 13px;
+      transition: all 0.2s ease;
+      width: 100%;
+      flex-basis: 100%;
+    }
+    .media-dropzone.dragover {
+      background: #f7fbff;
+      border-color: #69f;
+      color: #222;
     }
     .btn {
       background: #667eea;
@@ -241,12 +276,20 @@
   </div>
 
   <script>
-    function getHeaders() {
+    function getAuthHeaderValue() {
       const token = document.getElementById('adminToken').value;
-      return {
+      return token ? `Bearer ${token}` : '';
+    }
+
+    function getHeaders() {
+      const headers = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      };
+      } as Record<string, string>;
+      const authHeader = getAuthHeaderValue();
+      if (authHeader) {
+        headers.Authorization = authHeader;
+      }
+      return headers;
     }
 
     function getApiUrl() {
@@ -320,9 +363,115 @@
           <option value="audio">Áudio</option>
         </select>
         <input type="url" class="media-url" placeholder="https://...">
-        <button class="btn btn-secondary btn-small" onclick="this.parentElement.remove()">🗑️</button>
+        <label class="media-file-btn">
+          <input type="file" class="media-file" accept="image/*,video/*,audio/*" hidden>
+          <span>Enviar arquivo…</span>
+        </label>
+        <button type="button" class="btn btn-secondary btn-small media-remove">🗑️</button>
       `;
+
+      const dropzone = document.createElement('div');
+      dropzone.className = 'media-dropzone';
+      dropzone.textContent = 'Arraste e solte aqui sua mídia ou use “Enviar arquivo…”';
+      item.appendChild(dropzone);
+
       list.appendChild(item);
+      hookMediaItem(item);
+    }
+
+    function hookMediaItem(item) {
+      const removeBtn = item.querySelector('.media-remove');
+      const urlInput = item.querySelector('.media-url');
+      const fileInput = item.querySelector('.media-file');
+      let dropzone = item.querySelector('.media-dropzone');
+      if (!dropzone) {
+        dropzone = document.createElement('div');
+        dropzone.className = 'media-dropzone';
+        dropzone.textContent = 'Arraste e solte aqui sua mídia ou use “Enviar arquivo…”';
+        item.appendChild(dropzone);
+      }
+
+      async function uploadFile(file) {
+        if (!file) return;
+        if (!/^(image|video|audio)\//.test(file.type || '')) {
+          alert('Tipo de arquivo não suportado. Selecione uma imagem, vídeo ou áudio.');
+          return;
+        }
+        if (file.size > 20 * 1024 * 1024) {
+          alert('Arquivo maior que 20MB. Escolha um arquivo menor.');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        const btnLabel = item.querySelector('.media-file-btn span');
+        const originalText = btnLabel?.textContent;
+        if (btnLabel) btnLabel.textContent = 'Enviando…';
+
+        const baseUrl = document.getElementById('apiBaseUrl').value.trim();
+        const normalizedBase = baseUrl ? baseUrl.replace(/\/$/, '') : '';
+        const uploadEndpoint = normalizedBase ? `${normalizedBase}/admin/upload` : '/api/admin/upload';
+
+        try {
+          const headers: Record<string, string> = {};
+          const authHeader = getAuthHeaderValue();
+          if (authHeader) {
+            headers.Authorization = authHeader;
+          }
+
+          const response = await fetch(uploadEndpoint, {
+            method: 'POST',
+            body: formData,
+            headers,
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data?.ok || !data?.url) {
+            const reason = data?.error || response.statusText || 'Falha no upload.';
+            alert(`Erro no upload: ${reason}`);
+            return;
+          }
+          urlInput.value = data.url;
+        } catch (err) {
+          console.error(err);
+          alert('Erro ao enviar arquivo.');
+        } finally {
+          if (btnLabel) btnLabel.textContent = originalText || 'Enviar arquivo…';
+          if (fileInput) fileInput.value = '';
+        }
+      }
+
+      if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+          item.remove();
+          const list = document.getElementById('mediaList');
+          if (list && !list.querySelector('.media-item')) {
+            list.innerHTML = '<p style="color: #999; font-size: 14px;">Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios</p>';
+          }
+        });
+      }
+
+      if (fileInput) {
+        fileInput.addEventListener('change', (event) => {
+          const selectedFile = event.target?.files?.[0];
+          uploadFile(selectedFile);
+        });
+      }
+
+      if (dropzone) {
+        dropzone.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => {
+          dropzone.classList.remove('dragover');
+        });
+        dropzone.addEventListener('drop', (event) => {
+          event.preventDefault();
+          dropzone.classList.remove('dragover');
+          const droppedFile = event.dataTransfer?.files?.[0];
+          uploadFile(droppedFile);
+        });
+      }
     }
 
     async function saveStartTemplate() {
@@ -401,6 +550,8 @@
         showResponse('offerResponse', false, `Erro: ${err.message}`);
       }
     }
+
+    document.querySelectorAll('.media-item').forEach(item => hookMediaItem(item));
   </script>
 </body>
 </html>
