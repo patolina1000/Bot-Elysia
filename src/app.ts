@@ -5,6 +5,7 @@ import { requestIdMiddleware } from './http/middleware/requestId.js';
 import { errorHandler } from './http/middleware/errorHandler.js';
 import { router } from './http/routes.js';
 import { webhookRouter } from './telegram/webhookRouter.js';
+import { mountAdminUpload } from './admin/upload.js';
 
 export function createApp() {
   const app = express();
@@ -31,6 +32,7 @@ export function createApp() {
 
   // Serve static files (admin wizard)
   app.use(express.static('public'));
+  mountAdminUpload(app);
 
   // Routes
   app.use(webhookRouter);
