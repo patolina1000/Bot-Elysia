@@ -71,30 +71,41 @@
       min-height: 100px;
       font-family: inherit;
     }
-    .media-list {
-      border: 2px dashed #e0e0e0;
-      border-radius: 6px;
+    .media-box {
+      border: 1px dashed #cfcfe6;
+      border-radius: 10px;
       padding: 15px;
       min-height: 100px;
-    }
-    .media-item {
       display: flex;
-      gap: 10px;
-      margin-bottom: 10px;
-      align-items: center;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 8px;
     }
-    .media-item select {
+    .media-placeholder {
+      color: #8b8ba7;
+      font-size: 14px;
+    }
+    .media-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid #e5e5f7;
+      border-radius: 10px;
+      background: #fafaff;
+    }
+    .media-row select.media-type {
       width: 120px;
     }
-    .media-item input {
-      flex: 1;
+    .media-row input.media-url {
+      flex: 1 1 200px;
+      min-width: 180px;
     }
     .media-file-btn {
       background: #eef;
       border: 1px solid #99c;
       padding: 10px 14px;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       white-space: nowrap;
       font-size: 14px;
@@ -107,22 +118,35 @@
     .media-file-btn:hover {
       background: #e6efff;
     }
-    .media-dropzone {
+    .dropzone {
       border: 1px dashed #bbb;
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 12px;
       color: #666;
       text-align: center;
-      margin-top: 8px;
+      margin-top: 4px;
       font-size: 13px;
       transition: all 0.2s ease;
       width: 100%;
       flex-basis: 100%;
     }
-    .media-dropzone.dragover {
+    .dropzone.dragover {
       background: #f7fbff;
       border-color: #69f;
       color: #222;
+    }
+    .add-media-btn {
+      background: #e9ecff;
+      border: 1px solid #98a2ff;
+      border-radius: 10px;
+      padding: 10px 16px;
+      margin-top: 10px;
+      cursor: pointer;
+      color: #1e1e66;
+      font-weight: 600;
+    }
+    .add-media-btn:hover {
+      background: #dfe6ff;
     }
     .btn {
       background: #667eea;
@@ -242,10 +266,10 @@
       </div>
       <div class="form-group">
         <label>Mídias (Fotos, Vídeos, Áudios)</label>
-        <div class="media-list" id="mediaList">
-          <p style="color: #999; font-size: 14px;">Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios</p>
+        <div id="media-box" class="media-box" data-media-box>
+          <div class="media-placeholder">Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios</div>
         </div>
-        <button class="btn btn-secondary btn-small" onclick="addMedia()">➕ Adicionar Mídia</button>
+        <button id="btn-add-media" class="add-media-btn" type="button">➕ Adicionar Mídia</button>
       </div>
       <button class="btn" onclick="saveStartTemplate()">Salvar Template /start</button>
       <div id="startTemplateResponse" class="response"></div>
@@ -284,7 +308,7 @@
     function getHeaders() {
       const headers = {
         'Content-Type': 'application/json',
-      } as Record<string, string>;
+      };
       const authHeader = getAuthHeaderValue();
       if (authHeader) {
         headers.Authorization = authHeader;
@@ -359,54 +383,24 @@
       }
     }
 
-    function addMedia() {
-      const list = document.getElementById('mediaList');
-      if (list.querySelector('p')) {
-        list.innerHTML = '';
+    (function(){
+      const mediaBox = document.getElementById('media-box');
+      const addBtn = document.getElementById('btn-add-media');
+      if (!mediaBox) {
+        console.warn('[wizard] mediaBox não encontrado');
+        return;
       }
 
-      const item = document.createElement('div');
-      item.className = 'media-item';
-      item.innerHTML = `
-        <select class="media-type">
-          <option value="photo">Foto</option>
-          <option value="video">Vídeo</option>
-          <option value="audio">Áudio</option>
-        </select>
-        <input type="url" class="media-url" placeholder="https://...">
-        <label class="media-file-btn">
-          <input type="file" class="media-file" accept="image/*,video/*,audio/*" hidden>
-          <span>Enviar arquivo…</span>
-        </label>
-        <button type="button" class="btn btn-secondary btn-small media-remove">🗑️</button>
-      `;
-
-      const dropzone = document.createElement('div');
-      dropzone.className = 'media-dropzone';
-      dropzone.textContent = 'Arraste e solte aqui sua mídia ou use “Enviar arquivo…”';
-      item.appendChild(dropzone);
-
-      list.appendChild(item);
-      hookMediaItem(item);
-    }
-
-    function hookMediaItem(item) {
-      const removeBtn = item.querySelector('.media-remove');
-      const urlInput = item.querySelector('.media-url');
-      const fileInput = item.querySelector('.media-file');
-      let dropzone = item.querySelector('.media-dropzone');
-      if (!dropzone) {
-        dropzone = document.createElement('div');
-        dropzone.className = 'media-dropzone';
-        dropzone.textContent = 'Arraste e solte aqui sua mídia ou use “Enviar arquivo…”';
-        item.appendChild(dropzone);
+      function ensurePlaceholder() {
+        if (!mediaBox.querySelector('.media-row') && !mediaBox.querySelector('.media-placeholder')) {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'media-placeholder';
+          placeholder.textContent = 'Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios';
+          mediaBox.appendChild(placeholder);
+        }
       }
 
-      if (urlInput && urlInput.value) {
-        urlInput.value = absUrl(urlInput.value);
-      }
-
-      async function uploadFile(file) {
+      async function uploadFile(row, file) {
         if (!file) return;
         if (!/^(image|video|audio)\//.test(file.type || '')) {
           alert('Tipo de arquivo não suportado. Selecione uma imagem, vídeo ou áudio.');
@@ -419,22 +413,16 @@
 
         const formData = new FormData();
         formData.append('file', file);
-        const btnLabel = item.querySelector('.media-file-btn span');
+        const btnLabel = row.querySelector('.media-file-btn span');
         const originalText = btnLabel?.textContent;
         if (btnLabel) btnLabel.textContent = 'Enviando…';
 
-        const baseUrl = document.getElementById('apiBaseUrl').value.trim();
-        const normalizedBase = baseUrl ? baseUrl.replace(/\/$/, '') : '';
-        const uploadEndpoint = normalizedBase ? `${normalizedBase}/admin/upload` : '/api/admin/upload';
-
         try {
-          const headers: Record<string, string> = {};
           const authHeader = getAuthHeaderValue();
-          if (authHeader) {
-            headers.Authorization = authHeader;
-          }
+          const headers = {};
+          if (authHeader) headers.Authorization = authHeader;
 
-          const response = await fetch(uploadEndpoint, {
+          const response = await fetch('/api/admin/upload', {
             method: 'POST',
             body: formData,
             headers,
@@ -445,49 +433,109 @@
             alert(`Erro no upload: ${reason}`);
             return;
           }
-          urlInput.value = absUrl(data.url);
+          const urlInput = row.querySelector('.media-url');
+          if (urlInput) urlInput.value = absUrl(data.url);
         } catch (err) {
           console.error(err);
           alert('Erro ao enviar arquivo.');
         } finally {
           if (btnLabel) btnLabel.textContent = originalText || 'Enviar arquivo…';
+          const fileInput = row.querySelector('.media-file');
           if (fileInput) fileInput.value = '';
         }
       }
+      
+      function hookRow(row) {
+        const removeBtn = row.querySelector('.media-del');
+        const urlInput = row.querySelector('.media-url');
+        const fileInput = row.querySelector('.media-file');
+        const dropzone = row.querySelector('.dropzone');
 
-      if (removeBtn) {
-        removeBtn.addEventListener('click', () => {
-          item.remove();
-          const list = document.getElementById('mediaList');
-          if (list && !list.querySelector('.media-item')) {
-            list.innerHTML = '<p style="color: #999; font-size: 14px;">Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios</p>';
+        if (urlInput && urlInput.value) {
+          urlInput.value = absUrl(urlInput.value);
+        }
+
+        if (removeBtn) {
+          removeBtn.addEventListener('click', () => {
+            row.remove();
+            ensurePlaceholder();
+          });
+        }
+
+        if (fileInput) {
+          fileInput.addEventListener('change', (event) => {
+            const selectedFile = event?.target?.files?.[0];
+            uploadFile(row, selectedFile);
+          });
+        }
+
+        if (dropzone) {
+          dropzone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            dropzone.classList.add('dragover');
+          });
+          dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+          });
+          dropzone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dropzone.classList.remove('dragover');
+            const droppedFile = event?.dataTransfer?.files?.[0];
+            uploadFile(row, droppedFile);
+          });
+        }
+      }
+
+      function addRow(initial) {
+        const row = document.createElement('div');
+        row.className = 'media-row';
+        row.innerHTML = `
+          <select class="media-type">
+            <option value="photo">Foto</option>
+            <option value="video">Vídeo</option>
+            <option value="audio">Áudio</option>
+          </select>
+          <input type="url" class="media-url" placeholder="https://...">
+          <label class="media-file-btn">
+            <input type="file" class="media-file" accept="image/*,video/*,audio/*" hidden>
+            <span>Enviar arquivo…</span>
+          </label>
+          <button type="button" class="btn btn-secondary btn-small media-del" title="Remover">🗑️</button>
+          <div class="dropzone">Arraste e solte aqui sua mídia ou use “Enviar arquivo…”</div>
+        `;
+
+        mediaBox.appendChild(row);
+        const typeSelect = row.querySelector('.media-type');
+        const urlInput = row.querySelector('.media-url');
+        if (initial && typeof initial === 'object') {
+          if (typeSelect && initial.type) {
+            typeSelect.value = initial.type;
           }
-        });
+          if (urlInput && initial.url) {
+            urlInput.value = absUrl(initial.url);
+          }
+        }
+
+        hookRow(row);
+
+        const placeholder = mediaBox.querySelector('.media-placeholder');
+        if (placeholder) placeholder.remove();
       }
 
-      if (fileInput) {
-        fileInput.addEventListener('change', (event) => {
-          const selectedFile = event.target?.files?.[0];
-          uploadFile(selectedFile);
-        });
+      mediaBox.querySelectorAll('.media-row').forEach((row) => {
+        hookRow(row);
+        const placeholder = mediaBox.querySelector('.media-placeholder');
+        if (placeholder) placeholder.remove();
+      });
+
+      if (addBtn) {
+        addBtn.addEventListener('click', () => addRow());
+      } else {
+        console.warn('[wizard] botão "Adicionar Mídia" não encontrado');
       }
 
-      if (dropzone) {
-        dropzone.addEventListener('dragover', (event) => {
-          event.preventDefault();
-          dropzone.classList.add('dragover');
-        });
-        dropzone.addEventListener('dragleave', () => {
-          dropzone.classList.remove('dragover');
-        });
-        dropzone.addEventListener('drop', (event) => {
-          event.preventDefault();
-          dropzone.classList.remove('dragover');
-          const droppedFile = event.dataTransfer?.files?.[0];
-          uploadFile(droppedFile);
-        });
-      }
-    }
+      ensurePlaceholder();
+    })();
 
     async function saveStartTemplate() {
       const botId = document.getElementById('startBotId').value;
@@ -500,9 +548,11 @@
       }
 
       const mediaItems = [];
-      document.querySelectorAll('.media-item').forEach(item => {
-        const type = item.querySelector('.media-type').value;
-        const url = item.querySelector('.media-url').value;
+      document.querySelectorAll('.media-row').forEach(item => {
+        const typeEl = item.querySelector('.media-type');
+        const urlEl = item.querySelector('.media-url');
+        const type = typeEl ? typeEl.value : '';
+        const url = urlEl ? urlEl.value : '';
         if (url) {
           mediaItems.push({ type, media: url });
         }
@@ -566,13 +616,11 @@
       }
     }
 
-    document.querySelectorAll('.media-item').forEach(item => hookMediaItem(item));
-
     const form = document.querySelector('form');
     if (form) {
       form.addEventListener('submit', () => {
         document.querySelectorAll('.media-url').forEach((input) => {
-          if (input instanceof HTMLInputElement && input.value) {
+          if (input && input.value) {
             input.value = absUrl(input.value);
           }
         });
