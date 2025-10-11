@@ -155,6 +155,7 @@
       overflow-x: auto;
       gap: 6px;
       padding: 6px 0;
+      flex: 1 1 auto;
     }
 
     #tabs-scroll::-webkit-scrollbar {
@@ -190,7 +191,13 @@
       font-weight: 700;
     }
 
-    #tabs-actions button {
+    #bot-actions {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    #bot-actions button {
       padding: 8px 12px;
       border-radius: 8px;
       background: #e5e7eb;
@@ -198,7 +205,16 @@
       font-size: 16px;
     }
 
-    #tabs-actions button:hover {
+    #bot-actions button:first-child {
+      background: #6366f1;
+      color: #ffffff;
+    }
+
+    #bot-actions button:first-child:hover {
+      background: #4f46e5;
+    }
+
+    #bot-actions button:hover {
       background: #d1d5db;
     }
 
@@ -398,6 +414,94 @@
       font-size: 15px;
     }
 
+    dialog {
+      border: none;
+      border-radius: 12px;
+      padding: 0;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 25px 70px rgba(17, 24, 39, 0.35);
+    }
+
+    dialog::backdrop {
+      background: rgba(15, 23, 42, 0.45);
+    }
+
+    .modal-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 22px 26px 26px;
+      min-width: 320px;
+    }
+
+    .modal-form h3 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      color: #111827;
+    }
+
+    .modal-form label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      color: #1f2937;
+      font-size: 14px;
+    }
+
+    .modal-form > button {
+      align-self: flex-start;
+    }
+
+    .modal-form input[type='text'],
+    .modal-form input[type='password'],
+    .modal-form input[type='url'] {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+    }
+
+    .modal-form menu {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin: 12px 0 0;
+      padding: 0;
+    }
+
+    .modal-form menu button[value='cancel'] {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+
+    .modal-form menu button[value='cancel']:hover {
+      background: #d1d5db;
+    }
+
+    #toast {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: #111827;
+      color: #ffffff;
+      padding: 12px 16px;
+      border-radius: 10px;
+      box-shadow: 0 15px 45px rgba(17, 24, 39, 0.4);
+      font-size: 14px;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     .status {
       border-radius: 10px;
       padding: 12px 16px;
@@ -484,8 +588,9 @@
 
       <div id="tabs">
         <div id="tabs-scroll"></div>
-        <div id="tabs-actions">
-          <button id="refresh-bots" type="button" title="Recarregar bots">↻</button>
+        <div id="bot-actions">
+          <button id="btn-new-bot" type="button">+ Novo bot</button>
+          <button id="btn-refresh-bots" type="button" title="Recarregar bots">↻</button>
         </div>
       </div>
 
@@ -540,14 +645,53 @@
     </main>
   </div>
 
+  <dialog id="new-bot-modal">
+    <form method="dialog" id="new-bot-form" class="modal-form">
+      <h3>Novo bot</h3>
+      <label>Slug*
+        <input id="nb-slug" required pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$" />
+      </label>
+      <label>Token do Telegram*
+        <input id="nb-token" required type="password" autocomplete="off" />
+      </label>
+      <button type="button" id="nb-test-token">Testar token</button>
+      <label>Nome/Título
+        <input id="nb-title" />
+      </label>
+      <label>Secret webhook
+        <input id="nb-secret" placeholder="(opcional)" />
+      </label>
+      <label><input type="checkbox" id="nb-sethook" checked /> Setar webhook automaticamente</label>
+      <label><input type="checkbox" id="nb-empty" checked /> Criar template /start vazio</label>
+      <menu>
+        <button value="cancel">Cancelar</button>
+        <button id="nb-create" value="default">Criar</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
   <script>
     (() => {
       const tokenInput = document.getElementById('admin-token');
       const applyTokenBtn = document.getElementById('apply-token');
-      const refreshBtn = document.getElementById('refresh-bots');
+      const refreshBtn = document.getElementById('btn-refresh-bots');
+      const newBotBtn = document.getElementById('btn-new-bot');
+      const newBotModal = document.getElementById('new-bot-modal');
+      const newBotForm = document.getElementById('new-bot-form');
       const paneEl = document.getElementById('pane');
       const noBotsEl = document.getElementById('no-bots');
       const tabsScroll = document.getElementById('tabs-scroll');
+      const toastEl = document.getElementById('toast');
+      const nbSlugInput = document.getElementById('nb-slug');
+      const nbTokenInput = document.getElementById('nb-token');
+      const nbTitleInput = document.getElementById('nb-title');
+      const nbSecretInput = document.getElementById('nb-secret');
+      const nbSetHookInput = document.getElementById('nb-sethook');
+      const nbEmptyInput = document.getElementById('nb-empty');
+      const nbTestTokenBtn = document.getElementById('nb-test-token');
+      const nbCreateBtn = document.getElementById('nb-create');
 
       let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
       if (ADMIN_TOKEN) {
@@ -561,8 +705,26 @@
         cache: new Map(),
       };
 
+      let toastTimer = null;
+
       function getAdminToken() {
         return (ADMIN_TOKEN || '').trim();
+      }
+
+      function showToast(message) {
+        if (!message) return;
+        if (!toastEl) {
+          alert(message);
+          return;
+        }
+        toastEl.textContent = message;
+        toastEl.classList.add('show');
+        if (toastTimer) {
+          clearTimeout(toastTimer);
+        }
+        toastTimer = setTimeout(() => {
+          toastEl.classList.remove('show');
+        }, 3000);
       }
 
       async function fetchJSON(url, opts = {}) {
@@ -611,7 +773,7 @@
         return match ? match[1] : null;
       }
 
-      async function loadBots({ preserveSelection = true } = {}) {
+      async function loadBots({ preserveSelection = true, selectBotId = null } = {}) {
         try {
           const bots = await fetchJSON('/admin/bots');
           const previousId = preserveSelection ? state.currentBotId : null;
@@ -629,7 +791,16 @@
             }
           });
 
-          let targetId = getBotIdFromHash();
+          let targetId = null;
+          if (typeof selectBotId === 'string' && ids.has(selectBotId)) {
+            targetId = selectBotId;
+          }
+          if (!targetId) {
+            const hashId = getBotIdFromHash();
+            if (hashId && ids.has(hashId)) {
+              targetId = hashId;
+            }
+          }
           if (!targetId && previousId && ids.has(previousId)) {
             targetId = previousId;
           }
@@ -1026,6 +1197,136 @@
         }
       }
 
+      if (newBotBtn && newBotModal && typeof newBotModal.showModal === 'function') {
+        newBotBtn.addEventListener('click', () => {
+          if (newBotForm) {
+            newBotForm.reset();
+          }
+          if (nbSetHookInput) {
+            nbSetHookInput.checked = true;
+          }
+          if (nbEmptyInput) {
+            nbEmptyInput.checked = true;
+          }
+          if (nbSecretInput) {
+            nbSecretInput.value = '';
+          }
+          if (nbTokenInput) {
+            nbTokenInput.value = '';
+          }
+          newBotModal.showModal();
+          if (nbSlugInput) {
+            nbSlugInput.focus();
+          }
+        });
+      } else if (newBotBtn) {
+        newBotBtn.addEventListener('click', () => {
+          alert('Seu navegador não suporta a abertura do modal de novo bot.');
+        });
+      }
+
+      nbTestTokenBtn?.addEventListener('click', async () => {
+        const token = (nbTokenInput?.value || '').trim();
+        if (!token) {
+          alert('Informe o token');
+          return;
+        }
+        try {
+          const response = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+          const data = await response.json().catch(() => null);
+          if (data?.ok) {
+            const username = data?.result?.username ? `@${data.result.username}` : null;
+            alert(username ? `Token OK: ${username}` : 'Token OK');
+          } else {
+            alert('Token inválido');
+          }
+        } catch (error) {
+          console.warn(error);
+          alert('Token inválido');
+        }
+      });
+
+      nbCreateBtn?.addEventListener('click', async (event) => {
+        event.preventDefault();
+
+        const payload = {
+          slug: (nbSlugInput?.value || '').trim(),
+          token: (nbTokenInput?.value || '').trim(),
+          title: (nbTitleInput?.value || '').trim(),
+          secret: (nbSecretInput?.value || '').trim(),
+          setWebhook: nbSetHookInput ? Boolean(nbSetHookInput.checked) : true,
+          createEmptyTemplate: nbEmptyInput ? Boolean(nbEmptyInput.checked) : true,
+        };
+
+        if (!payload.slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(payload.slug)) {
+          alert('Slug inválido');
+          return;
+        }
+        if (!payload.token) {
+          alert('Informe o token');
+          return;
+        }
+
+        const adminToken = getAdminToken();
+        if (!adminToken) {
+          alert('Informe o token de admin para continuar.');
+          return;
+        }
+
+        const body = {
+          slug: payload.slug,
+          token: payload.token,
+          title: payload.title || null,
+          secret: payload.secret || null,
+          setWebhook: payload.setWebhook,
+          createEmptyTemplate: payload.createEmptyTemplate,
+        };
+
+        try {
+          if (nbCreateBtn) {
+            nbCreateBtn.disabled = true;
+          }
+          const res = await fetch('/admin/bots', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            if (res.status === 409) {
+              alert('Esse slug já está em uso.');
+            } else if (err?.error === 'telegram_token_invalid') {
+              alert('Token do Telegram inválido.');
+            } else if (err?.error === 'failed_to_set_webhook') {
+              alert('Não foi possível configurar o webhook automaticamente.');
+            } else {
+              alert(`Erro ao criar: ${res.status} ${err?.error || ''}`.trim());
+            }
+            return;
+          }
+
+          const bot = await res.json();
+          const newBotId = bot && typeof bot.id === 'string' ? bot.id : null;
+          newBotModal?.close();
+          if (newBotForm) {
+            newBotForm.reset();
+          }
+          await loadBots({ preserveSelection: false, selectBotId: newBotId });
+          showToast('Bot criado');
+        } catch (error) {
+          console.error(error);
+          alert('Falha ao criar bot');
+        } finally {
+          if (nbCreateBtn) {
+            nbCreateBtn.disabled = false;
+          }
+        }
+      });
+
       applyTokenBtn.addEventListener('click', () => {
         ADMIN_TOKEN = tokenInput.value.trim();
         if (!ADMIN_TOKEN) {
@@ -1050,7 +1351,7 @@
         }
       });
 
-      refreshBtn.addEventListener('click', () => {
+      refreshBtn?.addEventListener('click', () => {
         if (!getAdminToken()) {
           alert('Informe o token de admin para continuar.');
           return;
