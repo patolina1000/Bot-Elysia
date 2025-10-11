@@ -5,627 +5,1079 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Wizard - Multi-Bot Telegram</title>
   <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    }
+
     * {
       box-sizing: border-box;
-      margin: 0;
-      padding: 0;
     }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      margin: 0;
       min-height: 100vh;
-      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 24px;
+      color: #111827;
+      display: flex;
+      justify-content: center;
     }
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      padding: 40px;
-    }
-    h1 {
-      color: #333;
-      margin-bottom: 10px;
-      font-size: 32px;
-    }
-    .subtitle {
-      color: #666;
-      margin-bottom: 30px;
-      font-size: 16px;
-    }
-    .section {
-      margin-bottom: 30px;
-    }
-    .section h2 {
-      color: #667eea;
-      font-size: 20px;
-      margin-bottom: 15px;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #f0f0f0;
-    }
-    .form-group {
-      margin-bottom: 20px;
-    }
-    label {
-      display: block;
-      color: #555;
-      font-weight: 600;
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-    input, textarea, select {
+
+    .layout {
       width: 100%;
-      padding: 12px;
-      border: 2px solid #e0e0e0;
-      border-radius: 6px;
+      max-width: 960px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 25px 70px rgba(17, 24, 39, 0.35);
+      padding: 28px 28px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    header.top {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    header.top h1 {
+      font-size: 32px;
+      margin: 0 0 4px;
+    }
+
+    header.top p {
+      margin: 0;
+      color: #4b5563;
+      font-size: 15px;
+    }
+
+    .token-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .token-card label {
+      font-weight: 600;
+      color: #1f2937;
       font-size: 14px;
-      transition: border-color 0.3s;
     }
-    input:focus, textarea:focus, select:focus {
-      outline: none;
-      border-color: #667eea;
+
+    .token-input {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    textarea {
-      resize: vertical;
-      min-height: 100px;
+
+    .token-input input {
+      flex: 1 1 220px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #cbd5f5;
+      font-size: 14px;
+    }
+
+    button,
+    select,
+    textarea,
+    input {
       font-family: inherit;
     }
-    .media-box {
-      border: 1px dashed #cfcfe6;
+
+    .mono {
+      font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      background: #6366f1;
+      color: #ffffff;
+      font-weight: 600;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: #4f46e5;
+    }
+
+    button:disabled {
+      background: #c7c9d6;
+      cursor: not-allowed;
+    }
+
+    main.card {
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 22px;
+      color: #111827;
+    }
+
+    .card-header p {
+      margin: 4px 0 0;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    #tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    #tabs-scroll {
+      display: flex;
+      overflow-x: auto;
+      gap: 6px;
+      padding: 6px 0;
+    }
+
+    #tabs-scroll::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    #tabs-scroll::-webkit-scrollbar-thumb {
+      background: rgba(79, 70, 229, 0.35);
+      border-radius: 999px;
+    }
+
+    .tab {
+      padding: 8px 12px;
       border-radius: 10px;
-      padding: 15px;
-      min-height: 100px;
+      background: #f3f4f6;
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tab.active {
+      background: #111827;
+      color: #ffffff;
+    }
+
+    .tab .dirty {
+      margin-left: 6px;
+      color: #f59e0b;
+      font-weight: 700;
+    }
+
+    #tabs-actions button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #e5e7eb;
+      color: #111827;
+      font-size: 16px;
+    }
+
+    #tabs-actions button:hover {
+      background: #d1d5db;
+    }
+
+    #pane {
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    #no-bots {
+      border: 1px dashed #cbd5f5;
+      border-radius: 12px;
+      padding: 20px;
+      color: #4b5563;
+      background: #f8fafc;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    #bot-header {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    #bot-header > div {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #bot-header code,
+    #bot-header input {
+      background: #11182710;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #cbd5f5;
+      font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      font-size: 13px;
+      color: #111827;
+    }
+
+    #bot-header input {
+      flex: 1 1 auto;
+      min-width: 140px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+    }
+
+    #bot-header button {
+      padding: 6px 10px;
+      font-size: 14px;
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+
+    #bot-header button:hover {
+      background: #d1d5db;
+    }
+
+    .form-section {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
-    .media-placeholder {
-      color: #8b8ba7;
+
+    label {
+      font-weight: 600;
+      color: #1f2937;
       font-size: 14px;
     }
+
+    select,
+    textarea {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #ffffff;
+      color: inherit;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 160px;
+      line-height: 1.5;
+    }
+
+    #media-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    #media-empty {
+      border: 1px dashed #cbd5f5;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+      background: #f8fafc;
+    }
+
     .media-row {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       align-items: center;
-      padding: 8px 10px;
+      padding: 10px 12px;
       border: 1px solid #e5e5f7;
-      border-radius: 10px;
-      background: #fafaff;
+      border-radius: 12px;
+      background: #f5f5ff;
     }
+
     .media-row select.media-type {
-      width: 120px;
+      width: 140px;
     }
+
     .media-row input.media-url {
-      flex: 1 1 200px;
+      flex: 1 1 220px;
       min-width: 180px;
-    }
-    .media-file-btn {
-      background: #eef;
-      border: 1px solid #99c;
-      padding: 10px 14px;
+      padding: 10px 12px;
       border-radius: 8px;
+      border: 1px solid #d1d5db;
+    }
+
+    .media-file-btn {
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      padding: 10px 14px;
+      border-radius: 10px;
       cursor: pointer;
       white-space: nowrap;
       font-size: 14px;
-      color: #334;
+      color: #312e81;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-width: 140px;
+      min-width: 150px;
     }
+
     .media-file-btn:hover {
-      background: #e6efff;
+      background: #e0e7ff;
     }
+
     .dropzone {
-      border: 1px dashed #bbb;
-      border-radius: 8px;
+      border: 1px dashed #c7d2fe;
+      border-radius: 10px;
       padding: 12px;
-      color: #666;
+      color: #4b5563;
       text-align: center;
       margin-top: 4px;
       font-size: 13px;
       transition: all 0.2s ease;
       width: 100%;
       flex-basis: 100%;
+      background: #f8fafc;
     }
+
     .dropzone.dragover {
-      background: #f7fbff;
-      border-color: #69f;
-      color: #222;
+      background: #eef2ff;
+      border-color: #6366f1;
+      color: #1f2937;
     }
-    .add-media-btn {
-      background: #e9ecff;
-      border: 1px solid #98a2ff;
-      border-radius: 10px;
-      padding: 10px 16px;
-      margin-top: 10px;
-      cursor: pointer;
-      color: #1e1e66;
-      font-weight: 600;
-    }
-    .add-media-btn:hover {
-      background: #dfe6ff;
-    }
-    .btn {
-      background: #667eea;
-      color: white;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 6px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    .btn:hover {
-      background: #5568d3;
-    }
+
     .btn-secondary {
-      background: #e0e0e0;
-      color: #333;
+      background: #e5e7eb;
+      color: #1f2937;
+      padding: 8px 12px;
     }
+
     .btn-secondary:hover {
-      background: #d0d0d0;
+      background: #d1d5db;
     }
-    .btn-small {
-      padding: 6px 12px;
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    #save-start {
+      padding: 12px 20px;
+      font-size: 15px;
+    }
+
+    .status {
+      border-radius: 10px;
+      padding: 12px 16px;
       font-size: 14px;
-    }
-    .response {
-      margin-top: 20px;
-      padding: 15px;
-      border-radius: 6px;
-      display: none;
-    }
-    .response.success {
-      background: #d4edda;
-      border: 1px solid #c3e6cb;
-      color: #155724;
-      display: block;
-    }
-    .response.error {
-      background: #f8d7da;
-      border: 1px solid #f5c6cb;
-      color: #721c24;
-      display: block;
-    }
-    .response pre {
-      margin-top: 10px;
-      background: rgba(0,0,0,0.05);
-      padding: 10px;
-      border-radius: 4px;
-      overflow-x: auto;
-      font-size: 12px;
-    }
-    .config-display {
-      background: #f8f9fa;
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-    }
-    .config-display label {
       font-weight: 600;
-      color: #667eea;
+    }
+
+    .status.success {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .status.info {
+      background: #e0f2fe;
+      color: #075985;
+      border: 1px solid #bae6fd;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 16px;
+      }
+
+      .layout {
+        padding: 20px;
+      }
+
+      header.top {
+        align-items: stretch;
+      }
+
+      .card-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      #bot-header {
+        grid-template-columns: 1fr;
+      }
+
+      .token-input {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .token-input input,
+      .token-input button {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🤖 Admin Wizard</h1>
-    <p class="subtitle">Crie e configure bots do Telegram sem escrever código</p>
-
-    <div class="config-display">
-      <label>API Base URL:</label>
-      <input type="text" id="apiBaseUrl" value="http://localhost:8080" placeholder="https://seu-servico.onrender.com">
-      <label style="margin-top: 10px;">Admin Token:</label>
-      <input type="password" id="adminToken" placeholder="seu-admin-token">
-    </div>
-
-    <!-- Step 1: Create Bot -->
-    <div class="section">
-      <h2>1️⃣ Criar Bot</h2>
-      <div class="form-group">
-        <label>Nome do Bot</label>
-        <input type="text" id="botName" placeholder="Bot Curso X">
+  <div class="layout">
+    <header class="top">
+      <div>
+        <h1>🤖 Admin Wizard</h1>
+        <p>Gerencie múltiplos bots do Telegram sem precisar de código.</p>
       </div>
-      <div class="form-group">
-        <label>Slug (URL amigável)</label>
-        <input type="text" id="botSlug" placeholder="curso-x">
-      </div>
-      <div class="form-group">
-        <label>Token do Telegram</label>
-        <input type="text" id="botToken" placeholder="123456:ABC-DEF1234ghIkl...">
-      </div>
-      <div class="form-group">
-        <label>Webhook Secret</label>
-        <input type="text" id="webhookSecret" placeholder="segredo-super-secreto-123">
-      </div>
-      <button class="btn" onclick="createBot()">Criar Bot</button>
-      <div id="createBotResponse" class="response"></div>
-    </div>
-
-    <!-- Step 2: Configure /start -->
-    <div class="section">
-      <h2>2️⃣ Configurar /start</h2>
-      <div class="form-group">
-        <label>Bot ID (do passo anterior)</label>
-        <input type="text" id="startBotId" placeholder="uuid-do-bot">
-      </div>
-      <div class="form-group">
-        <label>Texto de Boas-vindas</label>
-        <textarea id="startText" placeholder="👋 Bem-vindo ao *Curso X*!&#10;&#10;Aqui você vai aprender..."></textarea>
-      </div>
-      <div class="form-group">
-        <label>Parse Mode</label>
-        <select id="parseMode">
-          <option value="Markdown">Markdown</option>
-          <option value="HTML">HTML</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Mídias (Fotos, Vídeos, Áudios)</label>
-        <div id="media-box" class="media-box" data-media-box>
-          <div class="media-placeholder">Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios</div>
+      <div class="token-card">
+        <label for="admin-token">Admin Token</label>
+        <div class="token-input">
+          <input id="admin-token" type="password" placeholder="Cole aqui o ADMIN_API_TOKEN" autocomplete="off">
+          <button id="apply-token" type="button">Usar token</button>
         </div>
-        <button id="btn-add-media" class="add-media-btn" type="button">➕ Adicionar Mídia</button>
+        <small style="color:#6b7280;">O token fica salvo apenas neste navegador.</small>
       </div>
-      <button class="btn" onclick="saveStartTemplate()">Salvar Template /start</button>
-      <div id="startTemplateResponse" class="response"></div>
-    </div>
+    </header>
 
-    <!-- Step 3: Create Offer -->
-    <div class="section">
-      <h2>3️⃣ Criar Oferta</h2>
-      <div class="form-group">
-        <label>Bot ID</label>
-        <input type="text" id="offerBotId" placeholder="uuid-do-bot">
+    <main class="card">
+      <div class="card-header">
+        <div>
+          <h2>Templates /start</h2>
+          <p>Escolha um bot para editar mensagem inicial, mídias e parse mode.</p>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Nome da Oferta</label>
-        <input type="text" id="offerName" placeholder="Plano Completo">
+
+      <div id="tabs">
+        <div id="tabs-scroll"></div>
+        <div id="tabs-actions">
+          <button id="refresh-bots" type="button" title="Recarregar bots">↻</button>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Preço (em centavos)</label>
-        <input type="number" id="offerPrice" placeholder="9900" value="9900">
+
+      <div id="no-bots" class="hidden">
+        Nenhum bot encontrado. Informe o token de admin e clique em ↻ para carregar os bots cadastrados.
       </div>
-      <div class="form-group">
-        <label>Moeda</label>
-        <input type="text" id="offerCurrency" placeholder="BRL" value="BRL">
+
+      <div id="pane" class="hidden">
+        <div id="bot-header" class="card-section">
+          <div>Bot ID: <code id="hdr-bot-id"></code></div>
+          <div>Slug: <code id="hdr-bot-slug"></code></div>
+          <div>
+            <span>Token:</span>
+            <input id="hdr-bot-token" type="password" readonly class="mono" value="">
+            <button id="reveal-token" type="button" title="Mostrar token">👁</button>
+          </div>
+          <div>
+            <span>Webhook:</span>
+            <code id="hdr-webhook" class="mono"></code>
+            <button id="copy-webhook" type="button">Copiar</button>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <label for="parse-mode">Parse Mode</label>
+          <select id="parse-mode">
+            <option value="Markdown">Markdown</option>
+            <option value="HTML">HTML</option>
+          </select>
+        </div>
+
+        <div class="form-section">
+          <label for="start-text">Mensagem inicial (/start)</label>
+          <textarea id="start-text" placeholder="👋 Bem-vindo!"></textarea>
+        </div>
+
+        <div class="form-section">
+          <div style="display:flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <label style="margin:0;">Mídias (foto, vídeo ou áudio)</label>
+            <button id="add-media" type="button" class="btn-secondary">➕ Adicionar mídia</button>
+          </div>
+          <div id="media-empty">Nenhuma mídia adicionada.</div>
+          <div id="media-list"></div>
+        </div>
+
+        <div class="actions">
+          <button id="save-start" type="button">Salvar Template /start</button>
+        </div>
+
+        <div id="status" class="status hidden"></div>
       </div>
-      <button class="btn" onclick="createOffer()">Criar Oferta</button>
-      <div id="offerResponse" class="response"></div>
-    </div>
+    </main>
   </div>
 
   <script>
-    function getAuthHeaderValue() {
-      const token = document.getElementById('adminToken').value;
-      return token ? `Bearer ${token}` : '';
-    }
+    (() => {
+      const tokenInput = document.getElementById('admin-token');
+      const applyTokenBtn = document.getElementById('apply-token');
+      const refreshBtn = document.getElementById('refresh-bots');
+      const paneEl = document.getElementById('pane');
+      const noBotsEl = document.getElementById('no-bots');
+      const tabsScroll = document.getElementById('tabs-scroll');
 
-    function getHeaders() {
-      const headers = {
-        'Content-Type': 'application/json',
+      let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
+      if (ADMIN_TOKEN) {
+        tokenInput.value = ADMIN_TOKEN;
+      }
+
+      const state = {
+        bots: [],
+        currentBotId: null,
+        dirty: new Set(),
+        cache: new Map(),
       };
-      const authHeader = getAuthHeaderValue();
-      if (authHeader) {
-        headers.Authorization = authHeader;
-      }
-      return headers;
-    }
 
-    function getApiUrl() {
-      return document.getElementById('apiBaseUrl').value;
-    }
-
-    function showResponse(elementId, success, message, data = null) {
-      const el = document.getElementById(elementId);
-      el.className = `response ${success ? 'success' : 'error'}`;
-      el.innerHTML = `<strong>${success ? '✅ Sucesso!' : '❌ Erro!'}</strong><br>${message}`;
-      if (data) {
-        el.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-      }
-    }
-
-    function absUrl(value) {
-      const trimmed = (value || '').trim();
-      if (!trimmed) return trimmed;
-      try {
-        return new URL(trimmed, window.location.origin).href;
-      } catch (err) {
-        console.warn('Não foi possível normalizar URL', trimmed, err);
-        return trimmed;
-      }
-    }
-
-    async function createBot() {
-      const name = document.getElementById('botName').value;
-      const slug = document.getElementById('botSlug').value;
-      const token = document.getElementById('botToken').value;
-      const webhookSecret = document.getElementById('webhookSecret').value;
-
-      if (!name || !slug || !token || !webhookSecret) {
-        showResponse('createBotResponse', false, 'Preencha todos os campos!');
-        return;
+      function getAdminToken() {
+        return (ADMIN_TOKEN || '').trim();
       }
 
-      try {
-        const response = await fetch(`${getApiUrl()}/admin/bots`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({
-            name,
-            slug,
-            token,
-            webhook_secret: webhookSecret,
-            features: {
-              'core-start': true,
-              'funnels': true,
-              'broadcast': true,
-              'payments': true
+      async function fetchJSON(url, opts = {}) {
+        const headers = new Headers(opts.headers || {});
+        const token = getAdminToken();
+        if (!token) {
+          throw new Error('Informe o token de admin para continuar.');
+        }
+        if (!headers.has('Authorization')) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+        const response = await fetch(url, { ...opts, headers });
+        const text = await response.text();
+        let data = null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (err) {
+            data = text;
+          }
+        }
+        if (!response.ok) {
+          const message = typeof data === 'object' && data !== null && 'error' in data
+            ? data.error
+            : data || response.statusText || 'Erro desconhecido';
+          throw new Error(typeof message === 'string' ? message : 'Erro ao carregar dados');
+        }
+        return data;
+      }
+
+      function updateNoBotsVisibility() {
+        const hasBots = state.bots.length > 0;
+        if (!hasBots) {
+          state.currentBotId = null;
+        }
+        noBotsEl.classList.toggle('hidden', hasBots);
+        paneEl.classList.toggle('hidden', !hasBots || !state.currentBotId);
+      }
+
+      function deepClone(value) {
+        return value == null ? value : JSON.parse(JSON.stringify(value));
+      }
+
+      function getBotIdFromHash() {
+        const match = new URL(window.location.href).hash.match(/bot=([a-f0-9-]+)/i);
+        return match ? match[1] : null;
+      }
+
+      async function loadBots({ preserveSelection = true } = {}) {
+        try {
+          const bots = await fetchJSON('/admin/bots');
+          const previousId = preserveSelection ? state.currentBotId : null;
+          state.bots = Array.isArray(bots) ? bots : [];
+
+          const ids = new Set(state.bots.map((b) => b.id));
+          Array.from(state.cache.keys()).forEach((key) => {
+            if (!ids.has(key)) {
+              state.cache.delete(key);
             }
-          })
+          });
+          Array.from(state.dirty).forEach((key) => {
+            if (!ids.has(key)) {
+              state.dirty.delete(key);
+            }
+          });
+
+          let targetId = getBotIdFromHash();
+          if (!targetId && previousId && ids.has(previousId)) {
+            targetId = previousId;
+          }
+          if (!targetId && state.bots[0]) {
+            targetId = state.bots[0].id;
+          }
+
+          renderTabs();
+          updateNoBotsVisibility();
+
+          if (targetId) {
+            await selectBot(targetId);
+          }
+        } catch (err) {
+          alert(err instanceof Error ? err.message : 'Erro ao carregar bots.');
+          state.bots = [];
+          renderTabs();
+          updateNoBotsVisibility();
+        }
+      }
+
+      function renderTabs() {
+        tabsScroll.innerHTML = '';
+        state.bots.forEach((bot) => {
+          const tab = document.createElement('div');
+          tab.className = 'tab' + (bot.id === state.currentBotId ? ' active' : '');
+          tab.dataset.id = bot.id;
+          const label = bot.slug || bot.name || bot.id.slice(0, 8);
+          tab.textContent = label;
+          if (state.dirty.has(bot.id)) {
+            const badge = document.createElement('span');
+            badge.className = 'dirty';
+            badge.textContent = '*';
+            tab.appendChild(badge);
+          }
+          tab.onclick = () => selectBot(bot.id);
+          tabsScroll.appendChild(tab);
+        });
+      }
+
+      async function selectBot(botId) {
+        if (!state.bots.find((bot) => bot.id === botId)) {
+          return;
+        }
+        if (state.currentBotId === botId) {
+          history.replaceState(null, '', `#bot=${botId}`);
+          updateNoBotsVisibility();
+          return;
+        }
+
+        if (state.currentBotId && state.dirty.has(state.currentBotId)) {
+          state.cache.set(state.currentBotId, pane.read());
+        }
+
+        state.currentBotId = botId;
+        history.replaceState(null, '', `#bot=${botId}`);
+        renderTabs();
+        updateNoBotsVisibility();
+        await loadBotPane(botId);
+      }
+
+      async function loadBotPane(botId) {
+        try {
+          let data = state.cache.get(botId);
+          if (!data) {
+            const fresh = await fetchJSON(`/admin/bots/${botId}/templates/start`);
+            data = normalizeTemplate(fresh);
+            state.cache.set(botId, deepClone(data));
+          }
+          const keepDirty = state.dirty.has(botId);
+          pane.fill(botId, normalizeTemplate(data), { keepDirty });
+          paneEl.classList.remove('hidden');
+        } catch (err) {
+          alert(err instanceof Error ? err.message : 'Erro ao carregar template.');
+        }
+      }
+
+      function normalizeTemplate(raw) {
+        const fallback = { parse_mode: 'Markdown', text: '', medias: [] };
+        if (!raw || typeof raw !== 'object') {
+          return fallback;
+        }
+        const parseMode = typeof raw.parse_mode === 'string' ? raw.parse_mode : fallback.parse_mode;
+        const text = typeof raw.text === 'string' ? raw.text : fallback.text;
+        const list = Array.isArray(raw.medias)
+          ? raw.medias
+          : Array.isArray(raw.media)
+          ? raw.media.map((item) => ({ type: item.type, url: item.media }))
+          : [];
+        const medias = list
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => ({
+            type: item.type === 'video' || item.type === 'audio' ? item.type : 'photo',
+            url: typeof item.url === 'string' ? item.url : typeof item.media === 'string' ? item.media : '',
+          }));
+        return { parse_mode: parseMode, text, medias };
+      }
+
+      const pane = (() => {
+        const parseSel = document.getElementById('parse-mode');
+        const textArea = document.getElementById('start-text');
+        const mediaList = document.getElementById('media-list');
+        const mediaEmpty = document.getElementById('media-empty');
+        const addMediaBtn = document.getElementById('add-media');
+        const saveBtn = document.getElementById('save-start');
+        const statusEl = document.getElementById('status');
+        const revealTokenBtn = document.getElementById('reveal-token');
+        const copyWebhookBtn = document.getElementById('copy-webhook');
+        const tokenField = document.getElementById('hdr-bot-token');
+
+        function clearStatus() {
+          statusEl.textContent = '';
+          statusEl.className = 'status hidden';
+        }
+
+        function showStatus(type, message) {
+          statusEl.textContent = message;
+          statusEl.className = `status ${type}`;
+        }
+
+        function updateMediaEmptyState() {
+          const hasRows = mediaList.querySelector('.media-row');
+          mediaEmpty.classList.toggle('hidden', Boolean(hasRows));
+        }
+
+        function serializeRow(row) {
+          const typeSel = row.querySelector('.media-type');
+          const urlInput = row.querySelector('.media-url');
+          return {
+            type: (typeSel?.value || 'photo'),
+            url: (urlInput?.value || '').trim(),
+          };
+        }
+
+        function notifyChange() {
+          if (!state.currentBotId) return;
+          clearStatus();
+          state.dirty.add(state.currentBotId);
+          state.cache.set(state.currentBotId, read());
+          renderTabs();
+        }
+
+        function attachUpload(row) {
+          const removeBtn = row.querySelector('.media-del');
+          const fileInput = row.querySelector('.media-file');
+          const urlInput = row.querySelector('.media-url');
+          const typeSelect = row.querySelector('.media-type');
+          const dropzone = row.querySelector('.dropzone');
+
+          if (removeBtn) {
+            removeBtn.addEventListener('click', () => {
+              row.remove();
+              updateMediaEmptyState();
+              notifyChange();
+            });
+          }
+
+          if (urlInput) {
+            urlInput.addEventListener('input', () => notifyChange());
+          }
+
+          if (typeSelect) {
+            typeSelect.addEventListener('change', () => notifyChange());
+          }
+
+          async function uploadFile(file) {
+            if (!file) return;
+            if (!/^(image|video|audio)\//.test(file.type || '')) {
+              alert('Tipo de arquivo não suportado. Selecione imagem, vídeo ou áudio.');
+              return;
+            }
+            if (file.size > 20 * 1024 * 1024) {
+              alert('Arquivo maior que 20MB. Selecione um arquivo menor.');
+              return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const buttonLabel = row.querySelector('.media-file-btn span');
+            const originalLabel = buttonLabel ? buttonLabel.textContent : '';
+            if (buttonLabel) {
+              buttonLabel.textContent = 'Enviando…';
+            }
+
+            try {
+              const headers = new Headers();
+              const token = getAdminToken();
+              if (token) {
+                headers.set('Authorization', `Bearer ${token}`);
+              }
+              const response = await fetch('/api/admin/upload', {
+                method: 'POST',
+                body: formData,
+                headers,
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok || !data?.ok || !data?.url) {
+                const reason = data?.error || response.statusText || 'Falha no upload.';
+                alert(`Erro no upload: ${reason}`);
+                return;
+              }
+              if (urlInput) {
+                urlInput.value = data.url;
+              }
+              notifyChange();
+            } catch (error) {
+              console.error(error);
+              alert('Erro ao enviar arquivo.');
+            } finally {
+              if (buttonLabel) {
+                buttonLabel.textContent = originalLabel || 'Enviar arquivo…';
+              }
+              if (fileInput) {
+                fileInput.value = '';
+              }
+            }
+          }
+
+          if (fileInput) {
+            fileInput.addEventListener('change', (event) => {
+              const file = event?.target?.files?.[0];
+              void uploadFile(file);
+            });
+          }
+
+          if (dropzone) {
+            dropzone.addEventListener('dragover', (event) => {
+              event.preventDefault();
+              dropzone.classList.add('dragover');
+            });
+            dropzone.addEventListener('dragleave', () => {
+              dropzone.classList.remove('dragover');
+            });
+            dropzone.addEventListener('drop', (event) => {
+              event.preventDefault();
+              dropzone.classList.remove('dragover');
+              const file = event?.dataTransfer?.files?.[0];
+              void uploadFile(file);
+            });
+          }
+        }
+
+        function addMediaRow(initial) {
+          const row = document.createElement('div');
+          row.className = 'media-row';
+          row.innerHTML = `
+            <select class="media-type">
+              <option value="photo">Foto</option>
+              <option value="video">Vídeo</option>
+              <option value="audio">Áudio</option>
+            </select>
+            <input type="url" class="media-url" placeholder="https://...">
+            <label class="media-file-btn">
+              <input type="file" class="media-file" accept="image/*,video/*,audio/*" hidden>
+              <span>Enviar arquivo…</span>
+            </label>
+            <button type="button" class="btn-secondary media-del" title="Remover">🗑️</button>
+            <div class="dropzone">Arraste e solte aqui ou clique em “Enviar arquivo…”</div>
+          `;
+
+          mediaList.appendChild(row);
+          if (initial && typeof initial === 'object') {
+            const typeSel = row.querySelector('.media-type');
+            const urlInput = row.querySelector('.media-url');
+            if (typeSel && initial.type) {
+              typeSel.value = initial.type;
+            }
+            if (urlInput && initial.url) {
+              urlInput.value = initial.url;
+            }
+          }
+
+          attachUpload(row);
+          updateMediaEmptyState();
+          return row;
+        }
+
+        addMediaBtn.addEventListener('click', () => {
+          addMediaRow();
+          notifyChange();
         });
 
-        const data = await response.json();
+        parseSel.addEventListener('change', () => notifyChange());
+        textArea.addEventListener('input', () => notifyChange());
 
-        if (response.ok) {
-          showResponse('createBotResponse', true, 'Bot criado com sucesso!', data);
-          document.getElementById('startBotId').value = data.bot_id;
-          document.getElementById('offerBotId').value = data.bot_id;
-        } else {
-          showResponse('createBotResponse', false, 'Erro ao criar bot', data);
-        }
-      } catch (err) {
-        showResponse('createBotResponse', false, `Erro: ${err.message}`);
-      }
-    }
+        revealTokenBtn.addEventListener('click', () => {
+          if (!tokenField.value) return;
+          const isPassword = tokenField.type === 'password';
+          tokenField.type = isPassword ? 'text' : 'password';
+          revealTokenBtn.textContent = isPassword ? '🙈' : '👁';
+        });
 
-    (function(){
-      const mediaBox = document.getElementById('media-box');
-      const addBtn = document.getElementById('btn-add-media');
-      if (!mediaBox) {
-        console.warn('[wizard] mediaBox não encontrado');
-        return;
-      }
-
-      function ensurePlaceholder() {
-        if (!mediaBox.querySelector('.media-row') && !mediaBox.querySelector('.media-placeholder')) {
-          const placeholder = document.createElement('div');
-          placeholder.className = 'media-placeholder';
-          placeholder.textContent = 'Clique em "Adicionar Mídia" para adicionar fotos, vídeos ou áudios';
-          mediaBox.appendChild(placeholder);
-        }
-      }
-
-      async function uploadFile(row, file) {
-        if (!file) return;
-        if (!/^(image|video|audio)\//.test(file.type || '')) {
-          alert('Tipo de arquivo não suportado. Selecione uma imagem, vídeo ou áudio.');
-          return;
-        }
-        if (file.size > 20 * 1024 * 1024) {
-          alert('Arquivo maior que 20MB. Escolha um arquivo menor.');
-          return;
-        }
-
-        const formData = new FormData();
-        formData.append('file', file);
-        const btnLabel = row.querySelector('.media-file-btn span');
-        const originalText = btnLabel?.textContent;
-        if (btnLabel) btnLabel.textContent = 'Enviando…';
-
-        try {
-          const authHeader = getAuthHeaderValue();
-          const headers = {};
-          if (authHeader) headers.Authorization = authHeader;
-
-          const response = await fetch('/api/admin/upload', {
-            method: 'POST',
-            body: formData,
-            headers,
-          });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok || !data?.ok || !data?.url) {
-            const reason = data?.error || response.statusText || 'Falha no upload.';
-            alert(`Erro no upload: ${reason}`);
+        copyWebhookBtn.addEventListener('click', async () => {
+          const webhook = document.getElementById('hdr-webhook').textContent || '';
+          if (!webhook || webhook === '—') {
             return;
           }
-          const urlInput = row.querySelector('.media-url');
-          if (urlInput) urlInput.value = absUrl(data.url);
-        } catch (err) {
-          console.error(err);
-          alert('Erro ao enviar arquivo.');
-        } finally {
-          if (btnLabel) btnLabel.textContent = originalText || 'Enviar arquivo…';
-          const fileInput = row.querySelector('.media-file');
-          if (fileInput) fileInput.value = '';
-        }
-      }
-      
-      function hookRow(row) {
-        const removeBtn = row.querySelector('.media-del');
-        const urlInput = row.querySelector('.media-url');
-        const fileInput = row.querySelector('.media-file');
-        const dropzone = row.querySelector('.dropzone');
-
-        if (urlInput && urlInput.value) {
-          urlInput.value = absUrl(urlInput.value);
-        }
-
-        if (removeBtn) {
-          removeBtn.addEventListener('click', () => {
-            row.remove();
-            ensurePlaceholder();
-          });
-        }
-
-        if (fileInput) {
-          fileInput.addEventListener('change', (event) => {
-            const selectedFile = event?.target?.files?.[0];
-            uploadFile(row, selectedFile);
-          });
-        }
-
-        if (dropzone) {
-          dropzone.addEventListener('dragover', (event) => {
-            event.preventDefault();
-            dropzone.classList.add('dragover');
-          });
-          dropzone.addEventListener('dragleave', () => {
-            dropzone.classList.remove('dragover');
-          });
-          dropzone.addEventListener('drop', (event) => {
-            event.preventDefault();
-            dropzone.classList.remove('dragover');
-            const droppedFile = event?.dataTransfer?.files?.[0];
-            uploadFile(row, droppedFile);
-          });
-        }
-      }
-
-      function addRow(initial) {
-        const row = document.createElement('div');
-        row.className = 'media-row';
-        row.innerHTML = `
-          <select class="media-type">
-            <option value="photo">Foto</option>
-            <option value="video">Vídeo</option>
-            <option value="audio">Áudio</option>
-          </select>
-          <input type="url" class="media-url" placeholder="https://...">
-          <label class="media-file-btn">
-            <input type="file" class="media-file" accept="image/*,video/*,audio/*" hidden>
-            <span>Enviar arquivo…</span>
-          </label>
-          <button type="button" class="btn btn-secondary btn-small media-del" title="Remover">🗑️</button>
-          <div class="dropzone">Arraste e solte aqui sua mídia ou use “Enviar arquivo…”</div>
-        `;
-
-        mediaBox.appendChild(row);
-        const typeSelect = row.querySelector('.media-type');
-        const urlInput = row.querySelector('.media-url');
-        if (initial && typeof initial === 'object') {
-          if (typeSelect && initial.type) {
-            typeSelect.value = initial.type;
+          try {
+            await navigator.clipboard.writeText(webhook);
+            showStatus('info', 'Webhook copiado para a área de transferência.');
+            setTimeout(clearStatus, 2500);
+          } catch (err) {
+            console.warn(err);
+            window.prompt('Copie o webhook manualmente:', webhook);
           }
-          if (urlInput && initial.url) {
-            urlInput.value = absUrl(initial.url);
+        });
+
+        saveBtn.addEventListener('click', async () => {
+          if (!state.currentBotId) return;
+          try {
+            showStatus('info', 'Salvando…');
+            const botId = state.currentBotId;
+            const payload = read();
+            const body = {
+              parse_mode: payload.parse_mode,
+              text: payload.text,
+              media: payload.medias.map((item) => ({ type: item.type, media: item.url })),
+            };
+            await fetchJSON(`/admin/bots/${botId}/templates/start`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            state.cache.set(botId, deepClone(payload));
+            state.dirty.delete(botId);
+            renderTabs();
+            showStatus('success', 'Template /start salvo com sucesso!');
+            setTimeout(clearStatus, 3500);
+          } catch (err) {
+            showStatus('error', err instanceof Error ? err.message : 'Erro ao salvar template.');
           }
+        });
+
+        function fill(botId, data, options = {}) {
+          const normalized = normalizeTemplate(data);
+          clearStatus();
+          parseSel.value = normalized.parse_mode || 'Markdown';
+          textArea.value = normalized.text || '';
+
+          mediaList.innerHTML = '';
+          (normalized.medias || []).forEach((item) => addMediaRow(item));
+          updateMediaEmptyState();
+
+          fillBotHeader(botId);
+
+          if (!options.keepDirty) {
+            state.dirty.delete(botId);
+          }
+          renderTabs();
         }
 
-        hookRow(row);
+        function read() {
+          const medias = Array.from(mediaList.querySelectorAll('.media-row'))
+            .map((row) => serializeRow(row))
+            .filter((item) => item.url);
+          return {
+            parse_mode: parseSel.value || 'Markdown',
+            text: textArea.value || '',
+            medias,
+          };
+        }
 
-        const placeholder = mediaBox.querySelector('.media-placeholder');
-        if (placeholder) placeholder.remove();
+        return { fill, read, showStatus, clearStatus };
+      })();
+
+      function fillBotHeader(botId) {
+        const bot = state.bots.find((b) => b.id === botId);
+        if (!bot) return;
+        const idEl = document.getElementById('hdr-bot-id');
+        const slugEl = document.getElementById('hdr-bot-slug');
+        const tokenEl = document.getElementById('hdr-bot-token');
+        const webhookEl = document.getElementById('hdr-webhook');
+        const copyBtn = document.getElementById('copy-webhook');
+        const revealBtn = document.getElementById('reveal-token');
+
+        idEl.textContent = bot.id;
+        slugEl.textContent = bot.slug || '(sem slug)';
+        tokenEl.type = 'password';
+        revealBtn.textContent = '👁';
+        if (bot.token) {
+          tokenEl.value = bot.token;
+        } else {
+          tokenEl.value = '*****';
+        }
+
+        const origin = window.location.origin.replace(/\/$/, '');
+        if (bot.slug) {
+          webhookEl.textContent = `${origin}/tg/${bot.slug}/webhook`;
+          copyBtn.disabled = false;
+        } else {
+          webhookEl.textContent = '—';
+          copyBtn.disabled = true;
+        }
       }
 
-      mediaBox.querySelectorAll('.media-row').forEach((row) => {
-        hookRow(row);
-        const placeholder = mediaBox.querySelector('.media-placeholder');
-        if (placeholder) placeholder.remove();
+      applyTokenBtn.addEventListener('click', () => {
+        ADMIN_TOKEN = tokenInput.value.trim();
+        if (!ADMIN_TOKEN) {
+          alert('Informe o token de admin para continuar.');
+          localStorage.removeItem('admin_token');
+          state.bots = [];
+          state.cache.clear();
+          state.dirty.clear();
+          state.currentBotId = null;
+          renderTabs();
+          updateNoBotsVisibility();
+          return;
+        }
+        localStorage.setItem('admin_token', ADMIN_TOKEN);
+        loadBots({ preserveSelection: false });
       });
 
-      if (addBtn) {
-        addBtn.addEventListener('click', () => addRow());
+      tokenInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          applyTokenBtn.click();
+        }
+      });
+
+      refreshBtn.addEventListener('click', () => {
+        if (!getAdminToken()) {
+          alert('Informe o token de admin para continuar.');
+          return;
+        }
+        loadBots();
+      });
+
+      window.addEventListener('hashchange', () => {
+        const targetId = getBotIdFromHash();
+        if (targetId && targetId !== state.currentBotId) {
+          void selectBot(targetId);
+        }
+      });
+
+      window.addEventListener('beforeunload', (event) => {
+        if (state.dirty.size) {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      });
+
+      if (getAdminToken()) {
+        loadBots();
       } else {
-        console.warn('[wizard] botão "Adicionar Mídia" não encontrado');
+        updateNoBotsVisibility();
       }
-
-      ensurePlaceholder();
     })();
-
-    async function saveStartTemplate() {
-      const botId = document.getElementById('startBotId').value;
-      const text = document.getElementById('startText').value;
-      const parseMode = document.getElementById('parseMode').value;
-
-      if (!botId || !text) {
-        showResponse('startTemplateResponse', false, 'Preencha Bot ID e Texto!');
-        return;
-      }
-
-      const mediaItems = [];
-      document.querySelectorAll('.media-row').forEach(item => {
-        const typeEl = item.querySelector('.media-type');
-        const urlEl = item.querySelector('.media-url');
-        const type = typeEl ? typeEl.value : '';
-        const url = urlEl ? urlEl.value : '';
-        if (url) {
-          mediaItems.push({ type, media: url });
-        }
-      });
-
-      try {
-        const response = await fetch(`${getApiUrl()}/admin/bots/${botId}/templates/start`, {
-          method: 'PUT',
-          headers: getHeaders(),
-          body: JSON.stringify({
-            text,
-            parse_mode: parseMode,
-            media: mediaItems
-          })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          showResponse('startTemplateResponse', true, 'Template /start salvo com sucesso!', data);
-        } else {
-          showResponse('startTemplateResponse', false, 'Erro ao salvar template', data);
-        }
-      } catch (err) {
-        showResponse('startTemplateResponse', false, `Erro: ${err.message}`);
-      }
-    }
-
-    async function createOffer() {
-      const botId = document.getElementById('offerBotId').value;
-      const name = document.getElementById('offerName').value;
-      const price = parseInt(document.getElementById('offerPrice').value);
-      const currency = document.getElementById('offerCurrency').value;
-
-      if (!botId || !name || !price) {
-        showResponse('offerResponse', false, 'Preencha todos os campos!');
-        return;
-      }
-
-      try {
-        const response = await fetch(`${getApiUrl()}/admin/offers`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({
-            bot_id: botId,
-            name,
-            price_cents: price,
-            currency
-          })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          showResponse('offerResponse', true, 'Oferta criada com sucesso!', data);
-        } else {
-          showResponse('offerResponse', false, 'Erro ao criar oferta', data);
-        }
-      } catch (err) {
-        showResponse('offerResponse', false, `Erro: ${err.message}`);
-      }
-    }
-
-    const form = document.querySelector('form');
-    if (form) {
-      form.addEventListener('submit', () => {
-        document.querySelectorAll('.media-url').forEach((input) => {
-          if (input && input.value) {
-            input.value = absUrl(input.value);
-          }
-        });
-      });
-    }
   </script>
 </body>
 </html>
