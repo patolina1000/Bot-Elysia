@@ -112,17 +112,9 @@ type StartMediaItem = {
   asset: MediaAsset;
 };
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  if (size <= 0) {
-    return [arr];
-  }
+const VISUAL_SEND_DELAY_MS = 150;
 
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    result.push(arr.slice(i, i + size));
-  }
-  return result;
-}
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function sendStartMediasFirst(
   ctx: MyContext,
@@ -139,7 +131,7 @@ async function sendStartMediasFirst(
   }
 
   const mediaAssets = mediaItems.map((item) => item.asset);
-  const { albumMedia, albumAssets, audios } = groupMediaForSending(mediaAssets);
+  const { albumAssets, audios } = groupMediaForSending(mediaAssets);
 
   if (audios.length > 0) {
     ctx.logger.info({ tgUserId: ctx.from?.id, count: audios.length }, '[START][media] audios');
@@ -167,61 +159,39 @@ async function sendStartMediasFirst(
     }
   }
 
-  if (albumMedia.length > 0) {
-    ctx.logger.info({ tgUserId: ctx.from?.id, count: albumMedia.length }, '[START][media] visuals');
+  if (albumAssets.length > 0) {
+    ctx.logger.info({ tgUserId: ctx.from?.id, count: albumAssets.length }, '[START][media] visuals');
 
     try {
-      const visualEntries = albumMedia.map((mediaItem, index) => ({
-        mediaItem,
-        asset: albumAssets[index],
-        visualIndex: index,
-      }));
-
-      const batches = chunk(visualEntries, 10);
-
-      for (const batch of batches) {
-        if (batch.length === 0) {
+      for (let index = 0; index < albumAssets.length; index++) {
+        const asset = albumAssets[index];
+        if (!asset) {
           continue;
         }
 
-        if (batch.length === 1) {
-          const [{ mediaItem, asset, visualIndex }] = batch;
-          if (!asset) {
-            continue;
-          }
+        const fallbackExtension = asset.kind === 'photo'
+          ? 'jpg'
+          : asset.kind === 'video'
+          ? 'mp4'
+          : 'dat';
+        const fallbackName = `start-${asset.kind}-${index + 1}.${fallbackExtension}`;
 
-          const fallbackExtension = asset.kind === 'photo'
-            ? 'jpg'
-            : asset.kind === 'video'
-            ? 'mp4'
-            : 'dat';
-          const fallbackName = `start-${asset.kind}-${visualIndex + 1}.${fallbackExtension}`;
+        try {
           const mediaInput = await resolveMediaInput(asset, fallbackName);
 
-          if (mediaItem.type === 'photo') {
-            const sentMessage = await ctx.api.sendPhoto(chatId, mediaInput, {
-              caption: mediaItem.caption,
-              parse_mode: mediaItem.parse_mode,
-              caption_entities: mediaItem.caption_entities,
-              has_spoiler: mediaItem.has_spoiler,
-              show_caption_above_media: mediaItem.show_caption_above_media,
-            });
+          if (asset.kind === 'photo') {
+            const sentMessage = await ctx.api.sendPhoto(chatId, mediaInput);
 
             if (!asset.file_id && sentMessage.photo) {
               const photo = sentMessage.photo[sentMessage.photo.length - 1];
               await mediaService.updateFileId(asset.id, photo.file_id, photo.file_unique_id);
             }
-          } else {
+          } else if (asset.kind === 'video') {
             const sentMessage = await ctx.api.sendVideo(chatId, mediaInput, {
-              caption: mediaItem.caption,
-              parse_mode: mediaItem.parse_mode,
-              caption_entities: mediaItem.caption_entities,
-              has_spoiler: mediaItem.has_spoiler,
-              show_caption_above_media: mediaItem.show_caption_above_media,
-              duration: mediaItem.duration,
-              width: mediaItem.width,
-              height: mediaItem.height,
-              supports_streaming: mediaItem.supports_streaming,
+              duration: asset.duration || undefined,
+              width: asset.width || undefined,
+              height: asset.height || undefined,
+              supports_streaming: true,
             });
 
             if (!asset.file_id && sentMessage.video) {
@@ -232,57 +202,11 @@ async function sendStartMediasFirst(
               );
             }
           }
-
-          continue;
+        } catch (visualError) {
+          ctx.logger.error({ err: visualError, tgUserId: ctx.from?.id, assetId: asset.id }, 'Error sending start visual');
         }
 
-        const preparedBatch = await Promise.all(
-          batch.map(async ({ mediaItem, asset, visualIndex }) => {
-            if (!asset) {
-              return { mediaPayload: mediaItem, asset };
-            }
-
-            const fallbackExtension = asset.kind === 'photo'
-              ? 'jpg'
-              : asset.kind === 'video'
-              ? 'mp4'
-              : 'dat';
-            const fallbackName = `start-${asset.kind}-${visualIndex + 1}.${fallbackExtension}`;
-            const mediaInput = await resolveMediaInput(asset, fallbackName);
-
-            return {
-              mediaPayload: {
-                ...mediaItem,
-                media: mediaInput,
-              },
-              asset,
-            };
-          })
-        );
-
-        const payload = preparedBatch.map((entry) => entry.mediaPayload);
-        const sentMessages = await ctx.api.sendMediaGroup(chatId, payload);
-
-        for (let i = 0; i < sentMessages.length; i++) {
-          const sentMsg = sentMessages[i];
-          const entry = preparedBatch[i];
-          const asset = entry?.asset;
-
-          if (!asset || asset.file_id) {
-            continue;
-          }
-
-          if ('photo' in sentMsg && sentMsg.photo) {
-            const photo = sentMsg.photo[sentMsg.photo.length - 1];
-            await mediaService.updateFileId(asset.id, photo.file_id, photo.file_unique_id);
-          } else if ('video' in sentMsg && sentMsg.video) {
-            await mediaService.updateFileId(
-              asset.id,
-              sentMsg.video.file_id,
-              sentMsg.video.file_unique_id
-            );
-          }
-        }
+        await delay(VISUAL_SEND_DELAY_MS);
       }
     } catch (mediaError) {
       ctx.logger.error({ err: mediaError, tgUserId: ctx.from?.id }, 'Error sending start media');
