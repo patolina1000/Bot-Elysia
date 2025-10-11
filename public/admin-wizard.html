@@ -305,6 +305,17 @@
       }
     }
 
+    function absUrl(value) {
+      const trimmed = (value || '').trim();
+      if (!trimmed) return trimmed;
+      try {
+        return new URL(trimmed, window.location.origin).href;
+      } catch (err) {
+        console.warn('Não foi possível normalizar URL', trimmed, err);
+        return trimmed;
+      }
+    }
+
     async function createBot() {
       const name = document.getElementById('botName').value;
       const slug = document.getElementById('botSlug').value;
@@ -391,6 +402,10 @@
         item.appendChild(dropzone);
       }
 
+      if (urlInput && urlInput.value) {
+        urlInput.value = absUrl(urlInput.value);
+      }
+
       async function uploadFile(file) {
         if (!file) return;
         if (!/^(image|video|audio)\//.test(file.type || '')) {
@@ -430,7 +445,7 @@
             alert(`Erro no upload: ${reason}`);
             return;
           }
-          urlInput.value = data.url;
+          urlInput.value = absUrl(data.url);
         } catch (err) {
           console.error(err);
           alert('Erro ao enviar arquivo.');
@@ -552,6 +567,17 @@
     }
 
     document.querySelectorAll('.media-item').forEach(item => hookMediaItem(item));
+
+    const form = document.querySelector('form');
+    if (form) {
+      form.addEventListener('submit', () => {
+        document.querySelectorAll('.media-url').forEach((input) => {
+          if (input instanceof HTMLInputElement && input.value) {
+            input.value = absUrl(input.value);
+          }
+        });
+      });
+    }
   </script>
 </body>
 </html>
