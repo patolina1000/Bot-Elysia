@@ -32,3 +32,22 @@ adminBotsRouter.get(
     }
   }
 );
+adminBotsRouter.get(
+  '/admin/bots/:slug/features',
+  authAdminMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const botFeatures = await adminBotsDb.getBotFeaturesBySlug(slug);
+      if (!botFeatures) {
+        res.status(404).json({ error: 'bot_not_found' });
+        return;
+      }
+      res.json(botFeatures);
+    } catch (error) {
+      req.log?.error({ error, slug: req.params.slug }, 'Failed to fetch bot features');
+      res.status(500).json({ error: 'failed_to_fetch_features' });
+    }
+  }
+);
+

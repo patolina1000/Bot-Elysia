@@ -91,27 +91,35 @@ async function decryptBotToken(tokenEncrypted: Buffer, slug: string): Promise<st
 }
 
 function registerBotFeatures(bot: Bot<MyContext>, config: BotRow) {
+  const features = config.features ?? {};
+  const botLogger = rootLogger.child({ bot_id: config.id, bot_slug: config.slug });
+
   bot.use(async (ctx, next) => {
     ctx.bot_id = config.id;
     ctx.bot_slug = config.slug;
-    ctx.logger = rootLogger.child({ bot_id: config.id, bot_slug: config.slug });
+    ctx.logger = botLogger;
     ctx.db = pool;
     await next();
   });
 
-  if (config.features['core-start']) {
+  const startEnabled = features['core-start'] !== false;
+  if (startEnabled) {
     bot.use(startFeature);
+  } else {
+    botLogger.info('[BOOT] core-start disabled explicitly');
   }
 
-  if (config.features['funnels']) {
+  botLogger.info({ bot_id: config.id, bot_slug: config.slug, features }, '[BOOT] features loaded');
+
+  if (features['funnels']) {
     bot.use(funnelsFeature);
   }
 
-  if (config.features['broadcast']) {
+  if (features['broadcast']) {
     bot.use(broadcastFeature);
   }
 
-  if (config.features['payments']) {
+  if (features['payments']) {
     bot.use(paymentsFeature);
   }
 
