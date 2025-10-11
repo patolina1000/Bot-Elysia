@@ -1,7 +1,13 @@
 import type { Pool } from 'pg';
+import { Agent, fetch } from 'undici';
 import { pool } from '../db/pool.js';
 import { getEncryptionKey } from '../utils/crypto.js';
 import { profileSend } from './TelegramSendProfiler.js';
+
+const telegramAgent = new Agent({
+  keepAliveTimeout: 60_000,
+  keepAliveMaxTimeout: 60_000,
+});
 
 export type TelegramMediaType = 'photo' | 'video' | 'audio' | 'document' | 'voice';
 
@@ -165,6 +171,7 @@ export class TelegramMediaCache {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      dispatcher: telegramAgent,
     });
 
     let data: TelegramApiResponse<T>;
@@ -175,6 +182,14 @@ export class TelegramMediaCache {
     }
 
     return data;
+  }
+
+  async callTelegram<T = unknown>(
+    method: string,
+    token: string,
+    body: Record<string, unknown>
+  ): Promise<TelegramApiResponse<T>> {
+    return this.tg<T>(method, token, body);
   }
 
   async upsertCache(params: UpsertCacheParams) {
@@ -486,6 +501,10 @@ export class TelegramMediaCache {
       [bot_slug]
     );
     return rows;
+  }
+
+  async listBots(): Promise<BotMediaCacheConfig[]> {
+    return this.listBotsFn();
   }
 }
 

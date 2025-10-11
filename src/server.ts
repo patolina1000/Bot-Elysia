@@ -3,10 +3,74 @@ import { env } from './env.js';
 import { logger } from './logger.js';
 import { pool } from './db/pool.js';
 import { telegramMediaCache } from './services/TelegramMediaCache.js';
+import { getLastSentByBot, profileSend } from './services/TelegramSendProfiler.js';
 
 const app = createApp();
 
 telegramMediaCache.scheduleHourlyWarmup(logger);
+
+const keepAliveInput = Number(process.env.TG_KEEPALIVE_SEC ?? '25');
+const KEEPALIVE_SEC = Number.isFinite(keepAliveInput) && keepAliveInput > 0 ? keepAliveInput : 25;
+
+function scheduleTelegramKeepAlive() {
+  type BotTokenInfo = { slug: string; token: string };
+  let cachedBots: BotTokenInfo[] = [];
+  let lastBotsFetch = 0;
+  const BOTS_CACHE_MS = 60_000;
+
+  const loadBots = async (): Promise<BotTokenInfo[]> => {
+    const now = Date.now();
+    if (now - lastBotsFetch > BOTS_CACHE_MS || !cachedBots.length) {
+      const bots = await telegramMediaCache.listBots();
+      cachedBots = bots.map((bot) => ({ slug: bot.slug, token: bot.token }));
+      lastBotsFetch = now;
+    }
+    return cachedBots;
+  };
+
+  const tick = async () => {
+    try {
+      const bots = await loadBots();
+      const lastByBot = getLastSentByBot();
+      const now = Date.now();
+
+      for (const bot of bots) {
+        const last = lastByBot.get(bot.slug) ?? 0;
+        if (now - last <= KEEPALIVE_SEC * 1000) {
+          continue;
+        }
+
+        try {
+          await profileSend(
+            { bot_slug: bot.slug, chat_id: '0', media_key: null, route: 'keepalive_ping' },
+            () => telegramMediaCache.callTelegram('getMe', bot.token, {})
+          );
+          logger.info({ slug: bot.slug }, '[KEEPALIVE] ping ok');
+        } catch (err) {
+          logger.warn(
+            { slug: bot.slug, err: err instanceof Error ? err.message : String(err) },
+            '[KEEPALIVE] ping erro'
+          );
+        }
+      }
+    } catch (err) {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        '[KEEPALIVE] loop erro'
+      );
+    }
+  };
+
+  const intervalMs = 5_000;
+  const run = () => {
+    void tick();
+  };
+
+  run();
+  setInterval(run, intervalMs);
+}
+
+scheduleTelegramKeepAlive();
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'Server started');
