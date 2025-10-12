@@ -6,6 +6,7 @@ import { startService } from './startService.js';
 import { groupMediaForSending, type MediaAsset } from '../../../utils/mediaGrouping.js';
 import { telegramMediaCache } from '../../../services/TelegramMediaCache.js';
 import { buildPlansKeyboard } from '../../../services/bot/plans.js';
+import { scheduleTriggeredDownsells } from '../../../services/bot/downsellsScheduler.js';
 import { getSettings } from '../../../db/botSettings.js';
 
 export const startFeature = new Composer<MyContext>();
@@ -81,6 +82,19 @@ startFeature.command('start', async (ctx) => {
     }
 
     ctx.logger.info({ tgUserId, eventId }, 'Start command completed');
+
+    try {
+      if (ctx.bot_slug && ctx.from?.id) {
+        await scheduleTriggeredDownsells({
+          bot_slug: ctx.bot_slug,
+          telegram_id: ctx.from.id,
+          trigger: 'after_start',
+          logger: ctx.logger,
+        });
+      }
+    } catch (err) {
+      ctx.logger?.warn({ err }, '[DOWNSELL][AFTER_START] schedule failed');
+    }
   } catch (err) {
     ctx.logger.error({ err, tgUserId }, 'Error handling /start command');
     await ctx.reply('Desculpe, ocorreu um erro. Por favor, tente novamente.');
