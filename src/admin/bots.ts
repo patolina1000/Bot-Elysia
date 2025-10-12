@@ -8,6 +8,7 @@ import {
   upsertDownsell,
   deleteDownsell,
   scheduleDownsellForUser,
+  getDownsellsStats,
   type UpsertDownsellInput,
 } from '../db/downsells.js';
 
@@ -301,6 +302,23 @@ adminBotsRouter.post(
     } catch (error) {
       req.log?.error({ error }, '[downsells] test-send failed');
       return res.status(500).json({ ok: false, error: 'downsells_test_send_failed' });
+    }
+  }
+);
+
+// Métricas por downsell (mini dashboard)
+adminBotsRouter.get(
+  '/admin/api/downsells/metrics',
+  authAdminMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const botSlug = String(req.query.bot_slug ?? '').trim();
+      if (!botSlug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
+      const stats = await getDownsellsStats(botSlug);
+      return res.json({ ok: true, stats });
+    } catch (error) {
+      req.log?.error({ error }, '[downsells] metrics failed');
+      return res.status(500).json({ ok: false, error: 'downsells_metrics_failed' });
     }
   }
 );

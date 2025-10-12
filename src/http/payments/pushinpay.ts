@@ -17,6 +17,7 @@ import { insertOrUpdatePayment, setPaymentStatus } from '../../db/payments.js';
 import { pool } from '../../db/pool.js';
 import { getPlanById } from '../../db/plans.js';
 import { authAdminMiddleware } from '../middleware/authAdmin.js';
+import { cancelPendingForUser } from '../../db/downsells.js';
 
 const PUSHINPAY_NOTICE_HTML = `<div class="text-xs opacity-70 mt-3">\n  <strong>Aviso:</strong> A PUSHIN PAY atua exclusivamente como processadora de pagamentos e não possui qualquer responsabilidade pela entrega, suporte, conteúdo, qualidade ou cumprimento das obrigações relacionadas aos produtos ou serviços oferecidos pelo vendedor.\n</div>`;
 
@@ -630,6 +631,25 @@ pushinpayWebhookRouter.post(
           end_to_end_id: payload.end_to_end_id ?? null,
         }, '[PIX][WEBHOOK] payment confirmed');
 
+        // Cancela downsells pendentes após compra
+        try {
+          const successList = new Set(['paid','approved','completed','success']);
+          const newStatus = String(payload.status || '').toLowerCase();
+
+          if (successList.has(newStatus)) {
+            const telegramId = updated.telegram_id;
+            const meta = (updated.meta ?? {}) as any;
+            const botSlugFromMeta = meta?.bot_slug;
+
+            if (telegramId && botSlugFromMeta) {
+              await cancelPendingForUser(String(botSlugFromMeta), Number(telegramId));
+              reqLogger.info({ botSlug: botSlugFromMeta, telegramId }, '[DOWNSELL][CANCEL_AFTER_PURCHASE] ok');
+            }
+          }
+        } catch (err) {
+          reqLogger.warn({ err }, '[DOWNSELL][CANCEL_AFTER_PURCHASE] failed');
+        }
+
         await recordFunnelEvent({
           event: 'purchase',
           eventId: `pur:${updated.external_id}`,
@@ -798,6 +818,25 @@ pushinpayWebhookRouter.post(
           ttc_ms,
           end_to_end_id: payload.end_to_end_id ?? null,
         }, '[PIX][WEBHOOK] payment confirmed');
+
+        // Cancela downsells pendentes após compra
+        try {
+          const successList = new Set(['paid','approved','completed','success']);
+          const newStatus = String(payload.status || '').toLowerCase();
+
+          if (successList.has(newStatus)) {
+            const telegramId = updated.telegram_id;
+            const meta = (updated.meta ?? {}) as any;
+            const botSlugFromMeta = meta?.bot_slug;
+
+            if (telegramId && botSlugFromMeta) {
+              await cancelPendingForUser(String(botSlugFromMeta), Number(telegramId));
+              reqLogger.info({ botSlug: botSlugFromMeta, telegramId }, '[DOWNSELL][CANCEL_AFTER_PURCHASE] ok');
+            }
+          }
+        } catch (err) {
+          reqLogger.warn({ err }, '[DOWNSELL][CANCEL_AFTER_PURCHASE] failed');
+        }
 
         await recordFunnelEvent({
           event: 'purchase',

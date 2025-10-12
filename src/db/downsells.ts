@@ -211,3 +211,65 @@ export async function cancelPendingForUser(botSlug: string, telegramId: number):
   );
   return res.rowCount ?? 0;
 }
+
+// === MÉTRICAS (mini dashboard) ===
+export interface DownsellStats {
+  scheduled: number;
+  sent: number;
+  canceled: number;
+  error: number;
+  pix: number;
+  purchased: number;
+}
+
+export async function getDownsellsStats(botSlug: string): Promise<Record<number, DownsellStats>> {
+  const res = await pool.query(
+    `
+    WITH q AS (
+      SELECT
+        downsell_id,
+        COUNT(*) FILTER (WHERE status='scheduled') AS scheduled,
+        COUNT(*) FILTER (WHERE status='sent') AS sent,
+        COUNT(*) FILTER (WHERE status='canceled') AS canceled,
+        COUNT(*) FILTER (WHERE status='error') AS error
+      FROM downsells_queue
+      WHERE bot_slug = $1
+      GROUP BY downsell_id
+    ),
+    p AS (
+      SELECT
+        (meta->>'downsell_id')::bigint AS downsell_id,
+        COUNT(*) FILTER (WHERE meta->>'origin' = 'downsell') AS pix,
+        COUNT(*) FILTER (WHERE meta->>'origin' = 'downsell' AND status IN ('paid','approved','completed','success')) AS purchased
+      FROM payments
+      WHERE (meta->>'downsell_id') IS NOT NULL
+      GROUP BY (meta->>'downsell_id')::bigint
+    )
+    SELECT d.id AS downsell_id,
+           COALESCE(q.scheduled,0) AS scheduled,
+           COALESCE(q.sent,0) AS sent,
+           COALESCE(q.canceled,0) AS canceled,
+           COALESCE(q.error,0) AS error,
+           COALESCE(p.pix,0) AS pix,
+           COALESCE(p.purchased,0) AS purchased
+    FROM downsells d
+    LEFT JOIN q ON q.downsell_id = d.id
+    LEFT JOIN p ON p.downsell_id = d.id
+    WHERE d.bot_slug = $1
+    `,
+    [botSlug]
+  );
+
+  const out: Record<number, DownsellStats> = {};
+  for (const r of res.rows) {
+    out[Number(r.downsell_id)] = {
+      scheduled: Number(r.scheduled ?? 0),
+      sent: Number(r.sent ?? 0),
+      canceled: Number(r.canceled ?? 0),
+      error: Number(r.error ?? 0),
+      pix: Number(r.pix ?? 0),
+      purchased: Number(r.purchased ?? 0),
+    };
+  }
+  return out;
+}
