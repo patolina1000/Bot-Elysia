@@ -3005,6 +3005,8 @@
   const btnDsSave = document.getElementById('btn-ds-save');
   const btnDsReset = document.getElementById('btn-ds-reset');
 
+  let downsStats = {}; // { [downsell_id]: {scheduled, sent, canceled, error, pix, purchased} }
+
   function cents(n){ return Math.round(Number(n)*100); }
   function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
   function adminHeaders(){ const h=new Headers(); const t=getAdminToken(); if(t) h.set('Authorization',`Bearer ${t}`); h.set('Content-Type','application/json'); return h; }
@@ -3026,10 +3028,14 @@
       return;
     }
     downsList.innerHTML = items.map(it => {
+      const st = downsStats[it.id] || {scheduled:0, sent:0, canceled:0, error:0, pix:0, purchased:0};
       return `<div class="card-section" style="display:flex; justify-content:space-between; gap:12px; align-items:center">
         <div style="flex:1">
           <div><strong>${it.title}</strong> — ${brl(it.price_cents)}</div>
           <div class="muted tiny">${it.trigger_kind} • delay ${it.delay_minutes}min • ativo: ${it.is_active ? 'sim' : 'não'}</div>
+          <div class="muted tiny">
+            agendados: ${st.scheduled} • enviados: ${st.sent} • cancelados: ${st.canceled} • erros: ${st.error} • PIX: ${st.pix} • compras: ${st.purchased}
+          </div>
         </div>
         <div style="display:flex; gap:8px">
           <button type="button" data-act="edit" data-id="${it.id}">Editar</button>
@@ -3042,10 +3048,22 @@
   btnLoadDowns?.addEventListener('click', async () => {
     const slug = (downsBotSlug.value||'').trim();
     if(!slug){ alert('Informe o bot slug'); return; }
-    const resp = await fetch(`/admin/api/downsells?bot_slug=${encodeURIComponent(slug)}`,{ headers: adminHeaders() });
-    const data = await resp.json().catch(()=>({}));
-    if(!resp.ok || !data?.ok){ alert('Falha ao carregar downsells'); return; }
-    renderDownsells(data.items||[]);
+
+    const [listResp, statsResp] = await Promise.all([
+      fetch(`/admin/api/downsells?bot_slug=${encodeURIComponent(slug)}`,{ headers: adminHeaders() }),
+      fetch(`/admin/api/downsells/metrics?bot_slug=${encodeURIComponent(slug)}`,{ headers: adminHeaders() }),
+    ]);
+
+    const listData = await listResp.json().catch(()=>({}));
+    const statsData = await statsResp.json().catch(()=>({}));
+
+    if(!listResp.ok || !listData?.ok){ alert('Falha ao carregar downsells'); return; }
+    if(statsResp.ok && statsData?.ok && statsData.stats){
+      downsStats = statsData.stats || {};
+    } else {
+      downsStats = {};
+    }
+    renderDownsells(listData.items||[]);
   });
   downsList?.addEventListener('click', async (ev)=>{
     const btn = ev.target.closest('button'); if(!btn) return;
