@@ -3599,5 +3599,73 @@
     }
   })();
   </script>
+
+<script>
+(function(){
+  'use strict';
+
+  // ---- helpers: token & headers (robustos) ----
+  function readAdminToken(){
+    try {
+      if (typeof window.getAdminToken === 'function') {
+        const t = window.getAdminToken(); if (t) return t;
+      }
+    } catch {}
+    try {
+      const t = localStorage.getItem('admin_token') || localStorage.getItem('adminToken');
+      if (t) return t;
+    } catch {}
+    const inp = document.querySelector('#admin-token') || document.querySelector('[data-admin-token]');
+    return inp && inp.value || '';
+  }
+  function adminAuthHeaders(){
+    const h = new Headers();
+    const t = readAdminToken();
+    if (t) h.set('Authorization', 'Bearer ' + t);
+    return h;
+  }
+
+  // ---- fallback visual do token (badge) ----
+  const tokStatus = document.getElementById('admin-token-status');
+
+  async function checkAdminTokenVisual(){
+    if (!tokStatus) return;
+    async function tryJson(url){
+      const r = await fetch(url, { headers: adminAuthHeaders() });
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json().catch(()=>({}));
+    }
+    try {
+      let data;
+      // 1) tenta ping oficial
+      try {
+        data = await tryJson('/admin/api/ping'); // deve responder { ok: true, botsCount: N }
+      } catch {
+        // 2) fallback: /admin/bots (retorna lista) -> converte para {ok:true}
+        const bots = await tryJson('/admin/bots');
+        if (Array.isArray(bots?.items)) data = { ok: true, botsCount: bots.items.length };
+        else throw new Error('no-ok');
+      }
+      if (data && (data.ok || typeof data.botsCount !== 'undefined')) {
+        tokStatus.textContent = `Token válido • ${data.botsCount ?? '—'} bot(s)`;
+        tokStatus.className = 'badge ok';
+        return;
+      }
+      throw new Error('not-ok');
+    } catch (e) {
+      tokStatus.textContent = 'Token inválido';
+      tokStatus.className = 'badge bad';
+    }
+  }
+
+  // roda no load, ao clicar no botão e quando o token mudar no storage
+  document.addEventListener('DOMContentLoaded', checkAdminTokenVisual);
+  (document.getElementById('admin-token-apply') || document.querySelector('#admin-card button'))
+    ?.addEventListener('click', () => setTimeout(checkAdminTokenVisual, 150));
+  window.addEventListener('storage', (ev) => {
+    if (ev.key === 'admin_token' || ev.key === 'adminToken') checkAdminTokenVisual();
+  });
+})();
+</script>
 </body>
 </html>
