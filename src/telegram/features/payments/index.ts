@@ -11,6 +11,7 @@ import {
 } from '../../../services/payments/PushinPayGateway.js';
 import { getGateway } from '../../../services/payments/registry.js';
 import { getSettings } from '../../../db/botSettings.js';
+import { generatePixTraceId } from '../../../utils/pixLogging.js';
 
 export const paymentsFeature = new Composer<MyContext>();
 
@@ -57,8 +58,20 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       return;
     }
 
+    const telegramId = ctx.from?.id ?? ctx.chat?.id ?? null;
+    const pix_trace_id = generatePixTraceId(null, null);
+
     try {
-      const telegramId = ctx.from?.id ?? ctx.chat?.id ?? null;
+      ctx.logger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        bot_slug: ctx.bot_slug,
+        telegram_id: telegramId,
+        payload_id: null,
+        plan_id: planId,
+        pix_trace_id,
+      }, '[PIX][CREATE] telegram callback');
+
       const { plan, transaction } = await createPixForPlan({
         planId,
         telegramId,
@@ -70,6 +83,18 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       if (!transaction.qr_code) {
         throw new Error('Código PIX indisponível.');
       }
+
+      const final_trace_id = generatePixTraceId(transaction.external_id, transaction.id);
+      ctx.logger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        provider_id: transaction.external_id,
+        transaction_id: transaction.id,
+        bot_slug: ctx.bot_slug,
+        telegram_id: telegramId,
+        price_cents: transaction.value_cents,
+        pix_trace_id: final_trace_id,
+      }, '[PIX][CREATE] telegram pix generated');
 
       const botSlug = ctx.bot_slug;
       if (botSlug) {
@@ -125,7 +150,14 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
 
       await ctx.answerCallbackQuery();
     } catch (err) {
-      ctx.logger.error({ err, data }, '[PAYMENTS] Failed to create PIX');
+      ctx.logger.error({
+        err,
+        op: 'create',
+        provider: 'PushinPay',
+        data,
+        plan_id: planId,
+        pix_trace_id,
+      }, '[PIX][ERROR] telegram create failed');
       await ctx.answerCallbackQuery({
         text: 'Erro ao gerar PIX. Tente novamente em instantes.',
         show_alert: true,
@@ -178,6 +210,16 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
 
   if (data.startsWith('paid:')) {
     const txid = data.slice('paid:'.length);
+    const pix_trace_id = generatePixTraceId(txid, null);
+
+    ctx.logger.info({
+      op: 'status',
+      provider: 'PushinPay',
+      provider_id: txid,
+      bot_slug: ctx.bot_slug,
+      telegram_id: ctx.from?.id ?? ctx.chat?.id ?? null,
+      pix_trace_id,
+    }, '[PIX][STATUS] telegram check');
 
     try {
       const gateway = resolvePushinPayGateway();
@@ -185,7 +227,25 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       const status = String(info?.status ?? 'created');
       const normalized = status.toLowerCase();
 
+      ctx.logger.info({
+        op: 'status',
+        provider: 'PushinPay',
+        provider_id: txid,
+        status,
+        pix_trace_id,
+      }, '[PIX][STATUS] telegram result');
+
       if (normalized === 'paid') {
+        ctx.logger.info({
+          op: 'status',
+          provider: 'PushinPay',
+          provider_id: txid,
+          status_next: 'paid',
+          bot_slug: ctx.bot_slug,
+          telegram_id: ctx.from?.id ?? ctx.chat?.id ?? null,
+          pix_trace_id,
+        }, '[PIX][STATUS] telegram payment confirmed');
+
         try {
           await ctx.editMessageText('🎉 Pagamento <b>confirmado</b>! Em instantes você será liberado.', {
             parse_mode: 'HTML',
@@ -205,7 +265,14 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         });
       }
     } catch (err) {
-      ctx.logger.error({ err, data }, '[PAYMENTS] Failed to verify payment');
+      ctx.logger.error({
+        err,
+        op: 'status',
+        provider: 'PushinPay',
+        provider_id: txid,
+        data,
+        pix_trace_id,
+      }, '[PIX][ERROR] telegram verify failed');
       await ctx.answerCallbackQuery({
         text: 'Não consegui consultar agora. Tente novamente mais tarde.',
         show_alert: true,
