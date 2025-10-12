@@ -1141,10 +1141,41 @@
     #admin-wizard .tabs .tab:hover {
       background: #e5e7eb;
     }
-    #admin-wizard .tabs .tab.active { 
+    #admin-wizard     .tabs .tab.active { 
       background: #2563eb; 
       color: #fff !important; 
       border-color: #2563eb;
+    }
+
+    /* Badge para status do Admin Token */
+    .badge { 
+      margin-left: 10px; 
+      padding: 4px 8px; 
+      border-radius: 999px; 
+      font-size: 12px; 
+      white-space: nowrap;
+    }
+    .badge.ok { 
+      background: #dcfce7; 
+      color: #166534; 
+      border: 1px solid #86efac; 
+    }
+    .badge.bad { 
+      background: #fee2e2; 
+      color: #991b1b; 
+      border: 1px solid #fecaca; 
+    }
+    .badge.muted { 
+      background: #f3f4f6; 
+      color: #374151; 
+      border: 1px solid #e5e7eb; 
+    }
+
+    /* Métricas */
+    .card-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
   </style>
 </head>
@@ -1160,6 +1191,7 @@
         <div class="token-input">
           <input id="admin-token" type="password" placeholder="Cole aqui o ADMIN_API_TOKEN" autocomplete="off">
           <button id="apply-token" type="button">Usar token</button>
+          <span id="admin-token-status" class="badge muted">Checando…</span>
         </div>
         <small style="color:#6b7280;">O token fica salvo apenas neste navegador.</small>
       </div>
@@ -1459,6 +1491,14 @@
         <button id="btn-ds-save" type="button">Salvar Downsell</button>
         <button id="btn-ds-reset" type="button" class="btn-secondary">Limpar formulário</button>
       </div>
+    </section>
+
+    <section id="metrics-card" class="simple-card">
+      <h2>Métricas do bot</h2>
+      <div class="muted tiny">Resumo rápido de envios do Telegram e downsells.</div>
+      <div id="metrics-summary" class="card-section"></div>
+      <canvas id="metrics-latency" height="120" style="width:100%; max-width:960px"></canvas>
+      <div id="metrics-recent" class="card-section" style="overflow:auto; max-height:220px"></div>
     </section>
   </div>
 
@@ -3318,6 +3358,107 @@
     (document.getElementById('ds-media2-url') as HTMLInputElement).value = data.url;
   });
 
+  // ===== Admin Token healthcheck =====
+  const tokStatus = document.getElementById('admin-token-status');
+  const tokInput = document.getElementById('admin-token');
+  const tokBtn = document.getElementById('apply-token');
+
+  function adminHeadersBare(){
+    const h = new Headers();
+    const t = getAdminToken?.();
+    if(t) h.set('Authorization', `Bearer ${t}`);
+    return h;
+  }
+
+  async function checkAdminTokenVisual(){
+    try{
+      const resp = await fetch('/admin/api/ping', { headers: adminHeadersBare() });
+      const ok = resp.ok;
+      const data = await resp.json().catch(()=>({}));
+      if(ok && data?.ok){
+        tokStatus.textContent = `Token válido • ${data.botsCount} bot(s)`;
+        tokStatus.className = 'badge ok';
+      } else {
+        tokStatus.textContent = 'Token inválido';
+        tokStatus.className = 'badge bad';
+      }
+    }catch(_e){
+      tokStatus.textContent = 'Sem resposta do servidor';
+      tokStatus.className = 'badge bad';
+    }
+  }
+
+  // checar ao carregar e sempre que clicar "Usar token"
+  document.addEventListener('DOMContentLoaded', checkAdminTokenVisual);
+  tokBtn?.addEventListener('click', () => setTimeout(checkAdminTokenVisual, 300));
+
+  // ===== Métricas (Telegram & Downsells) =====
+  const mSummary = document.getElementById('metrics-summary');
+  const mCanvas = document.getElementById('metrics-latency');
+  const mRecent = document.getElementById('metrics-recent');
+
+  async function loadMetricsForBot(slug){
+    try{
+      // downsells (agregadas) — já criadas anteriormente
+      const ds = await fetch(`/admin/api/downsells/metrics?bot_slug=${encodeURIComponent(slug)}`, { headers: adminHeadersBare() }).then(r=>r.json()).catch(()=>({}));
+      const agg = Object.values(ds?.stats||{}).reduce((a,s)=>({
+        scheduled:a.scheduled+(s.scheduled||0),
+        sent:a.sent+(s.sent||0),
+        canceled:a.canceled+(s.canceled||0),
+        error:a.error+(s.error||0),
+        pix:a.pix+(s.pix||0),
+        purchased:a.purchased+(s.purchased||0),
+      }), {scheduled:0,sent:0,canceled:0,error:0,pix:0,purchased:0});
+
+      // telegram sends (recentes) — já existem endpoints /admin/api/metrics/telegram-sends/*
+      const [recentResp, statsResp] = await Promise.all([
+        fetch('/admin/api/metrics/telegram-sends?limit=100',{ headers: adminHeadersBare() }),
+        fetch('/admin/api/metrics/telegram-sends/stats',{ headers: adminHeadersBare() }),
+      ]);
+      const recent = recentResp.ok ? await recentResp.json().catch(()=>({})) : {};
+
+      // resumo
+      mSummary.innerHTML = `
+        <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:14px;">
+          <div><strong>Downsells</strong> — agendados: ${agg.scheduled} • enviados: ${agg.sent} • cancelados: ${agg.canceled} • erros: ${agg.error} • PIX: ${agg.pix} • compras: ${agg.purchased}</div>
+        </div>
+      `;
+
+      // gráfico de latência (últimos envios deste bot)
+      const rows = Array.isArray(recent?.items) ? recent.items.filter(x => x.bot_slug===slug) : [];
+      drawLatency(rows);
+
+      // tabela recente
+      mRecent.innerHTML = rows.slice(-50).reverse().map(x => {
+        const ms = x.ms ?? x.latency ?? 0;
+        return `<div class="tiny muted">${x.ts || x.time} • ${x.name || x.kind} • <b>${ms}ms</b></div>`;
+      }).join('');
+    }catch(e){ console.warn('loadMetricsForBot', e); }
+  }
+
+  function drawLatency(rows){
+    const ctx = mCanvas.getContext('2d');
+    ctx.clearRect(0,0,mCanvas.width,mCanvas.height);
+    if(rows.length===0){ 
+      ctx.fillStyle='#6b7280'; 
+      ctx.font = '14px sans-serif';
+      ctx.fillText('Sem dados recentes', 10, 60); 
+      return; 
+    }
+    const W = mCanvas.width, H = mCanvas.height;
+    const vals = rows.map(r => Number(r.ms ?? r.latency ?? 0));
+    const max = Math.max(...vals, 1);
+    ctx.beginPath();
+    rows.forEach((r,i)=>{
+      const x = (i/(rows.length-1)) * (W-10) + 5;
+      const y = H - (vals[i]/max)*(H-10) - 5;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#2563eb';
+    ctx.stroke();
+  }
+
   // ===== Abas por bot =====
   const botTabs = document.getElementById('bot-tabs');
 
@@ -3389,6 +3530,9 @@
         });
         await loadDownsMetricsFor(slug);
       }
+
+      // Carregar métricas do bot (telegram + downsells)
+      await loadMetricsForBot(slug);
 
     } catch(e) { console.warn(e); }
   }

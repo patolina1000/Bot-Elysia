@@ -18,6 +18,20 @@ import {
 
 export const adminBotsRouter = Router();
 
+// Healthcheck do Admin Token (requer auth)
+adminBotsRouter.get(
+  '/admin/api/ping',
+  authAdminMiddleware,
+  async (_req: Request, res: Response) => {
+    const r = await pool.query(`select count(*)::int as c from bots`);
+    res.json({
+      ok: true,
+      now: new Date().toISOString(),
+      botsCount: r.rows[0]?.c ?? 0,
+    });
+  }
+);
+
 // Lista compacta de bots para desenhar as abas
 adminBotsRouter.get(
   '/admin/api/bots',
