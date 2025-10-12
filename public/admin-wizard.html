@@ -778,42 +778,123 @@
     }
     /* Elysia theme overrides */
     :root{
+      /* base */
       --bg:#0d1117;
-      --card:#121826;
-      --muted:#9fb2c8;
-      --text:#e8eef7;
+      --card-dark:#121826;
+      --on-dark:#e8eef7;
+      --on-light:#0b1220;
+      --muted-dark:#9fb2c8;
+      --muted-light:#5b6b81;
       --primary1:#19c3ff;
       --primary2:#4b7cff;
       --ring: rgba(73,140,255,.45);
       --radius:14px;
+      /* modal claro */
+      --modal-bg:#ffffff;
+      --modal-text:#0b1220;
+      --modal-border:#e8edf7;
     }
-    body{background:var(--bg); color:var(--text)}
-    .card{background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:var(--radius)}
-    input, textarea, select{background:#0b1220;color:var(--text);border:1px solid #263246;border-radius:10px;padding:10px}
-    input:focus, textarea:focus, select:focus{outline:none; box-shadow:0 0 0 3px var(--ring), 0 0 0 1px #2b3b57}
-    button{background:linear-gradient(135deg,var(--primary1),var(--primary2)); color:#081018;border:none;border-radius:12px;padding:10px 14px;font-weight:800}
-    button.secondary, .btn-secondary{background:#1f2838;color:#dfe9f7;border:1px solid #2b364a}
-    /* Modal "Novo bot" — versão CLARA para melhor leitura */
-    :root{ --modal-bg:#ffffff; --modal-text:#0b1220; --modal-border:#e8edf7; }
-    .modal, dialog{
+
+    /* fundo da página é escuro, texto claro por padrão */
+    body{ background:var(--bg); color:var(--on-dark) }
+
+    /* === SUPERFÍCIES (contraste alto) === */
+    /* Card CLARO (padrão): fundo branco, texto preto */
+    .card{
+      background:#ffffff;
+      color:var(--on-light);
+      border:1px solid #e8edf7;
+      border-radius:var(--radius);
+    }
+    .card .muted{ color:var(--muted-light); }
+
+    /* Card ESCURO (opcional): use class="card dark" onde quiser escuro */
+    .card.dark{
+      background:var(--card-dark);
+      color:var(--on-dark);
+      border:1px solid rgba(255,255,255,.06);
+    }
+    .card.dark .muted{ color:var(--muted-dark); }
+
+    /* Inputs se adaptam à superfície do card onde estão */
+    .card input,
+    .card textarea,
+    .card select{
+      background:#ffffff;
+      color:var(--on-light);
+      border:1px solid #d0d7e2;
+      border-radius:10px;
+      padding:10px;
+    }
+    .card.dark input,
+    .card.dark textarea,
+    .card.dark select{
+      background:#0b1220;
+      color:var(--on-dark);
+      border:1px solid #263246;
+    }
+    .card input:focus,
+    .card textarea:focus,
+    .card select:focus{
+      outline:none;
+      box-shadow:0 0 0 3px var(--ring), 0 0 0 1px #2b3b57;
+    }
+    .card.dark input:focus,
+    .card.dark textarea:focus,
+    .card.dark select:focus{
+      outline:none;
+      box-shadow:0 0 0 3px var(--ring), 0 0 0 1px #2b3b57;
+    }
+    .card label{ color:#334155 }
+    .card.dark label{ color:var(--muted-dark) }
+    .card ::placeholder{ color:#78879e; opacity:1 }
+    .card.dark ::placeholder{ color:#6f819b; opacity:1 }
+
+    /* Botões */
+    button{
+      background:linear-gradient(135deg,var(--primary1),var(--primary2));
+      color:#081018;
+      border:none;
+      border-radius:12px;
+      padding:10px 14px;
+      font-weight:800;
+    }
+    button.secondary,
+    .btn-secondary{
+      background:#eef2f9;
+      color:#0b1220;
+      border:1px solid #d0d7e2;
+    }
+
+    /* Modal CLARO (força contraste) */
+    .modal,
+    dialog{
       background:var(--modal-bg)!important;
       color:var(--modal-text)!important;
       border:1px solid var(--modal-border)!important;
       border-radius:20px!important;
       box-shadow:0 20px 70px rgba(2,19,48,.35), 0 2px 8px rgba(2,19,48,.12)!important;
     }
-    .modal h3, dialog h3{font-weight:900; color:var(--modal-text)!important}
+    .modal h3,
+    dialog h3{ font-weight:900; color:var(--modal-text)!important }
     dialog label{ color:#334155 }
-    dialog input, dialog textarea, dialog select{
-      background:#ffffff; color:var(--modal-text);
-      border:1px solid #d0d7e2; border-radius:10px; padding:10px;
+    dialog input,
+    dialog textarea,
+    dialog select{
+      background:#ffffff;
+      color:var(--modal-text);
+      border:1px solid #d0d7e2;
+      border-radius:10px;
+      padding:10px;
     }
-    dialog input:focus, dialog textarea:focus, dialog select:focus{
-      outline:none; box-shadow:0 0 0 3px rgba(47,128,237,.18), 0 0 0 1px #3b82f6;
+    dialog input:focus,
+    dialog textarea:focus,
+    dialog select:focus{
+      outline:none;
+      box-shadow:0 0 0 3px rgba(47,128,237,.18), 0 0 0 1px #3b82f6;
       border-color:#3b82f6;
     }
-    /* botão secundário dentro do modal (ex.: Cancelar) */
-    dialog .secondary{ background:#eef2f9; color:#0b1220; border:1px solid #d0d7e2; }
+    dialog .secondary{ background:#eef2f9; color:#0b1220; border:1px solid #d0d7e2 }
   </style>
 </head>
 <body>
