@@ -151,6 +151,16 @@
       padding: 8px 4px;
     }
 
+    .simple-card {
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
     main.card {
       background: #ffffff;
       border-radius: 12px;
@@ -159,6 +169,176 @@
       display: flex;
       flex-direction: column;
       gap: 16px;
+    }
+
+    .muted {
+      color: #6b7280;
+    }
+
+    .tiny {
+      font-size: 12px;
+    }
+
+    .text-xs {
+      font-size: 12px;
+    }
+
+    .opacity-70 {
+      opacity: 0.7;
+    }
+
+    .mt-2 {
+      margin-top: 8px;
+    }
+
+    #plans-card {
+      margin-top: 24px;
+    }
+
+    #plans-card h2 {
+      margin: 0;
+      font-size: 22px;
+      color: #111827;
+    }
+
+    #plans-card p.description {
+      margin: 0;
+      color: #4b5563;
+      font-size: 14px;
+    }
+
+    #plans-card .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    #plans-card .form-row .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1 1 220px;
+      min-width: 200px;
+    }
+
+    #plans-card .form-row .field.grow-2 {
+      flex: 2 1 260px;
+    }
+
+    #plans-card input {
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #ffffff;
+      color: inherit;
+    }
+
+    #plans-card input[type='hidden'] {
+      display: none;
+    }
+
+    #plans-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #plans-list .placeholder {
+      border: 1px dashed #cbd5f5;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 14px;
+      color: #6b7280;
+      background: #f8fafc;
+    }
+
+    #plans-list .plan-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #plans-list .plan-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #plans-list .plan-info .plan-price {
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    #plans-list .plan-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #plans-card .plan-hint {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    #plans-card hr {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 8px 0 12px;
+    }
+
+    #pix-modal {
+      max-width: 520px;
+      width: 100%;
+      padding: 24px;
+    }
+
+    #pix-modal h3 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    #pix-modal textarea {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    #pix-modal img {
+      max-width: 260px;
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto 12px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      padding: 8px;
+    }
+
+    #pix-modal .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    #pix-modal .pix-notice {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 12px;
+      line-height: 1.5;
     }
 
     .card-header {
@@ -697,7 +877,54 @@
         <div id="status" class="status hidden"></div>
       </div>
     </main>
+
+    <section id="plans-card" class="simple-card">
+      <div>
+        <h2>Planos por bot</h2>
+        <p class="description">Cadastre planos (nome e preço) por <strong>slug</strong> de bot e gere pagamentos PIX instantâneos para testes.</p>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="plans-bot-slug">Bot slug</label>
+          <input id="plans-bot-slug" type="text" placeholder="ex.: hadrielle-maria" autocomplete="off" />
+        </div>
+        <button id="btn-load-plans" type="button">Carregar planos</button>
+      </div>
+      <div id="plans-list">
+        <div class="placeholder">Informe o slug do bot e clique em "Carregar planos".</div>
+      </div>
+      <hr />
+      <h3>Cadastro de plano</h3>
+      <div class="form-row">
+        <input type="hidden" id="plan-id" />
+        <div class="field grow-2">
+          <label for="plan-name">Nome do plano</label>
+          <input id="plan-name" type="text" placeholder="ex.: 1 Semana" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="plan-price">Preço (R$)</label>
+          <input id="plan-price" type="text" placeholder="ex.: 9,90" inputmode="decimal" autocomplete="off" />
+        </div>
+        <button id="btn-save-plan" type="button">Salvar plano</button>
+      </div>
+      <p class="plan-hint">* Valores são convertidos para centavos; mínimo R$ 0,50.</p>
+    </section>
   </div>
+
+  <dialog id="pix-modal">
+    <h3 id="pix-title">Pagamento PIX</h3>
+    <div>
+      <img id="pix-qr" alt="QR Code PIX" src="" />
+      <textarea id="pix-code" readonly placeholder="Copia e cola do PIX"></textarea>
+      <div id="pix-notice" class="pix-notice" data-default="<strong>Aviso:</strong> A PUSHIN PAY atua exclusivamente como processadora de pagamentos e não possui qualquer responsabilidade pela entrega, suporte, conteúdo, qualidade ou cumprimento das obrigações relacionadas aos produtos ou serviços oferecidos pelo vendedor.">
+        <strong>Aviso:</strong> A PUSHIN PAY atua exclusivamente como processadora de pagamentos e não possui qualquer responsabilidade pela entrega, suporte, conteúdo, qualidade ou cumprimento das obrigações relacionadas aos produtos ou serviços oferecidos pelo vendedor.
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" id="btn-copy-code" class="btn-secondary">Copiar código</button>
+      <button type="button" id="btn-close-pix">Fechar</button>
+    </div>
+  </dialog>
 
   <dialog id="new-bot-modal">
     <form method="dialog" id="new-bot-form" class="modal-form">
@@ -753,6 +980,21 @@
       const nbEmptyInput = document.getElementById('nb-empty');
       const nbTestTokenBtn = document.getElementById('nb-test-token');
       const nbCreateBtn = document.getElementById('nb-create');
+      const plansBotSlugInput = document.getElementById('plans-bot-slug');
+      const plansList = document.getElementById('plans-list');
+      const plansLoadBtn = document.getElementById('btn-load-plans');
+      const planIdInput = document.getElementById('plan-id');
+      const planNameInput = document.getElementById('plan-name');
+      const planPriceInput = document.getElementById('plan-price');
+      const planSaveBtn = document.getElementById('btn-save-plan');
+      const pixModal = document.getElementById('pix-modal');
+      const pixTitle = document.getElementById('pix-title');
+      const pixQr = document.getElementById('pix-qr');
+      const pixCode = document.getElementById('pix-code');
+      const pixNotice = document.getElementById('pix-notice');
+      const pixCopyBtn = document.getElementById('btn-copy-code');
+      const pixCloseBtn = document.getElementById('btn-close-pix');
+      const pixNoticeDefault = pixNotice ? pixNotice.innerHTML : '';
 
       let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
       if (ADMIN_TOKEN) {
@@ -797,6 +1039,23 @@
           .replace(/'/g, '&#39;');
       }
 
+      function priceToCents(value) {
+        if (value === null || value === undefined) {
+          return Number.NaN;
+        }
+        const normalized = String(value).trim().replace(/\./g, '').replace(',', '.');
+        const number = Number(normalized);
+        return Number.isFinite(number) ? Math.round(number * 100) : Number.NaN;
+      }
+
+      function centsToBRL(cents) {
+        const number = Number(cents);
+        if (!Number.isFinite(number)) {
+          return 'R$ 0,00';
+        }
+        return (number / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      }
+
       function renderMediaCachePlaceholder(message) {
         if (!mediaCacheTable) {
           return;
@@ -806,6 +1065,282 @@
         placeholder.className = 'placeholder';
         placeholder.textContent = message;
         mediaCacheTable.appendChild(placeholder);
+      }
+
+      function setPlansPlaceholder(message) {
+        if (!plansList) {
+          return;
+        }
+        const placeholder = document.createElement('div');
+        placeholder.className = 'placeholder';
+        placeholder.textContent = message;
+        plansList.innerHTML = '';
+        plansList.appendChild(placeholder);
+      }
+
+      function resetPlanForm() {
+        if (planIdInput) {
+          planIdInput.value = '';
+        }
+        if (planNameInput) {
+          planNameInput.value = '';
+        }
+        if (planPriceInput) {
+          planPriceInput.value = '';
+        }
+      }
+
+      function fillPlanForm(plan) {
+        if (!plan) {
+          return;
+        }
+        if (planIdInput) {
+          planIdInput.value = plan.id != null ? String(plan.id) : '';
+        }
+        if (planNameInput) {
+          planNameInput.value = typeof plan.plan_name === 'string' ? plan.plan_name : '';
+        }
+        if (planPriceInput) {
+          const cents = Number(plan.price_cents);
+          planPriceInput.value = Number.isFinite(cents)
+            ? (cents / 100).toFixed(2).replace('.', ',')
+            : '';
+        }
+        planNameInput?.focus();
+      }
+
+      async function loadPlans(options = {}) {
+        if (!plansList) {
+          return;
+        }
+
+        const { autoload = false } = options;
+        const slug = (plansBotSlugInput?.value || '').trim();
+
+        if (!slug) {
+          if (!autoload) {
+            alert('Informe o slug do bot.');
+          }
+          setPlansPlaceholder('Informe o slug do bot para listar planos.');
+          return;
+        }
+
+        if (!getAdminToken()) {
+          if (!autoload) {
+            alert('Informe o token de admin para continuar.');
+          }
+          setPlansPlaceholder('Informe o token de admin para listar planos.');
+          return;
+        }
+
+        setPlansPlaceholder('Carregando planos...');
+
+        try {
+          const data = await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/plans`);
+          const items = Array.isArray(data?.items) ? data.items : [];
+
+          plansList.innerHTML = '';
+
+          if (!items.length) {
+            setPlansPlaceholder('Nenhum plano cadastrado para este bot.');
+            return;
+          }
+
+          const fragment = document.createDocumentFragment();
+
+          items.forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'plan-item';
+
+            const info = document.createElement('div');
+            info.className = 'plan-info';
+
+            const title = document.createElement('div');
+            title.textContent = typeof item.plan_name === 'string' ? item.plan_name : '';
+
+            const price = document.createElement('div');
+            price.className = 'plan-price';
+            const statusLabel = item.is_active ? 'ativo' : 'inativo';
+            price.textContent = `${centsToBRL(item.price_cents)} • ${statusLabel}`;
+
+            info.appendChild(title);
+            info.appendChild(price);
+
+            const actions = document.createElement('div');
+            actions.className = 'plan-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'btn-secondary';
+            editBtn.textContent = 'Editar';
+            editBtn.addEventListener('click', () => fillPlanForm(item));
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'btn-secondary';
+            deleteBtn.textContent = 'Excluir';
+            deleteBtn.addEventListener('click', () => removePlan(item));
+
+            const pixBtn = document.createElement('button');
+            pixBtn.type = 'button';
+            pixBtn.textContent = 'Gerar PIX';
+            pixBtn.disabled = !item.is_active;
+            if (!item.is_active) {
+              pixBtn.title = 'Plano inativo';
+            }
+            pixBtn.addEventListener('click', () => generatePlanPix(item));
+
+            actions.append(editBtn, deleteBtn, pixBtn);
+
+            row.append(info, actions);
+            fragment.appendChild(row);
+          });
+
+          plansList.appendChild(fragment);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao carregar planos.';
+          setPlansPlaceholder(message);
+          showToast(message);
+        }
+      }
+
+      async function savePlan() {
+        const slug = (plansBotSlugInput?.value || '').trim();
+        const name = (planNameInput?.value || '').trim();
+        const cents = priceToCents(planPriceInput?.value ?? '');
+        const currentId = planIdInput?.value ? Number(planIdInput.value) : null;
+
+        if (!slug || !name || !Number.isFinite(cents)) {
+          alert('Preencha slug, nome e preço válidos.');
+          return;
+        }
+
+        if (cents < 50) {
+          alert('Valor mínimo é R$ 0,50.');
+          return;
+        }
+
+        const payload = {
+          plan_name: name,
+          price_cents: cents,
+          is_active: true,
+        };
+
+        if (Number.isFinite(currentId) && currentId) {
+          payload.id = currentId;
+        }
+
+        try {
+          await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/plans`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          resetPlanForm();
+          showToast(currentId ? 'Plano atualizado.' : 'Plano criado.');
+          await loadPlans({ autoload: true });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao salvar plano.';
+          alert(message);
+        }
+      }
+
+      async function removePlan(plan) {
+        if (!plan) {
+          return;
+        }
+
+        const slug = typeof plan.bot_slug === 'string' ? plan.bot_slug : (plansBotSlugInput?.value || '').trim();
+        if (!slug) {
+          alert('Não foi possível identificar o bot do plano.');
+          return;
+        }
+
+        if (!confirm(`Excluir plano "${plan.plan_name}"?`)) {
+          return;
+        }
+
+        try {
+          await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/plans/${plan.id}`, {
+            method: 'DELETE',
+          });
+          showToast('Plano removido.');
+          await loadPlans({ autoload: true });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao excluir plano.';
+          alert(message);
+        }
+      }
+
+      async function generatePlanPix(plan) {
+        if (!plan) {
+          return;
+        }
+
+        const extra = window.prompt('Opcional: informe "telegram_id,payload_id" ou deixe vazio', '');
+        let telegramId = null;
+        let payloadId = null;
+
+        if (extra && typeof extra === 'string') {
+          const trimmed = extra.trim();
+          if (trimmed.includes(',')) {
+            const parts = trimmed.split(',');
+            const maybeTelegram = Number(parts[0].trim());
+            telegramId = Number.isFinite(maybeTelegram) ? maybeTelegram : null;
+            const maybePayload = parts[1] ? parts[1].trim() : '';
+            payloadId = maybePayload || null;
+          } else if (trimmed.length) {
+            const maybeTelegram = Number(trimmed);
+            if (Number.isFinite(maybeTelegram)) {
+              telegramId = maybeTelegram;
+            } else {
+              payloadId = trimmed;
+            }
+          }
+        }
+
+        const body = { plan_id: plan.id };
+        if (telegramId !== null) {
+          body.telegram_id = telegramId;
+        }
+        if (payloadId) {
+          body.payload_id = payloadId;
+        }
+
+        try {
+          const data = await fetchJSON('/api/payments/pushinpay/cash-in/by-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+
+          if (pixTitle) {
+            pixTitle.textContent = `${plan.plan_name} — ${centsToBRL(plan.price_cents)}`;
+          }
+          if (pixQr) {
+            pixQr.src = typeof data.qr_code_base64 === 'string' ? data.qr_code_base64 : '';
+            pixQr.style.display = pixQr.src ? 'block' : 'none';
+          }
+          if (pixCode) {
+            pixCode.value = typeof data.qr_code === 'string' ? data.qr_code : '';
+          }
+          if (pixNotice) {
+            const fallback = pixNoticeDefault || pixNotice.getAttribute('data-default') || pixNotice.innerHTML;
+            pixNotice.innerHTML = typeof data.notice_html === 'string' && data.notice_html
+              ? data.notice_html
+              : fallback;
+          }
+
+          if (pixModal && typeof pixModal.showModal === 'function') {
+            pixModal.showModal();
+          } else {
+            alert('Seu navegador não suporta o modal. Código PIX: ' + (pixCode ? pixCode.value : ''));
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao gerar PIX.';
+          alert(message);
+        }
       }
 
       async function refreshMediaCache(slug) {
@@ -994,6 +1529,12 @@
         paneEl.classList.toggle('hidden', !hasBots || !state.currentBotId);
         if (!hasBots || !state.currentBotId) {
           renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.');
+          if (plansBotSlugInput) {
+            plansBotSlugInput.value = '';
+          }
+          if (plansList) {
+            setPlansPlaceholder('Informe o slug do bot e clique em "Carregar planos".');
+          }
         }
       }
 
@@ -1082,7 +1623,8 @@
       }
 
       async function selectBot(botId) {
-        if (!state.bots.find((bot) => bot.id === botId)) {
+        const targetBot = state.bots.find((bot) => bot.id === botId);
+        if (!targetBot) {
           return;
         }
         if (state.currentBotId === botId) {
@@ -1096,6 +1638,15 @@
         }
 
         state.currentBotId = botId;
+        if (plansBotSlugInput) {
+          plansBotSlugInput.value = targetBot.slug || '';
+        }
+        resetPlanForm();
+        if (targetBot.slug) {
+          void loadPlans({ autoload: true });
+        } else if (plansList) {
+          setPlansPlaceholder('Informe o slug do bot e clique em "Carregar planos".');
+        }
         history.replaceState(null, '', `#bot=${botId}`);
         renderTabs();
         updateNoBotsVisibility();
@@ -1505,6 +2056,52 @@
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Erro ao aquecer mídias.';
           alert(message);
+        }
+      });
+
+      plansLoadBtn?.addEventListener('click', () => {
+        void loadPlans();
+      });
+
+      plansBotSlugInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          void loadPlans();
+        }
+      });
+
+      plansBotSlugInput?.addEventListener('input', () => {
+        resetPlanForm();
+      });
+
+      planSaveBtn?.addEventListener('click', () => {
+        void savePlan();
+      });
+
+      pixCloseBtn?.addEventListener('click', () => {
+        if (pixModal && typeof pixModal.close === 'function') {
+          pixModal.close();
+        }
+      });
+
+      pixCopyBtn?.addEventListener('click', async () => {
+        if (!pixCode) {
+          return;
+        }
+
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(pixCode.value);
+          } else {
+            pixCode.select();
+            if (document.execCommand) {
+              document.execCommand('copy');
+            }
+          }
+          showToast('Código PIX copiado!');
+        } catch (error) {
+          console.warn(error);
+          alert('Não foi possível copiar automaticamente. Copie manualmente.');
         }
       });
 
