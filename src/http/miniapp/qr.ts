@@ -26,9 +26,22 @@ miniappQrRouter.get('/miniapp/qr', async (req: Request, res: Response): Promise<
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial;}
     .wrap{max-width:520px;margin:0 auto;padding:16px 14px 28px}
-    .brand{display:flex;align-items:center;gap:10px;margin:4px 0 12px}
+    .brand{
+      display:flex;
+      align-items:center;
+      justify-content:center;      /* <-- centraliza horizontalmente */
+      gap:10px;
+      margin:4px 0 12px;
+      text-align:center;           /* garante centralização do texto */
+      width:100%;
+    }
     .logo{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent1),var(--accent2))}
-    .title{font-weight:700;font-size:18px}
+    .title{
+      font-weight:700;
+      font-size:18px;
+      line-height:1.2;
+      white-space:normal;          /* permite quebra em telas estreitas */
+    }
     .card{background:var(--card);border-radius:14px;padding:14px;border:1px solid rgba(255,255,255,.06)}
     .headline{font-weight:800;font-size:20px;background:linear-gradient(135deg,var(--accent1),var(--accent2));-webkit-background-clip:text;color:transparent;margin:0 0 8px}
     .muted{color:var(--muted);font-size:13px}
