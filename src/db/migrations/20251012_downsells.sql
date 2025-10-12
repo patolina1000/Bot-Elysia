@@ -11,6 +11,15 @@ CREATE TABLE IF NOT EXISTS downsells (
   media1_type TEXT NULL CHECK (media1_type IN ('photo','video','audio') OR media1_type IS NULL),
   media2_url TEXT NULL,
   media2_type TEXT NULL CHECK (media2_type IN ('photo','video','audio') OR media2_type IS NULL),
+  -- janela de horário
+  window_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  window_start_hour SMALLINT NULL CHECK (window_start_hour BETWEEN 0 AND 23),
+  window_end_hour SMALLINT NULL CHECK (window_end_hour BETWEEN 0 AND 23),
+  window_tz TEXT NULL, -- ex.: 'America/Recife'
+  -- limite diário por usuário (0 = sem limite)
+  daily_cap_per_user INT NOT NULL DEFAULT 0,
+  -- A/B (habilita uso de tabela de variantes)
+  ab_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -18,6 +27,24 @@ CREATE TABLE IF NOT EXISTS downsells (
 
 CREATE INDEX IF NOT EXISTS idx_downsells_bot ON downsells (bot_slug);
 CREATE INDEX IF NOT EXISTS idx_downsells_active ON downsells (is_active);
+
+-- Variações A/B (opcionais)
+CREATE TABLE IF NOT EXISTS downsells_variants (
+  id BIGSERIAL PRIMARY KEY,
+  downsell_id BIGINT NOT NULL REFERENCES downsells(id) ON DELETE CASCADE,
+  key CHAR(1) NOT NULL CHECK (key IN ('A','B')),
+  weight SMALLINT NOT NULL DEFAULT 50 CHECK (weight BETWEEN 0 AND 100),
+  title TEXT NULL,
+  price_cents INT NULL,
+  message_text TEXT NULL,
+  media1_url TEXT NULL,
+  media1_type TEXT NULL CHECK (media1_type IN ('photo','video','audio') OR media1_type IS NULL),
+  media2_url TEXT NULL,
+  media2_type TEXT NULL CHECK (media2_type IN ('photo','video','audio') OR media2_type IS NULL),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT ux_dsvar UNIQUE (downsell_id, key)
+);
 
 -- Fila de envios (agendamentos por usuário)
 CREATE TABLE IF NOT EXISTS downsells_queue (

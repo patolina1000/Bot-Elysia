@@ -1357,6 +1357,74 @@
           </div>
         </div>
       </div>
+      <hr />
+      <h3>Configurações Avançadas</h3>
+      <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="ds-window-enabled" /> Restringir horário
+        </label>
+        <div class="field" style="max-width:160px">
+          <label>De (hora)</label>
+          <input id="ds-window-start" type="number" min="0" max="23" placeholder="8" />
+        </div>
+        <div class="field" style="max-width:160px">
+          <label>Até (hora)</label>
+          <input id="ds-window-end" type="number" min="0" max="23" placeholder="22" />
+        </div>
+        <div class="field" style="max-width:260px">
+          <label>Timezone</label>
+          <input id="ds-window-tz" type="text" placeholder="America/Recife" />
+        </div>
+        <div class="field" style="max-width:220px">
+          <label>Limite diário por usuário</label>
+          <input id="ds-daily-cap" type="number" min="0" value="0" />
+        </div>
+      </div>
+      <div class="card-section">
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="ds-ab-enabled" /> Habilitar A/B (A e B com pesos)
+        </label>
+        <div id="ds-ab-block" style="display:none; margin-top:8px">
+          <div class="muted tiny">Se um campo ficar vazio na variação, usa-se o valor "base" do downsell.</div>
+          <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+            <div class="field"><label>Peso A</label><input id="ds-A-weight" type="number" min="0" max="100" value="50" /></div>
+            <div class="field"><label>Título A</label><input id="ds-A-title" type="text" /></div>
+            <div class="field"><label>Preço A (R$)</label><input id="ds-A-price" type="number" step="0.01" /></div>
+          </div>
+          <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+            <div class="field" style="flex:1"><label>Mensagem A</label><input id="ds-A-msg" type="text" /></div>
+          </div>
+          <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+            <div class="field"><label>Mídia A1 URL</label><input id="ds-A-m1" type="url" /></div>
+            <div class="field"><label>Tipo</label>
+              <select id="ds-A-m1t"><option value=""></option><option value="photo">Imagem</option><option value="video">Vídeo</option><option value="audio">Áudio</option></select>
+            </div>
+            <div class="field"><label>Mídia A2 URL</label><input id="ds-A-m2" type="url" /></div>
+            <div class="field"><label>Tipo</label>
+              <select id="ds-A-m2t"><option value=""></option><option value="photo">Imagem</option><option value="video">Vídeo</option><option value="audio">Áudio</option></select>
+            </div>
+          </div>
+          <hr/>
+          <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+            <div class="field"><label>Peso B</label><input id="ds-B-weight" type="number" min="0" max="100" value="50" /></div>
+            <div class="field"><label>Título B</label><input id="ds-B-title" type="text" /></div>
+            <div class="field"><label>Preço B (R$)</label><input id="ds-B-price" type="number" step="0.01" /></div>
+          </div>
+          <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+            <div class="field" style="flex:1"><label>Mensagem B</label><input id="ds-B-msg" type="text" /></div>
+          </div>
+          <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+            <div class="field"><label>Mídia B1 URL</label><input id="ds-B-m1" type="url" /></div>
+            <div class="field"><label>Tipo</label>
+              <select id="ds-B-m1t"><option value=""></option><option value="photo">Imagem</option><option value="video">Vídeo</option><option value="audio">Áudio</option></select>
+            </div>
+            <div class="field"><label>Mídia B2 URL</label><input id="ds-B-m2" type="url" /></div>
+            <div class="field"><label>Tipo</label>
+              <select id="ds-B-m2t"><option value=""></option><option value="photo">Imagem</option><option value="video">Vídeo</option><option value="audio">Áudio</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="form-row">
         <button id="btn-ds-save" type="button">Salvar Downsell</button>
         <button id="btn-ds-reset" type="button" class="btn-secondary">Limpar formulário</button>
@@ -3004,6 +3072,28 @@
   const btnDsMedia2Upload = document.getElementById('btn-ds-media2-upload');
   const btnDsSave = document.getElementById('btn-ds-save');
   const btnDsReset = document.getElementById('btn-ds-reset');
+  // New fields
+  const dsWindowEnabled = document.getElementById('ds-window-enabled');
+  const dsWindowStart = document.getElementById('ds-window-start');
+  const dsWindowEnd = document.getElementById('ds-window-end');
+  const dsWindowTz = document.getElementById('ds-window-tz');
+  const dsDailyCap = document.getElementById('ds-daily-cap');
+  const dsAbEnabled = document.getElementById('ds-ab-enabled');
+  const dsAbBlock = document.getElementById('ds-ab-block');
+  // A
+  const Aweight = document.getElementById('ds-A-weight');
+  const Atitle = document.getElementById('ds-A-title');
+  const Aprice = document.getElementById('ds-A-price');
+  const Amsg = document.getElementById('ds-A-msg');
+  const Am1 = document.getElementById('ds-A-m1'); const Am1t = document.getElementById('ds-A-m1t');
+  const Am2 = document.getElementById('ds-A-m2'); const Am2t = document.getElementById('ds-A-m2t');
+  // B
+  const Bweight = document.getElementById('ds-B-weight');
+  const Btitle = document.getElementById('ds-B-title');
+  const Bprice = document.getElementById('ds-B-price');
+  const Bmsg = document.getElementById('ds-B-msg');
+  const Bm1 = document.getElementById('ds-B-m1'); const Bm1t = document.getElementById('ds-B-m1t');
+  const Bm2 = document.getElementById('ds-B-m2'); const Bm2t = document.getElementById('ds-B-m2t');
 
   let downsStats = {}; // { [downsell_id]: {scheduled, sent, canceled, error, pix, purchased} }
 
@@ -3021,7 +3111,33 @@
     dsMedia1Url.value = item?.media1_url ?? '';
     dsMedia2Type.value = item?.media2_type ?? '';
     dsMedia2Url.value = item?.media2_url ?? '';
+    dsWindowEnabled.checked = !!item?.window_enabled;
+    dsWindowStart.value = item?.window_start_hour ?? '';
+    dsWindowEnd.value = item?.window_end_hour ?? '';
+    dsWindowTz.value = item?.window_tz ?? 'America/Recife';
+    dsDailyCap.value = item?.daily_cap_per_user ?? 0;
+    dsAbEnabled.checked = !!item?.ab_enabled;
+    dsAbBlock.style.display = dsAbEnabled.checked ? 'block' : 'none';
+    // Clear variants
+    Aweight.value = 50; Atitle.value = ''; Aprice.value = ''; Amsg.value = ''; 
+    Am1.value = ''; Am1t.value = ''; Am2.value = ''; Am2t.value = '';
+    Bweight.value = 50; Btitle.value = ''; Bprice.value = ''; Bmsg.value = ''; 
+    Bm1.value = ''; Bm1t.value = ''; Bm2.value = ''; Bm2t.value = '';
+    if (item?.id) {
+      // carregar variantes existentes
+      fetch(`/admin/api/downsells/variants?downsell_id=${item.id}`, { headers: adminHeaders() })
+        .then(r=>r.json()).then(d=>{
+          if (d?.ok && Array.isArray(d.items)) {
+            const A = d.items.find(x=>x.key==='A'); const B = d.items.find(x=>x.key==='B');
+            if (A){ Aweight.value=A.weight; Atitle.value=A.title||''; Aprice.value=A.price_cents? (A.price_cents/100).toFixed(2):''; Amsg.value=A.message_text||''; Am1.value=A.media1_url||''; Am1t.value=A.media1_type||''; Am2.value=A.media2_url||''; Am2t.value=A.media2_type||''; }
+            if (B){ Bweight.value=B.weight; Btitle.value=B.title||''; Bprice.value=B.price_cents? (B.price_cents/100).toFixed(2):''; Bmsg.value=B.message_text||''; Bm1.value=B.media1_url||''; Bm1t.value=B.media1_type||''; Bm2.value=B.media2_url||''; Bm2t.value=B.media2_type||''; }
+          }
+        });
+    }
   }
+  dsAbEnabled?.addEventListener('change', ()=> {
+    dsAbBlock.style.display = dsAbEnabled.checked ? 'block' : 'none';
+  });
   function renderDownsells(items){
     if(!items || items.length===0){
       downsList.innerHTML = '<div class="placeholder">Nenhum downsell ainda.</div>';
@@ -3108,11 +3224,45 @@
       media1_type: dsMedia1Type.value || null,
       media2_url: dsMedia2Url.value || null,
       media2_type: dsMedia2Type.value || null,
+      window_enabled: dsWindowEnabled.checked,
+      window_start_hour: dsWindowStart.value ? Number(dsWindowStart.value) : null,
+      window_end_hour: dsWindowEnd.value ? Number(dsWindowEnd.value) : null,
+      window_tz: dsWindowTz.value || null,
+      daily_cap_per_user: Number(dsDailyCap.value||0),
+      ab_enabled: dsAbEnabled.checked,
       is_active: true,
     };
     const resp = await fetch('/admin/api/downsells/upsert',{ method:'POST', headers: adminHeaders(), body: JSON.stringify(body) });
     const data = await resp.json().catch(()=>({}));
     if(!resp.ok || !data?.ok){ alert('Falha ao salvar'); return; }
+    
+    // se A/B habilitado, upsert variantes
+    if (dsAbEnabled.checked) {
+      const id = data.item.id;
+      const up = async (key, payload)=> {
+        await fetch('/admin/api/downsells/variants/upsert',{
+          method:'POST', headers: adminHeaders(),
+          body: JSON.stringify({ downsell_id:id, key, ...payload })
+        });
+      };
+      await up('A', {
+        weight: Number(Aweight.value||50),
+        title: Atitle.value || null,
+        price_cents: Aprice.value ? Math.round(Number(Aprice.value)*100) : null,
+        message_text: Amsg.value || null,
+        media1_url: Am1.value || null, media1_type: Am1t.value || null,
+        media2_url: Am2.value || null, media2_type: Am2t.value || null,
+      });
+      await up('B', {
+        weight: Number(Bweight.value||50),
+        title: Btitle.value || null,
+        price_cents: Bprice.value ? Math.round(Number(Bprice.value)*100) : null,
+        message_text: Bmsg.value || null,
+        media1_url: Bm1.value || null, media1_type: Bm1t.value || null,
+        media2_url: Bm2.value || null, media2_type: Bm2t.value || null,
+      });
+    }
+    
     fillDownsellForm(null);
     btnLoadDowns.click();
   });
