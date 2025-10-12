@@ -6,6 +6,7 @@ import { startService } from './startService.js';
 import { groupMediaForSending, type MediaAsset } from '../../../utils/mediaGrouping.js';
 import { telegramMediaCache } from '../../../services/TelegramMediaCache.js';
 import { buildPlansKeyboard } from '../../../services/bot/plans.js';
+import { getSettings } from '../../../db/botSettings.js';
 
 export const startFeature = new Composer<MyContext>();
 
@@ -55,7 +56,9 @@ startFeature.command('start', async (ctx) => {
     try {
       const keyboard = await buildPlansKeyboard(ctx.bot_slug);
       if (keyboard) {
-        await ctx.reply('Escolha uma oferta abaixo:', {
+        const settings = await getSettings(ctx.bot_slug).catch(() => ({ bot_slug: ctx.bot_slug, pix_image_url: null, offers_text: null }));
+        const offersText = settings?.offers_text?.trim() || 'Escolha uma oferta abaixo:';
+        await ctx.reply(offersText, {
           reply_markup: keyboard,
         });
       }
