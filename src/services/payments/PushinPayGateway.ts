@@ -59,7 +59,7 @@ export class PushinPayGateway implements PaymentGateway {
     };
   }
 
-  async createPix(params: PixCreationParams & { splitRules?: unknown[] }): Promise<PushinPayPixResponse> {
+  async createPix(params: PixCreationParams): Promise<PushinPayPixResponse> {
     const valueCents = Number(params.value_cents);
     if (!Number.isFinite(valueCents) || valueCents < 50) {
       const err = new Error('Valor mínimo é 50 centavos.');
@@ -67,7 +67,9 @@ export class PushinPayGateway implements PaymentGateway {
       throw err;
     }
 
-    const webhookPath = params.webhookPath ?? '/webhooks/pushinpay';
+    // Webhook específico por bot
+    const botSlugPath = params.botSlug ? `/${params.botSlug}` : '';
+    const webhookPath = params.webhookPath ?? `/webhooks/pushinpay${botSlugPath}`;
     const webhookUrl = this.options.webhookBase ? `${this.options.webhookBase}${webhookPath}` : undefined;
 
     const body: Record<string, unknown> = {

@@ -2,6 +2,7 @@ export interface PixCreationParams {
   value_cents: number;
   webhookPath?: string;
   splitRules?: unknown[];
+  botSlug?: string;
 }
 
 export interface PaymentGateway {

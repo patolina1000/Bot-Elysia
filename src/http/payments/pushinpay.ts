@@ -150,7 +150,12 @@ pushinpayRouter.post(
         return;
       }
 
-      const pix = await gateway.createPix({ value_cents: body.value_cents, splitRules: [] });
+      // Extrair botSlug do meta, se disponível
+      const botSlug = body.meta && typeof body.meta === 'object' && 'botSlug' in body.meta
+        ? String(body.meta.botSlug)
+        : undefined;
+
+      const pix = await gateway.createPix({ value_cents: body.value_cents, splitRules: [], botSlug });
       const responseValue = Number(pix.value);
       const valueCents = Number.isFinite(responseValue) ? Math.trunc(responseValue) : body.value_cents;
 
@@ -251,7 +256,7 @@ pushinpayRouter.post(
         return;
       }
 
-      const pix = await gateway.createPix({ value_cents: plan.price_cents, splitRules: [] });
+      const pix = await gateway.createPix({ value_cents: plan.price_cents, splitRules: [], botSlug: plan.bot_slug });
       const responseValue = Number(pix.value);
       const valueCents = Number.isFinite(responseValue) ? Math.trunc(responseValue) : plan.price_cents;
 
@@ -346,9 +351,117 @@ const webhookPayloadSchema = z.object({
   payer_national_registration: z.string().optional(),
 });
 
+// Webhook específico por bot
+pushinpayWebhookRouter.post(
+  '/webhooks/pushinpay/:botSlug',
+  async (req: Request, res: Response): Promise<void> => {
+    const botSlug = req.params.botSlug;
+    logger.info({ botSlug }, '[payments] Recebendo webhook PushinPay para bot');
+
+    const secretHeader = process.env.PUSHINPAY_WEBHOOK_HEADER;
+    const secretValue = process.env.PUSHINPAY_WEBHOOK_SECRET;
+
+    if (secretHeader && secretValue) {
+      const received = req.get(secretHeader);
+      if (received !== secretValue) {
+        res.status(401).json({ error: 'invalid webhook secret' });
+        return;
+      }
+    }
+
+    const parsed = webhookPayloadSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: 'payload inválido', details: parsed.error.flatten() });
+      return;
+    }
+
+    const payload = parsed.data;
+
+    try {
+      const updated = await setPaymentStatus('pushinpay', payload.id, payload.status, {
+        end_to_end_id: payload.end_to_end_id ?? null,
+        payer_name: payload.payer_name ?? null,
+        payer_doc: payload.payer_national_registration ?? null,
+      });
+
+      if (!updated) {
+        logger.warn({ external_id: payload.id }, '[payments] transação PushinPay não encontrada localmente');
+      }
+
+      if (updated && payload.status === 'paid') {
+        const mergedMeta = {
+          ...(typeof updated.meta === 'object' && updated.meta ? updated.meta : {}),
+          gateway: 'pushinpay',
+          ...(payload.end_to_end_id ? { end_to_end_id: payload.end_to_end_id } : {}),
+        };
+
+        await recordFunnelEvent({
+          event: 'purchase',
+          eventId: `pur:${updated.external_id}`,
+          telegramId: updated.telegram_id ?? null,
+          transactionId: updated.external_id,
+          priceCents: updated.value_cents,
+          payloadId: updated.payload_id ?? null,
+          meta: mergedMeta,
+        });
+
+        if (process.env.UTMIFY_API_TOKEN) {
+          try {
+            const trackingParameters =
+              typeof updated.meta === 'object' && updated.meta && 'trackingParameters' in updated.meta
+                ? (updated.meta as Record<string, unknown>).trackingParameters
+                : undefined;
+
+            const orderPayload = {
+              orderId: updated.external_id,
+              platform: process.env.UTMIFY_PLATFORM ?? 'hotbotweb',
+              paymentMethod: 'pix',
+              status: 'approved',
+              createdAt: updated.created_at.toISOString(),
+              approvedDate: new Date().toISOString(),
+              customer: { email: 'unknown@example.com' },
+              products: [
+                {
+                  id: 'plan',
+                  name: updated.plan_name ?? 'Plano',
+                  quantity: 1,
+                  priceInCents: updated.value_cents,
+                },
+              ],
+              trackingParameters: trackingParameters ?? {},
+              isTest: (process.env.PUSHINPAY_ENV ?? '').toLowerCase() === 'sandbox',
+            };
+
+            await fetch('https://api.utmify.com.br/api-credentials/orders', {
+              method: 'POST',
+              headers: {
+                'x-api-token': process.env.UTMIFY_API_TOKEN,
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+              },
+              body: JSON.stringify(orderPayload),
+            });
+          } catch (notifyErr) {
+            logger.warn({ err: notifyErr }, '[payments] falha ao notificar UTMify');
+          }
+        }
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, '[payments] erro ao processar webhook PushinPay');
+      const message = err instanceof Error ? err.message : 'Erro inesperado';
+      res.status(500).json({ error: message });
+    }
+  }
+);
+
+// Webhook global (fallback para compatibilidade com webhooks antigos)
 pushinpayWebhookRouter.post(
   '/webhooks/pushinpay',
   async (req: Request, res: Response): Promise<void> => {
+    logger.info('[payments] Recebendo webhook PushinPay global (sem botSlug)');
+
     const secretHeader = process.env.PUSHINPAY_WEBHOOK_HEADER;
     const secretValue = process.env.PUSHINPAY_WEBHOOK_SECRET;
 
