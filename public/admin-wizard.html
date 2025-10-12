@@ -1548,6 +1548,39 @@
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script>
+  (() => {
+    // Lê o token do input ou do localStorage, sem estourar erro
+    window.getAdminToken = window.getAdminToken || function () {
+      try {
+        const inp = document.querySelector('#admin-token') || document.querySelector('[data-admin-token]');
+        const fromInput = inp && inp.value ? inp.value.trim() : '';
+        const fromLS = localStorage.getItem('admin_token') || localStorage.getItem('adminToken') || '';
+        return fromInput || fromLS || '';
+      } catch { return ''; }
+    };
+
+    // Salva o token e sincroniza visualmente
+    window.setAdminToken = window.setAdminToken || function (t) {
+      try {
+        localStorage.setItem('admin_token', t || '');
+        const inp = document.querySelector('#admin-token') || document.querySelector('[data-admin-token]');
+        if (inp && t) inp.value = t;
+        // dispara um evento para quem ouvir mudanças
+        window.dispatchEvent(new StorageEvent('storage', { key: 'admin_token', newValue: t || '' }));
+      } catch {}
+    };
+
+    // Constrói headers SEMPRE com Authorization
+    window.adminHeaders = window.adminHeaders || function (extra) {
+      const h = new Headers(extra || {});
+      const token = window.getAdminToken();
+      if (token) h.set('Authorization', 'Bearer ' + token);
+      return h;
+    };
+  })();
+  </script>
+
+  <script>
     (() => {
       const tokenInput = document.getElementById('admin-token');
       const applyTokenBtn = document.getElementById('apply-token');
