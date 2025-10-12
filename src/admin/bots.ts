@@ -52,7 +52,27 @@ adminBotsRouter.get(
           warmup_chat_id: x.warmup_chat_id ?? null
         })) 
       });
-    } catch (error) {
+    } catch (error: any) {
+      // Se coluna não existe, faz fallback para query mínima
+      if (error?.code === '42703') {
+        _req.log?.warn({ error }, 'Column not found in bots query, using fallback');
+        try {
+          const r = await pool.query(
+            `SELECT id, slug, name FROM bots ORDER BY id DESC`
+          );
+          return res.json({ 
+            ok: true, 
+            items: r.rows.map(x => ({
+              id: Number(x.id), 
+              slug: x.slug, 
+              name: x.name ?? x.slug,
+              warmup_chat_id: null
+            })) 
+          });
+        } catch (fallbackError) {
+          _req.log?.error({ error: fallbackError }, 'Fallback query also failed');
+        }
+      }
       _req.log?.error({ error }, 'Failed to list bots for tabs');
       res.status(500).json({ ok: false, error: 'failed_to_list_bots' });
     }
@@ -269,40 +289,75 @@ adminBotsRouter.post(
   authAdminMiddleware,
   async (req: Request, res: Response) => {
     try {
-      const body = req.body as Partial<UpsertDownsellInput>;
-      if (!body?.bot_slug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
-      if (!body?.trigger_kind || !['after_start','after_pix'].includes(body.trigger_kind as string)) {
-        return res.status(422).json({ ok: false, error: 'invalid_trigger' });
+      const b = req.body || {};
+      
+      // Helper para normalizar price_cents (aceita string com vírgula, ponto, ou número)
+      const toCents = (v: any): number | null => {
+        if (v == null || v === '') return null;
+        if (typeof v === 'number') return Math.round(v);
+        const s = String(v).replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '');
+        const n = Number(s.replace(',', '.'));
+        return Number.isFinite(n) ? Math.round(n * 100) : null;
+      };
+
+      // Normaliza body para aceitar camelCase ou snake_case
+      const normalized = {
+        id: b.id ?? b.downsellId ?? undefined,
+        bot_slug: (b.bot_slug ?? b.botSlug ?? '').trim(),
+        trigger_kind: b.trigger_kind ?? b.triggerKind,
+        delay_minutes: +(b.delay_minutes ?? b.delayMinutes ?? 10),
+        title: (b.title ?? '').trim(),
+        price_cents: typeof b.price_cents === 'number' ? b.price_cents : toCents(b.price_cents ?? b.priceCents ?? b.price),
+        message_text: b.message_text ?? b.messageText ?? null,
+        media1_url: b.media1_url ?? b.media1Url ?? null,
+        media1_type: b.media1_type ?? b.media1Type ?? null,
+        media2_url: b.media2_url ?? b.media2Url ?? null,
+        media2_type: b.media2_type ?? b.media2Type ?? null,
+        window_enabled: !!(b.window_enabled ?? b.windowEnabled),
+        window_start_hour: b.window_start_hour ?? b.windowStartHour ?? null,
+        window_end_hour: b.window_end_hour ?? b.windowEndHour ?? null,
+        window_tz: b.window_tz ?? b.windowTz ?? null,
+        daily_cap_per_user: +(b.daily_cap_per_user ?? b.dailyCapPerUser ?? 0),
+        ab_enabled: !!(b.ab_enabled ?? b.abEnabled),
+        is_active: b.is_active ?? b.isActive ?? true,
+      };
+
+      // Validações com mensagens detalhadas
+      if (!normalized.bot_slug) {
+        return res.status(422).json({ ok: false, error: 'missing_bot_slug', details: 'bot_slug é obrigatório' });
       }
-      const delay = Number(body.delay_minutes);
-      if (!Number.isFinite(delay) || delay < 5 || delay > 60) {
-        return res.status(422).json({ ok: false, error: 'invalid_delay' });
+      if (!normalized.trigger_kind || !['after_start','after_pix'].includes(normalized.trigger_kind as string)) {
+        return res.status(422).json({ ok: false, error: 'invalid_trigger', details: 'trigger_kind deve ser "after_start" ou "after_pix"' });
       }
-      const price = Number(body.price_cents);
-      if (!Number.isFinite(price) || price < 50) {
-        return res.status(422).json({ ok: false, error: 'invalid_price' });
+      if (!Number.isFinite(normalized.delay_minutes) || normalized.delay_minutes < 5 || normalized.delay_minutes > 60) {
+        return res.status(422).json({ ok: false, error: 'invalid_delay', details: 'delay_minutes deve ser entre 5 e 60' });
       }
-      if (!body.title) return res.status(422).json({ ok: false, error: 'missing_title' });
+      if (!normalized.price_cents || !Number.isFinite(normalized.price_cents) || normalized.price_cents < 50) {
+        return res.status(422).json({ ok: false, error: 'invalid_price', details: 'price_cents deve ser >= 50 centavos (0.50)' });
+      }
+      if (!normalized.title) {
+        return res.status(422).json({ ok: false, error: 'missing_title', details: 'title é obrigatório' });
+      }
 
       const item = await upsertDownsell({
-        id: body.id,
-        bot_slug: body.bot_slug,
-        trigger_kind: body.trigger_kind as 'after_start' | 'after_pix',
-        delay_minutes: delay,
-        title: body.title,
-        price_cents: price,
-        message_text: body.message_text ?? null,
-        media1_url: body.media1_url ?? null,
-        media1_type: (body.media1_type ?? null) as any,
-        media2_url: body.media2_url ?? null,
-        media2_type: (body.media2_type ?? null) as any,
-        window_enabled: body.window_enabled ?? false,
-        window_start_hour: body.window_start_hour ?? null,
-        window_end_hour: body.window_end_hour ?? null,
-        window_tz: body.window_tz ?? null,
-        daily_cap_per_user: body.daily_cap_per_user ?? 0,
-        ab_enabled: body.ab_enabled ?? false,
-        is_active: body.is_active ?? true,
+        id: normalized.id,
+        bot_slug: normalized.bot_slug,
+        trigger_kind: normalized.trigger_kind as 'after_start' | 'after_pix',
+        delay_minutes: normalized.delay_minutes,
+        title: normalized.title,
+        price_cents: normalized.price_cents,
+        message_text: normalized.message_text,
+        media1_url: normalized.media1_url,
+        media1_type: normalized.media1_type as any,
+        media2_url: normalized.media2_url,
+        media2_type: normalized.media2_type as any,
+        window_enabled: normalized.window_enabled,
+        window_start_hour: normalized.window_start_hour,
+        window_end_hour: normalized.window_end_hour,
+        window_tz: normalized.window_tz,
+        daily_cap_per_user: normalized.daily_cap_per_user,
+        ab_enabled: normalized.ab_enabled,
+        is_active: normalized.is_active,
       });
       return res.json({ ok: true, item });
     } catch (error) {
@@ -367,7 +422,12 @@ adminBotsRouter.get(
       if (!botSlug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
       const stats = await getDownsellsStats(botSlug);
       return res.json({ ok: true, stats });
-    } catch (error) {
+    } catch (error: any) {
+      // Se a tabela/visão não existe, retorna métricas vazias ao invés de quebrar
+      if (error?.code === '42P01') {
+        req.log?.warn({ error, botSlug }, '[downsells] metrics table not found, returning empty');
+        return res.json({ ok: true, stats: {} });
+      }
       req.log?.error({ error }, '[downsells] metrics failed');
       return res.status(500).json({ ok: false, error: 'downsells_metrics_failed' });
     }

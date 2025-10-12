@@ -3200,6 +3200,19 @@
 
   let downsStats = {}; // { [downsell_id]: {scheduled, sent, canceled, error, pix, purchased} }
 
+  // Helper para BRL -> centavos (aceita vírgula e ponto)
+  function toCents(v) {
+    if (v == null || v === '') return null;
+    const s = String(v).replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, ''); // remove milhares
+    const n = Number(s.replace(',', '.'));
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+  }
+
+  function toInt(v, def = 0) {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : def;
+  }
+
   function cents(n){ return Math.round(Number(n)*100); }
   function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
   function adminHeaders(){ const h=new Headers(); const t=getAdminToken(); if(t) h.set('Authorization',`Bearer ${t}`); h.set('Content-Type','application/json'); return h; }
@@ -3314,30 +3327,34 @@
   document.getElementById('btn-ds-save')?.addEventListener('click', async ()=>{
     const slug = (downsBotSlug.value||'').trim();
     if(!slug){ alert('Informe o bot slug'); return; }
-    const price = cents(dsPrice.value);
     const body = {
       id: dsId.value ? Number(dsId.value) : undefined,
       bot_slug: slug,
       trigger_kind: dsTrigger.value,
-      delay_minutes: Number(dsDelay.value),
-      title: dsTitle.value,
-      price_cents: price,
+      delay_minutes: toInt(dsDelay.value, 10),
+      title: dsTitle.value.trim(),
+      price_cents: toCents(dsPrice.value),
       message_text: dsMessage.value || null,
       media1_url: dsMedia1Url.value || null,
       media1_type: dsMedia1Type.value || null,
       media2_url: dsMedia2Url.value || null,
       media2_type: dsMedia2Type.value || null,
       window_enabled: dsWindowEnabled.checked,
-      window_start_hour: dsWindowStart.value ? Number(dsWindowStart.value) : null,
-      window_end_hour: dsWindowEnd.value ? Number(dsWindowEnd.value) : null,
+      window_start_hour: dsWindowStart.value ? toInt(dsWindowStart.value) : null,
+      window_end_hour: dsWindowEnd.value ? toInt(dsWindowEnd.value) : null,
       window_tz: dsWindowTz.value || null,
-      daily_cap_per_user: Number(dsDailyCap.value||0),
+      daily_cap_per_user: toInt(dsDailyCap.value, 0),
       ab_enabled: dsAbEnabled.checked,
       is_active: true,
     };
     const resp = await fetch('/admin/api/downsells/upsert',{ method:'POST', headers: adminHeaders(), body: JSON.stringify(body) });
     const data = await resp.json().catch(()=>({}));
-    if(!resp.ok || !data?.ok){ alert('Falha ao salvar'); return; }
+    if(!resp.ok || !data?.ok){ 
+      const errorMsg = data?.error || data?.details || 'Falha ao salvar';
+      console.error('Erro ao salvar downsell:', data);
+      alert(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)); 
+      return; 
+    }
     
     // se A/B habilitado, upsert variantes
     if (dsAbEnabled.checked) {
@@ -3349,17 +3366,17 @@
         });
       };
       await up('A', {
-        weight: Number(Aweight.value||50),
+        weight: toInt(Aweight.value, 50),
         title: Atitle.value || null,
-        price_cents: Aprice.value ? Math.round(Number(Aprice.value)*100) : null,
+        price_cents: toCents(Aprice.value),
         message_text: Amsg.value || null,
         media1_url: Am1.value || null, media1_type: Am1t.value || null,
         media2_url: Am2.value || null, media2_type: Am2t.value || null,
       });
       await up('B', {
-        weight: Number(Bweight.value||50),
+        weight: toInt(Bweight.value, 50),
         title: Btitle.value || null,
-        price_cents: Bprice.value ? Math.round(Number(Bprice.value)*100) : null,
+        price_cents: toCents(Bprice.value),
         message_text: Bmsg.value || null,
         media1_url: Bm1.value || null, media1_type: Bm1t.value || null,
         media2_url: Bm2.value || null, media2_type: Bm2t.value || null,
