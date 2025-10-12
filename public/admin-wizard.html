@@ -1008,6 +1008,28 @@
       border-color: #e5e7eb !important;
     }
 
+    /* ====== Lista de planos ====== */
+    /* Garante legibilidade do nome e do preço do plano */
+    #admin-wizard #plans-list .plan-info,
+    #admin-wizard #plans-list .plan-info * {
+      color: var(--aw-fg) !important;   /* preto */
+      opacity: 1 !important;            /* sem desbotar */
+      text-shadow: none !important;
+      filter: none !important;
+    }
+    /* Preço e status (ex.: "R$ 9,90 • ativo") */
+    #admin-wizard #plans-list .plan-info .plan-price {
+      color: var(--aw-fg) !important;
+      opacity: 1 !important;
+    }
+    /* Nome do plano em leve destaque sem perder contraste */
+    #admin-wizard #plans-list .plan-info > div:first-child {
+      color: var(--aw-fg) !important;
+      font-weight: 600; /* opcional, melhora leitura */
+    }
+    /* Não interferir nos botões da linha */
+    #admin-wizard #plans-list .plan-actions .btn { opacity: 1 !important; }
+
     /* ===== Planos por bot: força o nome do plano a ficar visível ===== */
     /* Muitos templates usam text-muted/opacidade para o título do item. */
     #admin-wizard .list-group-item {
