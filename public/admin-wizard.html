@@ -1281,6 +1281,87 @@
       </div>
       <p class="plan-hint">* Valores são convertidos para centavos; mínimo R$ 0,50.</p>
     </section>
+
+    <section id="downsells-card" class="simple-card">
+      <div>
+        <h2>Downsells por bot</h2>
+        <p class="description">Crie ofertas para enviar automaticamente <strong>após /start</strong> ou <strong>após gerar o PIX</strong> com um atraso entre 5 e 60 minutos.</p>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="downs-bot-slug">Bot slug</label>
+          <input id="downs-bot-slug" type="text" placeholder="ex.: hadrielle-maria" autocomplete="off" />
+        </div>
+        <button id="btn-load-downs" type="button">Carregar downsells</button>
+      </div>
+      <div id="downs-list">
+        <div class="placeholder">Informe o slug e clique em "Carregar downsells".</div>
+      </div>
+      <hr />
+      <h3>Novo/Editar Downsell</h3>
+      <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+        <input id="ds-id" type="hidden" />
+        <div class="field" style="max-width:220px">
+          <label for="ds-trigger">Disparar</label>
+          <select id="ds-trigger">
+            <option value="after_start">Após /start</option>
+            <option value="after_pix">Após gerar PIX</option>
+          </select>
+        </div>
+        <div class="field" style="max-width:180px">
+          <label for="ds-delay">Delay (min)</label>
+          <input id="ds-delay" type="number" min="5" max="60" value="10" />
+        </div>
+        <div class="field" style="min-width:240px; flex:1">
+          <label for="ds-title">Nome do plano</label>
+          <input id="ds-title" type="text" placeholder="ex.: Galeria Completa" />
+        </div>
+        <div class="field" style="max-width:180px">
+          <label for="ds-price">Preço (R$)</label>
+          <input id="ds-price" type="number" step="0.01" min="0.50" placeholder="ex.: 9,90" />
+        </div>
+      </div>
+      <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+        <div class="field" style="min-width:280px; flex:1">
+          <label for="ds-message">Mensagem (opcional)</label>
+          <textarea id="ds-message" rows="2" placeholder="Copy do downsell..."></textarea>
+        </div>
+      </div>
+      <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+        <div class="field">
+          <label>Mídia 1 (opcional)</label>
+          <div style="display:flex; gap:8px; align-items:center">
+            <select id="ds-media1-type" style="max-width:150px">
+              <option value="">-- tipo --</option>
+              <option value="photo">Imagem</option>
+              <option value="video">Vídeo</option>
+              <option value="audio">Áudio</option>
+            </select>
+            <input id="ds-media1-url" type="url" placeholder="URL https://..." style="flex:1" />
+            <input type="file" id="ds-media1-file" accept="image/*,video/*,audio/*" style="display:none" />
+            <button id="btn-ds-media1-upload" type="button" class="btn-secondary">Enviar arquivo…</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Mídia 2 (opcional)</label>
+          <div style="display:flex; gap:8px; align-items:center">
+            <select id="ds-media2-type" style="max-width:150px">
+              <option value="">-- tipo --</option>
+              <option value="photo">Imagem</option>
+              <option value="video">Vídeo</option>
+              <option value="audio">Áudio</option>
+            </select>
+            <input id="ds-media2-url" type="url" placeholder="URL https://..." style="flex:1" />
+            <input type="file" id="ds-media2-file" accept="image/*,video/*,audio/*" style="display:none" />
+            <button id="btn-ds-media2-upload" type="button" class="btn-secondary">Enviar arquivo…</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <button id="btn-ds-save" type="button">Salvar Downsell</button>
+        <button id="btn-ds-reset" type="button" class="btn-secondary">Limpar formulário</button>
+      </div>
+    </section>
   </div>
 
   <dialog id="pix-modal">
@@ -2902,6 +2983,142 @@
         updateNoBotsVisibility();
       }
     })();
+
+  // ==== Downsells UI ====
+  const downsBotSlug = document.getElementById('downs-bot-slug');
+  const btnLoadDowns = document.getElementById('btn-load-downs');
+  const downsList = document.getElementById('downs-list');
+  const dsId = document.getElementById('ds-id');
+  const dsTrigger = document.getElementById('ds-trigger');
+  const dsDelay = document.getElementById('ds-delay');
+  const dsTitle = document.getElementById('ds-title');
+  const dsPrice = document.getElementById('ds-price');
+  const dsMessage = document.getElementById('ds-message');
+  const dsMedia1Type = document.getElementById('ds-media1-type');
+  const dsMedia1Url = document.getElementById('ds-media1-url');
+  const dsMedia1File = document.getElementById('ds-media1-file');
+  const btnDsMedia1Upload = document.getElementById('btn-ds-media1-upload');
+  const dsMedia2Type = document.getElementById('ds-media2-type');
+  const dsMedia2Url = document.getElementById('ds-media2-url');
+  const dsMedia2File = document.getElementById('ds-media2-file');
+  const btnDsMedia2Upload = document.getElementById('btn-ds-media2-upload');
+  const btnDsSave = document.getElementById('btn-ds-save');
+  const btnDsReset = document.getElementById('btn-ds-reset');
+
+  function cents(n){ return Math.round(Number(n)*100); }
+  function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+  function adminHeaders(){ const h=new Headers(); const t=getAdminToken(); if(t) h.set('Authorization',`Bearer ${t}`); h.set('Content-Type','application/json'); return h; }
+  function fillDownsellForm(item){
+    dsId.value = item?.id ?? '';
+    dsTrigger.value = item?.trigger_kind ?? 'after_start';
+    dsDelay.value = item?.delay_minutes ?? 10;
+    dsTitle.value = item?.title ?? '';
+    dsPrice.value = item ? (item.price_cents/100).toFixed(2) : '';
+    dsMessage.value = item?.message_text ?? '';
+    dsMedia1Type.value = item?.media1_type ?? '';
+    dsMedia1Url.value = item?.media1_url ?? '';
+    dsMedia2Type.value = item?.media2_type ?? '';
+    dsMedia2Url.value = item?.media2_url ?? '';
+  }
+  function renderDownsells(items){
+    if(!items || items.length===0){
+      downsList.innerHTML = '<div class="placeholder">Nenhum downsell ainda.</div>';
+      return;
+    }
+    downsList.innerHTML = items.map(it => {
+      return `<div class="card-section" style="display:flex; justify-content:space-between; gap:12px; align-items:center">
+        <div style="flex:1">
+          <div><strong>${it.title}</strong> — ${brl(it.price_cents)}</div>
+          <div class="muted tiny">${it.trigger_kind} • delay ${it.delay_minutes}min • ativo: ${it.is_active ? 'sim' : 'não'}</div>
+        </div>
+        <div style="display:flex; gap:8px">
+          <button type="button" data-act="edit" data-id="${it.id}">Editar</button>
+          <button type="button" class="btn-secondary" data-act="test" data-id="${it.id}">Enviar teste</button>
+          <button type="button" class="btn-secondary" data-act="delete" data-id="${it.id}">Excluir</button>
+        </div>
+      </div>`
+    }).join('');
+  }
+  btnLoadDowns?.addEventListener('click', async () => {
+    const slug = (downsBotSlug.value||'').trim();
+    if(!slug){ alert('Informe o bot slug'); return; }
+    const resp = await fetch(`/admin/api/downsells?bot_slug=${encodeURIComponent(slug)}`,{ headers: adminHeaders() });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok || !data?.ok){ alert('Falha ao carregar downsells'); return; }
+    renderDownsells(data.items||[]);
+  });
+  downsList?.addEventListener('click', async (ev)=>{
+    const btn = ev.target.closest('button'); if(!btn) return;
+    const id = Number(btn.getAttribute('data-id'));
+    const act = btn.getAttribute('data-act');
+    const slug = (downsBotSlug.value||'').trim();
+    if(act==='edit'){
+      const resp = await fetch(`/admin/api/downsells?bot_slug=${encodeURIComponent(slug)}`,{ headers: adminHeaders() });
+      const data = await resp.json().catch(()=>({}));
+      const item = (data.items||[]).find(x=>x.id===id);
+      if(item) fillDownsellForm(item);
+      window.scrollTo({top: document.getElementById('downsells-card').offsetTop - 16, behavior:'smooth'});
+    } else if(act==='delete'){
+      if(!confirm('Excluir este downsell?')) return;
+      const resp = await fetch(`/admin/api/downsells/${id}?bot_slug=${encodeURIComponent(slug)}`,{ method:'DELETE', headers: adminHeaders() });
+      const data = await resp.json().catch(()=>({}));
+      if(!resp.ok || !data?.ok){ alert('Falha ao excluir'); return; }
+      btnLoadDowns.click();
+    } else if(act==='test'){
+      const tg = prompt('Informe o Telegram ID para envio de teste:');
+      if(!tg) return;
+      const body = { downsell_id:id, bot_slug: slug, telegram_id: Number(tg) };
+      const resp = await fetch('/admin/api/downsells/test-send',{ method:'POST', headers: adminHeaders(), body: JSON.stringify(body) });
+      const data = await resp.json().catch(()=>({}));
+      if(!resp.ok || !data?.ok){ alert('Falha ao agendar teste'); return; }
+      alert('Agendado para agora. O worker enviará em até 1 minuto.');
+    }
+  });
+  document.getElementById('btn-ds-save')?.addEventListener('click', async ()=>{
+    const slug = (downsBotSlug.value||'').trim();
+    if(!slug){ alert('Informe o bot slug'); return; }
+    const price = cents(dsPrice.value);
+    const body = {
+      id: dsId.value ? Number(dsId.value) : undefined,
+      bot_slug: slug,
+      trigger_kind: dsTrigger.value,
+      delay_minutes: Number(dsDelay.value),
+      title: dsTitle.value,
+      price_cents: price,
+      message_text: dsMessage.value || null,
+      media1_url: dsMedia1Url.value || null,
+      media1_type: dsMedia1Type.value || null,
+      media2_url: dsMedia2Url.value || null,
+      media2_type: dsMedia2Type.value || null,
+      is_active: true,
+    };
+    const resp = await fetch('/admin/api/downsells/upsert',{ method:'POST', headers: adminHeaders(), body: JSON.stringify(body) });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok || !data?.ok){ alert('Falha ao salvar'); return; }
+    fillDownsellForm(null);
+    btnLoadDowns.click();
+  });
+  document.getElementById('btn-ds-reset')?.addEventListener('click', ()=> fillDownsellForm(null));
+  document.getElementById('btn-ds-media1-upload')?.addEventListener('click', ()=>{ document.getElementById('ds-media1-file').click(); });
+  document.getElementById('ds-media1-file')?.addEventListener('change', async ()=>{
+    const file = (document.getElementById('ds-media1-file') as HTMLInputElement).files?.[0]; if(!file) return;
+    const formData = new FormData(); formData.append('file', file, file.name);
+    const headers=new Headers(); const t=getAdminToken(); if(t) headers.set('Authorization',`Bearer ${t}`);
+    const resp = await fetch('/api/admin/upload',{ method:'POST', body: formData, headers });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok || !data?.ok || !data?.url){ alert('Falha no upload'); return; }
+    (document.getElementById('ds-media1-url') as HTMLInputElement).value = data.url;
+  });
+  document.getElementById('btn-ds-media2-upload')?.addEventListener('click', ()=>{ document.getElementById('ds-media2-file').click(); });
+  document.getElementById('ds-media2-file')?.addEventListener('change', async ()=>{
+    const file = (document.getElementById('ds-media2-file') as HTMLInputElement).files?.[0]; if(!file) return;
+    const formData = new FormData(); formData.append('file', file, file.name);
+    const headers=new Headers(); const t=getAdminToken(); if(t) headers.set('Authorization',`Bearer ${t}`);
+    const resp = await fetch('/api/admin/upload',{ method:'POST', body: formData, headers });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok || !data?.ok || !data?.url){ alert('Falha no upload'); return; }
+    (document.getElementById('ds-media2-url') as HTMLInputElement).value = data.url;
+  });
   </script>
 </body>
 </html>
