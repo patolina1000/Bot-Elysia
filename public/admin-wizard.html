@@ -931,8 +931,85 @@
     }
     dialog .secondary{ background:#eef2f9; color:#0b1220; border:1px solid #d0d7e2 }
   </style>
+  <!-- High-contrast fixes para o Admin Wizard -->
+  <style id="aw-contrast-fixes">
+    :root {
+      --aw-fg: #111;
+      --aw-muted: #444;
+      --aw-bg: #fff;
+    }
+
+    /* Escopo: apenas elementos dentro do body desta página */
+    #admin-wizard,
+    #admin-wizard * {
+      text-shadow: none !important;
+    }
+
+    /* Títulos, rótulos e textos principais */
+    #admin-wizard h1,
+    #admin-wizard h2,
+    #admin-wizard h3,
+    #admin-wizard h4,
+    #admin-wizard h5,
+    #admin-wizard h6,
+    #admin-wizard label,
+    #admin-wizard .form-label,
+    #admin-wizard legend,
+    #admin-wizard .section-title,
+    #admin-wizard .field-title,
+    #admin-wizard .card-title,
+    #admin-wizard .text,
+    #admin-wizard .title,
+    #admin-wizard .text-body,
+    #admin-wizard .subtitle {
+      color: var(--aw-fg) !important;
+    }
+
+    /* Textos de apoio e placeholders */
+    #admin-wizard small,
+    #admin-wizard .form-text,
+    #admin-wizard .help,
+    #admin-wizard .hint,
+    #admin-wizard .text-muted {
+      color: var(--aw-muted) !important;
+    }
+
+    #admin-wizard ::placeholder {
+      color: var(--aw-muted) !important;
+      opacity: 1;
+    }
+
+    /* Inputs e campos com fundo claro */
+    #admin-wizard input,
+    #admin-wizard textarea,
+    #admin-wizard select {
+      color: var(--aw-fg) !important;
+      background: var(--aw-bg) !important;
+    }
+
+    #admin-wizard .input-group-text {
+      color: var(--aw-fg) !important;
+      background: var(--aw-bg) !important;
+    }
+
+    /* Cards, painéis e modais */
+    #admin-wizard .card,
+    #admin-wizard .panel,
+    #admin-wizard .modal-content {
+      background: var(--aw-bg) !important;
+      color: var(--aw-fg) !important;
+    }
+
+    #admin-wizard .modal-header,
+    #admin-wizard .modal-body,
+    #admin-wizard .modal-footer {
+      background: var(--aw-bg) !important;
+      color: var(--aw-fg) !important;
+      border-color: #e5e7eb !important;
+    }
+  </style>
 </head>
-<body>
+<body id="admin-wizard">
   <div class="layout">
     <header class="top">
       <div>
