@@ -1119,6 +1119,33 @@
     #admin-wizard .list-group-item .btn {
       opacity: 1 !important;
     }
+
+    /* Abas de bots */
+    #admin-wizard .tabs { 
+      display: flex; 
+      gap: 8px; 
+      flex-wrap: wrap; 
+      margin: 12px 0 8px;
+      padding: 0 16px;
+    }
+    #admin-wizard .tabs .tab {
+      padding: 8px 12px; 
+      border-radius: 999px; 
+      background: #f2f3f5; 
+      cursor: pointer; 
+      border: 1px solid #e6e8eb;
+      transition: all 0.2s;
+      color: var(--aw-fg) !important;
+      font-weight: 500;
+    }
+    #admin-wizard .tabs .tab:hover {
+      background: #e5e7eb;
+    }
+    #admin-wizard .tabs .tab.active { 
+      background: #2563eb; 
+      color: #fff !important; 
+      border-color: #2563eb;
+    }
   </style>
 </head>
 <body id="admin-wizard">
@@ -1137,6 +1164,9 @@
         <small style="color:#6b7280;">O token fica salvo apenas neste navegador.</small>
       </div>
     </header>
+
+    <!-- Abas por bot -->
+    <div id="bot-tabs" class="tabs"></div>
 
     <main class="card">
       <div class="card-header">
@@ -3287,6 +3317,129 @@
     if(!resp.ok || !data?.ok || !data?.url){ alert('Falha no upload'); return; }
     (document.getElementById('ds-media2-url') as HTMLInputElement).value = data.url;
   });
+
+  // ===== Abas por bot =====
+  const botTabs = document.getElementById('bot-tabs');
+
+  // elementos de slug existentes nas seções
+  const hdrBotSlug = document.getElementById('hdr-bot-slug');
+  const plansBotSlug = document.getElementById('plans-bot-slug');
+  const downsBotSlug = document.getElementById('downs-bot-slug');
+
+  // botões/ações já existentes nas seções
+  const btnPlansLoad = document.getElementById('btn-plans-load') || document.getElementById('btn-load-plans');
+  const btnLoadDowns = document.getElementById('btn-load-downs');
+
+  // helpers
+  function getHashBot(){ const m=location.hash.match(/bot=([^&]+)/); return m? decodeURIComponent(m[1]): null; }
+  function setHashBot(slug){ const other = location.hash.replace(/(^#|&)?bot=[^&]*/g,'').replace(/^#?/,''); const extra = other? `&${other}`:''; location.hash = `#bot=${encodeURIComponent(slug)}${extra}`; }
+  function adminAuthHeaders(){ const h=new Headers(); const t=getAdminToken?.(); if(t) h.set('Authorization',`Bearer ${t}`); return h; }
+
+  // carrega lista e desenha abas
+  async function initBotTabs(){
+    try{
+      const resp = await fetch('/admin/api/bots',{ headers: adminAuthHeaders() });
+      const data = await resp.json().catch(()=>({}));
+      if(!resp.ok || !data?.ok || !Array.isArray(data.items)){ return; }
+      const bots = data.items;
+      if(bots.length === 0) return;
+
+      botTabs.innerHTML = bots.map(b => `
+        <button type="button" class="tab" data-slug="${b.slug}">${b.name || b.slug}</button>
+      `).join('');
+
+      const first = getHashBot() && bots.find(b=>b.slug===getHashBot()) ? getHashBot() : bots[0].slug;
+      selectBotTab(first);
+
+      botTabs.addEventListener('click', (ev)=>{
+        const btn = ev.target.closest('.tab'); if(!btn) return;
+        selectBotTab(btn.getAttribute('data-slug'));
+      });
+    }catch(_e){}
+  }
+
+  function setActiveTab(slug){
+    botTabs.querySelectorAll('.tab').forEach(el=>{
+      el.classList.toggle('active', el.getAttribute('data-slug')===slug);
+    });
+  }
+
+  async function selectBotTab(slug){
+    if(!slug) return;
+
+    // marcar visual
+    setActiveTab(slug);
+    setHashBot(slug);
+
+    // preencher todos os inputs de slug
+    if (hdrBotSlug) hdrBotSlug.textContent = slug;
+    if (plansBotSlug) plansBotSlug.value = slug;
+    if (downsBotSlug) downsBotSlug.value = slug;
+
+    // disparar carregamentos
+    try {
+      // Planos
+      if (btnPlansLoad) btnPlansLoad.click?.();
+
+      // Downsells + métricas
+      if (btnLoadDowns) {
+        await new Promise(resolve => {
+          btnLoadDowns.click?.();
+          setTimeout(resolve, 100); // pequeno delay para garantir que a lista carregou
+        });
+        await loadDownsMetricsFor(slug);
+      }
+
+    } catch(e) { console.warn(e); }
+  }
+
+  // métricas de downsell (mini cards) — reusa seu endpoint criado anteriormente
+  async function loadDownsMetricsFor(slug){
+    try{
+      const cont = document.getElementById('downs-list');
+      if(!cont) return;
+      const resp = await fetch(`/admin/api/downsells/metrics?bot_slug=${encodeURIComponent(slug)}`, { headers: adminAuthHeaders() });
+      const data = await resp.json().catch(()=>({}));
+      if(!resp.ok || !data?.ok || !data.stats) return;
+
+      // cria um cabeçalho compacto de métricas acima da lista
+      const statBoxId = 'downs-metrics-box';
+      let box = document.getElementById(statBoxId);
+      if(!box){
+        box = document.createElement('div');
+        box.id = statBoxId;
+        box.className = 'card-section';
+        box.style.cssText = 'background:#f9fafb; border-radius:8px; padding:12px; margin-bottom:16px;';
+        cont.parentElement.insertBefore(box, cont);
+      }
+      const agg = Object.values(data.stats).reduce((acc, s)=>({
+        scheduled: acc.scheduled + (s.scheduled||0),
+        sent: acc.sent + (s.sent||0),
+        canceled: acc.canceled + (s.canceled||0),
+        error: acc.error + (s.error||0),
+        pix: acc.pix + (s.pix||0),
+        purchased: acc.purchased + (s.purchased||0),
+      }), {scheduled:0,sent:0,canceled:0,error:0,pix:0,purchased:0});
+
+      box.innerHTML = `
+        <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:14px;">
+          <div><strong>DNS agendados:</strong> ${agg.scheduled}</div>
+          <div><strong>Enviados:</strong> ${agg.sent}</div>
+          <div><strong>Cancelados:</strong> ${agg.canceled}</div>
+          <div><strong>Erros:</strong> ${agg.error}</div>
+          <div><strong>PIX criados:</strong> ${agg.pix}</div>
+          <div><strong>Compras:</strong> ${agg.purchased}</div>
+        </div>
+      `;
+    }catch(e){ console.warn('downs metrics', e); }
+  }
+
+  // inicializar quando a página carrega
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBotTabs);
+  } else {
+    initBotTabs();
+  }
   </script>
 </body>
 </html>
