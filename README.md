@@ -7,7 +7,8 @@ Serviço web completo para gerenciar múltiplos bots do Telegram com admin APIs,
 - **Multi-bot support**: Um único serviço gerencia múltiplos bots do Telegram
 - **Config-driven**: Toda configuração armazenada no Postgres (tokens criptografados)
 - **Admin APIs**: Crie bots, configure mensagens /start, ofertas e mais — sem código
-- **Funil de eventos**: Track start, checkout_start, pix_created, purchase_paid
+- **Funil de eventos**: Track start, checkout_start, pix_created, purchase
+- **Pagamentos modularizados**: Gateway registry com PushinPay PIX (cash-in, consulta e webhook)
 - **Analytics**: APIs para métricas, conversão, breakdown por dimensão
 - **Media grouping**: Álbuns com fotos+vídeos, áudios separados
 - **Logging estruturado**: pino + pino-http com request_id
@@ -73,6 +74,59 @@ O servidor estará disponível em `http://localhost:8080`.
 
 Acesse `http://localhost:8080/admin-wizard.html` no navegador.
 
+## 💳 Pagamentos PushinPay
+
+### Criar um PIX via API
+
+```
+POST /api/payments/pushinpay/cash-in
+Content-Type: application/json
+
+{
+  "value_cents": 990,
+  "telegram_id": 7205343917,
+  "payload_id": "abc123",
+  "plan_name": "1 Semana",
+  "meta": {
+    "trackingParameters": {
+      "utm_source": "facebook",
+      "utm_medium": "paid_social",
+      "utm_campaign": "teste"
+    }
+  }
+}
+```
+
+**Resposta 201:**
+
+```json
+{
+  "id": "<uuid>",
+  "status": "created",
+  "value_cents": 990,
+  "qr_code": "...",
+  "qr_code_base64": "data:image/png;base64,...",
+  "notice_html": "<div class=\"text-xs opacity-70 mt-3\">...</div>"
+}
+```
+
+- `value_cents` deve ser em centavos (mínimo 50)
+- Mostre o QR Code usando `qr_code_base64` e exiba o `notice_html` junto ao checkout
+- Os headers obrigatórios (`Authorization: Bearer`, `Accept`, `Content-Type`) são configurados automaticamente pelo serviço
+
+### Webhook
+
+Configure `PUBLIC_BASE_URL` para que o serviço registre o webhook público (`/webhooks/pushinpay`).
+Ao receber `status = paid`, o sistema grava `purchase` no funil e, se `UTMIFY_API_TOKEN` estiver presente, dispara a notificação para a UTMify.
+
+### Consulta manual (apenas quando necessário)
+
+```
+GET /api/payments/pushinpay/transactions/{id}
+```
+
+Use somente em casos pontuais (a PushinPay recomenda aguardar o webhook e evitar polling agressivo).
+
 ## 📦 Deploy no Render
 
 ### Build Command
@@ -98,6 +152,13 @@ DATABASE_URL=postgres://user:pass@host:5432/db
 ENCRYPTION_KEY=uma_senha_forte_para_pgp_sym_encrypt
 ADMIN_API_TOKEN=token_admin_para_rotas_/admin
 NODE_ENV=production
+PUSHINPAY_TOKEN=seu_token_pushinpay
+PUSHINPAY_ENV=sandbox
+PUBLIC_BASE_URL=https://seu-dominio-publico.com
+# PUSHINPAY_WEBHOOK_HEADER=X-PushinPay-Secret
+# PUSHINPAY_WEBHOOK_SECRET=um-segredo-qualquer
+# UTMIFY_API_TOKEN=token_da_utmify
+# UTMIFY_PLATFORM=hotbotweb
 ```
 
 ## 🎯 Como Criar um Novo Bot (5 Passos)
