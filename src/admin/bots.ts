@@ -9,6 +9,9 @@ import {
   deleteDownsell,
   scheduleDownsellForUser,
   getDownsellsStats,
+  listVariants,
+  upsertVariant,
+  deleteVariant,
   type UpsertDownsellInput,
 } from '../db/downsells.js';
 
@@ -251,6 +254,12 @@ adminBotsRouter.post(
         media1_type: (body.media1_type ?? null) as any,
         media2_url: body.media2_url ?? null,
         media2_type: (body.media2_type ?? null) as any,
+        window_enabled: body.window_enabled ?? false,
+        window_start_hour: body.window_start_hour ?? null,
+        window_end_hour: body.window_end_hour ?? null,
+        window_tz: body.window_tz ?? null,
+        daily_cap_per_user: body.daily_cap_per_user ?? 0,
+        ab_enabled: body.ab_enabled ?? false,
         is_active: body.is_active ?? true,
       });
       return res.json({ ok: true, item });
@@ -322,4 +331,57 @@ adminBotsRouter.get(
     }
   }
 );
+
+// Listar variantes A/B de um downsell
+adminBotsRouter.get('/admin/api/downsells/variants', authAdminMiddleware, async (req: Request, res: Response)=>{
+  try {
+    const downsell_id = Number(req.query.downsell_id);
+    if (!Number.isFinite(downsell_id)) return res.status(422).json({ ok:false, error:'invalid_downsell_id' });
+    const items = await listVariants(downsell_id);
+    return res.json({ ok:true, items });
+  } catch (error) {
+    req.log?.error({ error }, '[downsells] list variants failed');
+    return res.status(500).json({ ok: false, error: 'downsells_list_variants_failed' });
+  }
+});
+
+// Upsert variante
+adminBotsRouter.post('/admin/api/downsells/variants/upsert', authAdminMiddleware, async (req: Request, res: Response)=>{
+  try {
+    const b = req.body || {};
+    const downsell_id = Number(b.downsell_id);
+    const key = String(b.key) as 'A'|'B';
+    const weight = Number(b.weight ?? 50);
+    if (!Number.isFinite(downsell_id) || !['A','B'].includes(key)) return res.status(422).json({ ok:false, error:'invalid_payload' });
+    const item = await upsertVariant({
+      id: b.id ? Number(b.id) : undefined,
+      downsell_id, key, weight,
+      title: b.title ?? null,
+      price_cents: b.price_cents ?? null,
+      message_text: b.message_text ?? null,
+      media1_url: b.media1_url ?? null,
+      media1_type: b.media1_type ?? null,
+      media2_url: b.media2_url ?? null,
+      media2_type: b.media2_type ?? null,
+    });
+    return res.json({ ok:true, item });
+  } catch (error) {
+    req.log?.error({ error }, '[downsells] upsert variant failed');
+    return res.status(500).json({ ok: false, error: 'downsells_upsert_variant_failed' });
+  }
+});
+
+// Deletar variante
+adminBotsRouter.delete('/admin/api/downsells/variants', authAdminMiddleware, async (req: Request, res: Response)=>{
+  try {
+    const downsell_id = Number(req.query.downsell_id);
+    const key = String(req.query.key) as 'A'|'B';
+    if (!Number.isFinite(downsell_id) || !['A','B'].includes(key)) return res.status(422).json({ ok:false, error:'invalid_params' });
+    const ok = await deleteVariant(downsell_id, key);
+    return res.json({ ok });
+  } catch (error) {
+    req.log?.error({ error }, '[downsells] delete variant failed');
+    return res.status(500).json({ ok: false, error: 'downsells_delete_variant_failed' });
+  }
+});
 
