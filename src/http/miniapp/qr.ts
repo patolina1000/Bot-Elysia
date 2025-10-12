@@ -49,6 +49,12 @@ miniappQrRouter.get('/miniapp/qr', async (req: Request, res: Response): Promise<
       -webkit-background-clip:text;
       color:transparent;
     }
+    .foot-hero .ok{
+      background:none !important;
+      color:#22c55e !important;
+      -webkit-text-fill-color:#22c55e !important;
+      display:inline-block;
+    }
   </style>
 </head>
 <body>
@@ -67,7 +73,7 @@ miniappQrRouter.get('/miniapp/qr', async (req: Request, res: Response): Promise<
         <button class="btn btn-copy" id="copy">Copiar código</button>
         <button class="btn btn-done" id="done">Fechar</button>
       </div>
-      <div class="foot foot-hero">Entrega garantida ✅</div>
+      <div class="foot foot-hero">Entrega garantida <span class="ok" aria-hidden="true">✅</span></div>
     </div>
   </div>
   <script>
