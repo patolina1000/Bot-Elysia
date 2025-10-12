@@ -776,6 +776,26 @@
         width: 100%;
       }
     }
+    /* Elysia theme overrides */
+    :root{
+      --bg:#0d1117;
+      --card:#121826;
+      --muted:#9fb2c8;
+      --text:#e8eef7;
+      --primary1:#19c3ff;
+      --primary2:#4b7cff;
+      --ring: rgba(73,140,255,.45);
+      --radius:14px;
+    }
+    body{background:var(--bg); color:var(--text)}
+    .card{background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:var(--radius)}
+    input, textarea, select{background:#0b1220;color:var(--text);border:1px solid #263246;border-radius:10px;padding:10px}
+    input:focus, textarea:focus, select:focus{outline:none; box-shadow:0 0 0 3px var(--ring), 0 0 0 1px #2b3b57}
+    button{background:linear-gradient(135deg,var(--primary1),var(--primary2)); color:#081018;border:none;border-radius:12px;padding:10px 14px;font-weight:800}
+    button.secondary, .btn-secondary{background:#1f2838;color:#dfe9f7;border:1px solid #2b364a}
+    /* Modal "Novo bot" */
+    .modal, dialog{background:var(--card)!important;color:var(--text)!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:20px!important}
+    .modal h3, dialog h3{font-weight:900}
   </style>
 </head>
 <body>
@@ -895,16 +915,27 @@
       </div>
       <hr />
       <h3>Imagem para o PIX</h3>
-      <p class="description muted tiny">URL pública (ex.: do seu R2). Esta imagem será enviada no Telegram ao gerar o PIX.</p>
+      <p class="muted tiny">URL pública (ex.: do seu R2). Esta imagem será enviada no Telegram ao gerar o PIX.</p>
       <div class="form-row" style="gap:12px; align-items:flex-end; flex-wrap:wrap;">
         <div class="field" style="flex:1 1 240px;">
           <label for="pix-img-url">URL da imagem</label>
           <input id="pix-img-url" type="url" placeholder="https://.../uploads/pix-help.png" autocomplete="off" />
         </div>
+        <input type="file" id="pix-img-file" accept="image/*" style="display:none" />
+        <button id="btn-pix-upload" type="button" class="btn-secondary">Enviar arquivo…</button>
         <button id="btn-pix-preview" type="button" class="btn-secondary">Pré-visualizar</button>
         <button id="btn-pix-save" type="button">Salvar imagem</button>
       </div>
       <div id="pix-img-preview" class="mt-2"></div>
+      <hr />
+      <h3>Texto que acompanha as ofertas (/start)</h3>
+      <p class="muted tiny">Este texto aparece acima dos botões dos planos.</p>
+      <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+        <textarea id="offers-text" rows="3" style="flex:1 1 300px; min-width:200px" placeholder="Escolha uma oferta abaixo:"></textarea>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <button id="btn-offers-save" type="button">Salvar texto</button>
+        </div>
+      </div>
       <hr />
       <h3>Cadastro de plano</h3>
       <div class="form-row">
@@ -1014,6 +1045,10 @@
       const pixCopyBtn = document.getElementById('btn-copy-code');
       const pixCloseBtn = document.getElementById('btn-close-pix');
       const pixNoticeDefault = pixNotice ? pixNotice.innerHTML : '';
+      const pixFile = document.getElementById('pix-img-file');
+      const btnPixUpload = document.getElementById('btn-pix-upload');
+      const offersText = document.getElementById('offers-text');
+      const btnOffersSave = document.getElementById('btn-offers-save');
 
       renderPixPreview();
 
@@ -1166,10 +1201,16 @@
           const settings = await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/settings`);
           const value = typeof settings?.pix_image_url === 'string' ? settings.pix_image_url : '';
           pixImageUrlInput.value = value;
+          if (offersText) {
+            offersText.value = typeof settings?.offers_text === 'string' ? settings.offers_text : '';
+          }
           renderPixPreview();
         } catch (error) {
           console.warn('[pix] falha ao carregar imagem', error);
           pixImageUrlInput.value = '';
+          if (offersText) {
+            offersText.value = '';
+          }
           renderPixPreview();
         }
       }
@@ -1284,7 +1325,10 @@
           await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/settings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pix_image_url: url || null }),
+            body: JSON.stringify({ 
+              pix_image_url: url || null,
+              offers_text: offersText?.value || null
+            }),
           });
           renderPixPreview();
           showToast('Imagem do PIX salva!');
@@ -2174,6 +2218,62 @@
 
       pixSaveBtn?.addEventListener('click', () => {
         void savePixImage();
+      });
+
+      btnPixUpload?.addEventListener('click', () => pixFile?.click());
+
+      pixFile?.addEventListener('change', async (e) => {
+        const file = e.target?.files?.[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('file', file);
+        const token = getAdminToken();
+        try {
+          const res = await fetch('/api/uploads/pix-image', {
+            method: 'POST',
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+            body: fd
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            alert(data.error || 'Falha no upload');
+            return;
+          }
+          if (pixImageUrlInput) {
+            pixImageUrlInput.value = data.url;
+          }
+          renderPixPreview();
+          showToast('Upload concluído!');
+        } catch (error) {
+          console.error(error);
+          alert('Erro ao enviar arquivo.');
+        } finally {
+          if (pixFile) {
+            pixFile.value = '';
+          }
+        }
+      });
+
+      btnOffersSave?.addEventListener('click', async () => {
+        const slug = (plansBotSlugInput?.value || '').trim();
+        if (!slug) {
+          alert('Informe o slug do bot.');
+          return;
+        }
+        try {
+          await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              pix_image_url: pixImageUrlInput?.value || null,
+              offers_text: offersText?.value || null
+            }),
+          });
+          showToast('Texto salvo!');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao salvar texto.';
+          alert(message);
+        }
       });
 
       pixCloseBtn?.addEventListener('click', () => {
