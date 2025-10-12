@@ -75,6 +75,7 @@ export async function createPixForPlan(
   const created = await gateway.createPix({
     value_cents: plan.price_cents,
     splitRules: [],
+    botSlug: plan.bot_slug,
   });
 
   const createdValue = Number(created?.value);
