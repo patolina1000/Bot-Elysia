@@ -631,6 +631,56 @@
       font-size: 15px;
     }
 
+    /* Repeater de mensagens iniciais */
+    .start-msg-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px;
+      background: #f9fafb;
+    }
+    .start-msg-item .msg-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .start-msg-item .msg-header strong {
+      font-size: 14px;
+      color: #374151;
+    }
+    .start-msg-item .msg-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .start-msg-item .msg-actions button {
+      padding: 4px 10px;
+      font-size: 13px;
+      background: #ffffff;
+      border: 1px solid #d1d5db;
+      color: #374151;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .start-msg-item .msg-actions button:hover {
+      background: #f3f4f6;
+    }
+    .start-msg-item .msg-actions button.remove {
+      color: #dc2626;
+      border-color: #fecaca;
+    }
+    .start-msg-item .msg-actions button.remove:hover {
+      background: #fee2e2;
+    }
+    .start-msg-item textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-family: inherit;
+      resize: vertical;
+    }
+
     dialog {
       border: none;
       border-radius: 12px;
@@ -1150,8 +1200,14 @@
         </div>
 
         <div class="form-section">
-          <label for="start-text">Mensagem inicial (/start)</label>
-          <textarea id="start-text" placeholder="👋 Bem-vindo!"></textarea>
+          <label>Mensagens iniciais (/start)</label>
+          <div id="start-messages-list" style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;"></div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+            <button type="button" id="add-start-message" class="btn-secondary">+ Adicionar mensagem /start</button>
+            <small style="color: #6b7280;">Máx. 3 mensagens. Serão enviadas após as mídias e antes dos planos.</small>
+          </div>
+          <!-- Campo legado mantido oculto para retrocompatibilidade -->
+          <textarea id="start-text" style="display: none;"></textarea>
         </div>
 
         <div class="form-section">
@@ -2077,12 +2133,21 @@
       }
 
       function normalizeTemplate(raw) {
-        const fallback = { parse_mode: 'Markdown', text: '', medias: [] };
+        const fallback = { parse_mode: 'Markdown', text: '', start_messages: [], medias: [] };
         if (!raw || typeof raw !== 'object') {
           return fallback;
         }
         const parseMode = typeof raw.parse_mode === 'string' ? raw.parse_mode : fallback.parse_mode;
         const text = typeof raw.text === 'string' ? raw.text : fallback.text;
+        
+        // Normaliza start_messages: preferência pelo array, fallback para text
+        let startMessages = [];
+        if (Array.isArray(raw.start_messages) && raw.start_messages.length > 0) {
+          startMessages = raw.start_messages.map(s => String(s)).filter(Boolean);
+        } else if (text) {
+          startMessages = [text];
+        }
+        
         const list = Array.isArray(raw.medias)
           ? raw.medias
           : Array.isArray(raw.media)
@@ -2094,7 +2159,7 @@
             type: item.type === 'video' || item.type === 'audio' ? item.type : 'photo',
             url: typeof item.url === 'string' ? item.url : typeof item.media === 'string' ? item.media : '',
           }));
-        return { parse_mode: parseMode, text, medias };
+        return { parse_mode: parseMode, text, start_messages: startMessages, medias };
       }
 
       const pane = (() => {
@@ -2108,6 +2173,10 @@
         const revealTokenBtn = document.getElementById('reveal-token');
         const copyWebhookBtn = document.getElementById('copy-webhook');
         const tokenField = document.getElementById('hdr-bot-token');
+        
+        // Start messages repeater
+        const startMessagesList = document.getElementById('start-messages-list');
+        const addStartMessageBtn = document.getElementById('add-start-message');
 
         function clearStatus() {
           statusEl.textContent = '';
@@ -2118,6 +2187,68 @@
           statusEl.textContent = message;
           statusEl.className = `status ${type}`;
         }
+
+        // Start messages repeater functions
+        function getStartMessagesValues() {
+          return Array.from(startMessagesList.querySelectorAll('.start-msg-text'))
+            .map(textarea => textarea.value.trim())
+            .filter(Boolean)
+            .slice(0, 3);
+        }
+
+        function refreshAddMessageButton() {
+          const count = startMessagesList.querySelectorAll('.start-msg-item').length;
+          addStartMessageBtn.disabled = count >= 3;
+        }
+
+        function createStartMessageItem(value = '') {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'start-msg-item';
+          wrapper.innerHTML = `
+            <div class="msg-header">
+              <strong>Mensagem /start</strong>
+              <div class="msg-actions">
+                <button type="button" class="up" title="Mover para cima">↑</button>
+                <button type="button" class="down" title="Mover para baixo">↓</button>
+                <button type="button" class="remove" title="Remover">Excluir</button>
+              </div>
+            </div>
+            <textarea class="start-msg-text" placeholder="Texto em Markdown/HTML conforme Parse Mode selecionado"></textarea>
+          `;
+          
+          const textarea = wrapper.querySelector('.start-msg-text');
+          textarea.value = value || '';
+          textarea.addEventListener('input', () => notifyChange());
+          
+          wrapper.querySelector('.remove').addEventListener('click', () => {
+            wrapper.remove();
+            refreshAddMessageButton();
+            notifyChange();
+          });
+          
+          wrapper.querySelector('.up').addEventListener('click', () => {
+            if (wrapper.previousElementSibling) {
+              startMessagesList.insertBefore(wrapper, wrapper.previousElementSibling);
+              notifyChange();
+            }
+          });
+          
+          wrapper.querySelector('.down').addEventListener('click', () => {
+            if (wrapper.nextElementSibling) {
+              startMessagesList.insertBefore(wrapper.nextElementSibling, wrapper);
+              notifyChange();
+            }
+          });
+          
+          return wrapper;
+        }
+
+        addStartMessageBtn.addEventListener('click', () => {
+          if (startMessagesList.querySelectorAll('.start-msg-item').length >= 3) return;
+          startMessagesList.appendChild(createStartMessageItem(''));
+          refreshAddMessageButton();
+          notifyChange();
+        });
 
         function updateMediaEmptyState() {
           const hasRows = mediaList.querySelector('.media-row');
@@ -2316,6 +2447,7 @@
             const body = {
               parse_mode: payload.parse_mode,
               text: payload.text,
+              start_messages: payload.start_messages || [],
               media: payload.medias.map((item) => ({ type: item.type, media: item.url })),
             };
             await fetchJSON(`/admin/bots/${botId}/templates/start`, {
@@ -2339,6 +2471,16 @@
           parseSel.value = normalized.parse_mode || 'Markdown';
           textArea.value = normalized.text || '';
 
+          // Populate start messages repeater
+          startMessagesList.innerHTML = '';
+          const messages = Array.isArray(normalized.start_messages) && normalized.start_messages.length > 0
+            ? normalized.start_messages
+            : (normalized.text ? [normalized.text] : ['']);
+          messages.slice(0, 3).forEach(msg => {
+            startMessagesList.appendChild(createStartMessageItem(msg));
+          });
+          refreshAddMessageButton();
+
           mediaList.innerHTML = '';
           (normalized.medias || []).forEach((item) => addMediaRow(item));
           updateMediaEmptyState();
@@ -2355,9 +2497,11 @@
           const medias = Array.from(mediaList.querySelectorAll('.media-row'))
             .map((row) => serializeRow(row))
             .filter((item) => item.url);
+          const startMessages = getStartMessagesValues();
           return {
             parse_mode: parseSel.value || 'Markdown',
-            text: textArea.value || '',
+            text: startMessages[0] || '',
+            start_messages: startMessages,
             medias,
           };
         }
