@@ -1,4 +1,14 @@
 import { PixCreationParams, PaymentGateway, registerGateway } from './registry.js';
+import { logger } from '../../logger.js';
+import {
+  generatePixTraceId,
+  maskToken,
+  sanitizeHeaders,
+  getQrCodePreview,
+  getQrCodeBase64Length,
+  createBodyPreview,
+  calculateElapsedMs,
+} from '../../utils/pixLogging.js';
 
 const PROD_URL = 'https://api.pushinpay.com.br';
 const SANDBOX_URL = 'https://api-sandbox.pushinpay.com.br';
@@ -80,6 +90,24 @@ export class PushinPayGateway implements PaymentGateway {
       body.webhook_url = webhookUrl;
     }
 
+    const pix_trace_id = generatePixTraceId(null, params.transaction_id);
+    const startTime = Date.now();
+
+    // Log request
+    logger.child({
+      op: 'create',
+      provider: 'PushinPay',
+      bot_slug: params.botSlug ?? null,
+      telegram_id: params.telegram_id ?? null,
+      payload_id: params.payload_id ?? null,
+      transaction_id: params.transaction_id ?? null,
+      price_cents: valueCents,
+      pix_trace_id,
+    }).info({
+      headers_sanitized: sanitizeHeaders(this.headers as Record<string, string>),
+      body_preview: createBodyPreview(body),
+    }, '[PIX][CREATE] request');
+
     const response = await fetch(`${this.baseUrl}/api/pix/cashIn`, {
       method: 'POST',
       headers: this.headers,
@@ -87,7 +115,22 @@ export class PushinPayGateway implements PaymentGateway {
     });
 
     const payload = await parseResponse(response);
+    const elapsed_ms = calculateElapsedMs(startTime);
+
     if (!response.ok) {
+      // Log error
+      logger.child({
+        op: 'create',
+        provider: 'PushinPay',
+        pix_trace_id,
+      }).error({
+        http_status: response.status,
+        provider_error_code: (payload as any)?.code ?? (payload as any)?.error_code ?? null,
+        provider_error_msg: (payload as any)?.message ?? (payload as any)?.error ?? response.statusText,
+        elapsed_ms,
+        raw_response_len: JSON.stringify(payload).length,
+      }, '[PIX][ERROR] create failed');
+
       throw new PushinPayError(
         `PushinPay cashIn falhou: ${response.status} ${response.statusText}`,
         response.status,
@@ -95,17 +138,74 @@ export class PushinPayGateway implements PaymentGateway {
       );
     }
 
-    return payload as PushinPayPixResponse;
+    // Log success
+    const typedPayload = payload as PushinPayPixResponse;
+    const provider_id = typedPayload.id;
+    const final_trace_id = generatePixTraceId(provider_id, params.transaction_id);
+
+    logger.child({
+      op: 'create',
+      provider: 'PushinPay',
+      pix_trace_id: final_trace_id,
+    }).info({
+      provider_id,
+      status: typedPayload.status,
+      qr_code_preview: getQrCodePreview(typedPayload.qr_code),
+      qr_code_base64_len: getQrCodeBase64Length(typedPayload.qr_code_base64),
+      elapsed_ms,
+    }, '[PIX][CREATE] response');
+
+    return typedPayload;
   }
 
   async getTransaction(externalId: string): Promise<PushinPayTransactionResponse> {
+    const pix_trace_id = generatePixTraceId(externalId, null);
+    const startTime = Date.now();
+
+    // Log request
+    logger.child({
+      op: 'status',
+      provider: 'PushinPay',
+      provider_id: externalId,
+      pix_trace_id,
+    }).info({
+      headers_sanitized: sanitizeHeaders(this.headers as Record<string, string>),
+    }, '[PIX][STATUS] request');
+
     const response = await fetch(`${this.baseUrl}/api/transactions/${encodeURIComponent(externalId)}`, {
       method: 'GET',
       headers: this.headers,
     });
 
     const payload = await parseResponse(response);
+    const elapsed_ms = calculateElapsedMs(startTime);
+
     if (!response.ok) {
+      // Check for rate limit
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('retry-after');
+        logger.child({
+          op: 'status',
+          provider: 'PushinPay',
+          pix_trace_id,
+        }).warn({
+          retry_in_s: retryAfter ? Number(retryAfter) : null,
+          elapsed_ms,
+        }, '[PIX][STATUS] rate-limited');
+      } else {
+        logger.child({
+          op: 'status',
+          provider: 'PushinPay',
+          pix_trace_id,
+        }).error({
+          http_status: response.status,
+          provider_error_code: (payload as any)?.code ?? (payload as any)?.error_code ?? null,
+          provider_error_msg: (payload as any)?.message ?? (payload as any)?.error ?? response.statusText,
+          elapsed_ms,
+          raw_response_len: JSON.stringify(payload).length,
+        }, '[PIX][ERROR] status failed');
+      }
+
       throw new PushinPayError(
         `PushinPay consulta falhou: ${response.status} ${response.statusText}`,
         response.status,
@@ -113,7 +213,19 @@ export class PushinPayGateway implements PaymentGateway {
       );
     }
 
-    return payload as PushinPayTransactionResponse;
+    // Log success
+    const typedPayload = payload as PushinPayTransactionResponse;
+    logger.child({
+      op: 'status',
+      provider: 'PushinPay',
+      pix_trace_id,
+    }).info({
+      provider_id: externalId,
+      status: typedPayload.status,
+      elapsed_ms,
+    }, '[PIX][STATUS] response');
+
+    return typedPayload;
   }
 }
 

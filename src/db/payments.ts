@@ -1,4 +1,6 @@
 import { pool } from './pool.js';
+import { logger } from '../logger.js';
+import { generatePixTraceId } from '../utils/pixLogging.js';
 
 export interface PaymentTransaction {
   id: number;
@@ -66,6 +68,9 @@ function mapRow(row: any): PaymentTransaction {
 }
 
 export async function insertOrUpdatePayment(params: InsertPaymentParams): Promise<PaymentTransaction> {
+  const pix_trace_id = generatePixTraceId(params.external_id, null);
+  const bot_slug = params.meta && 'bot_slug' in params.meta ? String(params.meta.bot_slug) : null;
+
   const result = await pool.query(
     `INSERT INTO payment_transactions
        (gateway, external_id, status, value_cents, qr_code, qr_code_base64, webhook_url,
@@ -103,7 +108,24 @@ export async function insertOrUpdatePayment(params: InsertPaymentParams): Promis
     ]
   );
 
-  return mapRow(result.rows[0]);
+  const saved = mapRow(result.rows[0]);
+
+  // Log DB insert/update
+  logger.child({
+    op: 'db',
+    provider: params.gateway,
+    provider_id: params.external_id,
+    transaction_id: saved.id,
+    bot_slug,
+    telegram_id: params.telegram_id ?? null,
+    payload_id: params.payload_id ?? null,
+    pix_trace_id,
+  }).info({
+    status_next: params.status,
+    price_cents: params.value_cents,
+  }, '[PIX][DB] insert/update');
+
+  return saved;
 }
 
 export async function setPaymentStatus(
@@ -112,6 +134,15 @@ export async function setPaymentStatus(
   status: string,
   extra: SetPaymentStatusOptions = {}
 ): Promise<PaymentTransaction | null> {
+  const pix_trace_id = generatePixTraceId(external_id, null);
+
+  // Buscar status anterior
+  const prev = await pool.query(
+    'SELECT status, telegram_id, payload_id, meta FROM payment_transactions WHERE gateway = $1 AND external_id = $2',
+    [gateway, external_id]
+  );
+  const status_prev = prev.rows[0]?.status ?? 'unknown';
+
   const result = await pool.query(
     `UPDATE payment_transactions
         SET status = $3,
@@ -135,7 +166,33 @@ export async function setPaymentStatus(
     return null;
   }
 
-  return mapRow(result.rows[0]);
+  const updated = mapRow(result.rows[0]);
+  const bot_slug = updated.meta && 'bot_slug' in updated.meta ? String(updated.meta.bot_slug) : null;
+
+  // Log DB update
+  const changed_fields = [];
+  if (status_prev !== status) changed_fields.push('status');
+  if (extra.end_to_end_id) changed_fields.push('end_to_end_id');
+  if (extra.payer_name) changed_fields.push('payer_name');
+  if (extra.payer_doc) changed_fields.push('payer_doc');
+
+  logger.child({
+    op: 'db',
+    provider: gateway,
+    provider_id: external_id,
+    transaction_id: updated.id,
+    bot_slug,
+    telegram_id: updated.telegram_id ?? null,
+    payload_id: updated.payload_id ?? null,
+    pix_trace_id,
+  }).info({
+    status_prev,
+    status_next: status,
+    changed_fields,
+    confirmed_at: status.toLowerCase() === 'paid' || status.toLowerCase() === 'approved' ? new Date().toISOString() : null,
+  }, '[PIX][DB] update status');
+
+  return updated;
 }
 
 export async function getPaymentByExternalId(

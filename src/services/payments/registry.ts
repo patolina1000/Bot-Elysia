@@ -3,6 +3,9 @@ export interface PixCreationParams {
   webhookPath?: string;
   splitRules?: unknown[];
   botSlug?: string;
+  telegram_id?: number | null;
+  payload_id?: string | null;
+  transaction_id?: string | number | null;
 }
 
 export interface PaymentGateway {

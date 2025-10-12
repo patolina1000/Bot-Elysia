@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { logger } from '../../logger.js';
 import { getGateway } from '../../services/payments/registry.js';
 import {
+  generatePixTraceId,
+  getQrCodePreview,
+  getQrCodeBase64Length,
+  calculateTtcMs,
+} from '../../utils/pixLogging.js';
+import {
   PushinPayGateway,
   PushinPayError,
   registerPushinPayGatewayFromEnv,
@@ -32,10 +38,11 @@ async function recordFunnelEvent(params: {
   payloadId?: string | null;
   meta?: Record<string, unknown>;
 }): Promise<void> {
-  await pool.query(
+  const result = await pool.query(
     `INSERT INTO funnel_events (bot_id, tg_user_id, event, event_id, price_cents, transaction_id, payload_id, meta)
      VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::jsonb, '{}'::jsonb))
-     ON CONFLICT (event_id) DO NOTHING`,
+     ON CONFLICT (event_id) DO NOTHING
+     RETURNING *`,
     [
       null,
       params.telegramId ?? null,
@@ -47,6 +54,27 @@ async function recordFunnelEvent(params: {
       params.meta ? JSON.stringify(params.meta) : '{}',
     ]
   );
+
+  // Log apenas se foi inserido (não duplicado)
+  if (result.rows.length > 0) {
+    const pix_trace_id = generatePixTraceId(params.transactionId ?? null, null);
+    const bot_slug = params.meta && 'bot_slug' in params.meta ? String(params.meta.bot_slug) : null;
+    const provider = params.meta && 'gateway' in params.meta ? String(params.meta.gateway) : null;
+
+    logger.child({
+      op: 'funnel',
+      provider,
+      provider_id: params.transactionId ?? null,
+      bot_slug,
+      telegram_id: params.telegramId ?? null,
+      payload_id: params.payloadId ?? null,
+      pix_trace_id,
+    }).info({
+      event_name: params.event,
+      event_id: params.eventId,
+      price_cents: params.priceCents ?? null,
+    }, `[PIX][FUNNEL] ${params.event}`);
+  }
 }
 
 type RawTrackingRow = {
@@ -139,6 +167,26 @@ pushinpayRouter.post(
     try {
       const body = createPixSchema.parse(req.body ?? {});
 
+      // Extrair botSlug do meta, se disponível
+      const botSlug = body.meta && typeof body.meta === 'object' && 'botSlug' in body.meta
+        ? String(body.meta.botSlug)
+        : undefined;
+
+      const pix_trace_id = generatePixTraceId(null, null);
+      const reqLogger = (req as any).log ?? logger;
+
+      // Log entrada
+      reqLogger.info({
+        route: '/api/payments/pushinpay/cash-in',
+        op: 'create',
+        bot_slug: botSlug ?? null,
+        telegram_id: body.telegram_id ?? null,
+        payload_id: body.payload_id ?? null,
+        price_cents: body.value_cents,
+        pix_trace_id,
+        request_id: (req as any).id ?? null,
+      }, '[PIX][CREATE] inbound');
+
       let gateway: PushinPayGateway;
       try {
         gateway = getGateway('pushinpay') as PushinPayGateway;
@@ -146,16 +194,23 @@ pushinpayRouter.post(
         const message = pushinpayConfigured
           ? 'Gateway PushinPay indisponível'
           : 'Gateway PushinPay não configurado';
+        reqLogger.error({
+          op: 'create',
+          provider: 'PushinPay',
+          pix_trace_id,
+          http_status: 503,
+        }, '[PIX][ERROR] gateway unavailable');
         res.status(503).json({ error: message });
         return;
       }
 
-      // Extrair botSlug do meta, se disponível
-      const botSlug = body.meta && typeof body.meta === 'object' && 'botSlug' in body.meta
-        ? String(body.meta.botSlug)
-        : undefined;
-
-      const pix = await gateway.createPix({ value_cents: body.value_cents, splitRules: [], botSlug });
+      const pix = await gateway.createPix({
+        value_cents: body.value_cents,
+        splitRules: [],
+        botSlug,
+        telegram_id: body.telegram_id ?? null,
+        payload_id: body.payload_id ?? null,
+      });
       const responseValue = Number(pix.value);
       const valueCents = Number.isFinite(responseValue) ? Math.trunc(responseValue) : body.value_cents;
 
@@ -189,6 +244,8 @@ pushinpayRouter.post(
         meta: baseMeta,
       });
 
+      const final_trace_id = generatePixTraceId(saved.external_id, saved.id);
+
       await recordFunnelEvent({
         event: 'pix_created',
         eventId: `pix:${saved.external_id}`,
@@ -198,6 +255,18 @@ pushinpayRouter.post(
         payloadId: body.payload_id ?? null,
         meta: { gateway: 'pushinpay' },
       });
+
+      // Log sucesso
+      reqLogger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        provider_id: saved.external_id,
+        transaction_id: saved.id,
+        status: saved.status,
+        pix_trace_id: final_trace_id,
+        qr_code_preview: getQrCodePreview(saved.qr_code),
+        qr_code_base64_len: getQrCodeBase64Length(saved.qr_code_base64),
+      }, '[PIX][CREATE] ok');
 
       res.status(201).json({
         id: saved.external_id,
@@ -209,13 +278,29 @@ pushinpayRouter.post(
         notice_html: PUSHINPAY_NOTICE_HTML,
       });
     } catch (err) {
+      const reqLogger = (req as any).log ?? logger;
+
       if (err instanceof z.ZodError) {
+        reqLogger.warn({
+          op: 'create',
+          provider: 'PushinPay',
+          http_status: 400,
+          validation_errors: err.flatten(),
+        }, '[PIX][ERROR] validation failed');
         res.status(400).json({ error: 'Payload inválido', details: err.flatten() });
         return;
       }
 
       if (err instanceof PushinPayError) {
-        res.status(err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502).json({
+        const httpStatus = err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502;
+        reqLogger.error({
+          op: 'create',
+          provider: 'PushinPay',
+          http_status: httpStatus,
+          provider_error_code: (err.responseBody as any)?.code ?? null,
+          provider_error_msg: err.message,
+        }, '[PIX][ERROR] cashIn failed');
+        res.status(httpStatus).json({
           error: err.message,
           details: err.responseBody ?? null,
         });
@@ -223,6 +308,7 @@ pushinpayRouter.post(
       }
 
       const message = err instanceof Error ? err.message : 'Erro inesperado';
+      reqLogger.error({ err, op: 'create' }, '[PIX][ERROR] unexpected');
       res.status(500).json({ error: message });
     }
   }
@@ -234,6 +320,13 @@ pushinpayRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const parsedBody = createPixByPlanSchema.safeParse(req.body ?? {});
     if (!parsedBody.success) {
+      const reqLogger = (req as any).log ?? logger;
+      reqLogger.warn({
+        op: 'create',
+        route: '/api/payments/pushinpay/cash-in/by-plan',
+        http_status: 400,
+        validation_errors: parsedBody.error.flatten(),
+      }, '[PIX][ERROR] validation failed');
       res.status(400).json({ error: 'Payload inválido', details: parsedBody.error.flatten() });
       return;
     }
@@ -245,6 +338,22 @@ pushinpayRouter.post(
         return;
       }
 
+      const pix_trace_id = generatePixTraceId(null, null);
+      const reqLogger = (req as any).log ?? logger;
+
+      // Log entrada
+      reqLogger.info({
+        route: '/api/payments/pushinpay/cash-in/by-plan',
+        op: 'create',
+        bot_slug: plan.bot_slug ?? null,
+        telegram_id: parsedBody.data.telegram_id ?? null,
+        payload_id: parsedBody.data.payload_id ?? null,
+        price_cents: plan.price_cents,
+        plan_id: plan.id,
+        pix_trace_id,
+        request_id: (req as any).id ?? null,
+      }, '[PIX][CREATE] inbound');
+
       let gateway: PushinPayGateway;
       try {
         gateway = getGateway('pushinpay') as PushinPayGateway;
@@ -252,11 +361,23 @@ pushinpayRouter.post(
         const message = pushinpayConfigured
           ? 'Gateway PushinPay indisponível'
           : 'Gateway PushinPay não configurado';
+        reqLogger.error({
+          op: 'create',
+          provider: 'PushinPay',
+          pix_trace_id,
+          http_status: 503,
+        }, '[PIX][ERROR] gateway unavailable');
         res.status(503).json({ error: message });
         return;
       }
 
-      const pix = await gateway.createPix({ value_cents: plan.price_cents, splitRules: [], botSlug: plan.bot_slug });
+      const pix = await gateway.createPix({
+        value_cents: plan.price_cents,
+        splitRules: [],
+        botSlug: plan.bot_slug,
+        telegram_id: parsedBody.data.telegram_id ?? null,
+        payload_id: parsedBody.data.payload_id ?? null,
+      });
       const responseValue = Number(pix.value);
       const valueCents = Number.isFinite(responseValue) ? Math.trunc(responseValue) : plan.price_cents;
 
@@ -274,6 +395,8 @@ pushinpayRouter.post(
         meta: { planFromAdmin: true, bot_slug: plan.bot_slug },
       });
 
+      const final_trace_id = generatePixTraceId(saved.external_id, saved.id);
+
       await recordFunnelEvent({
         event: 'pix_created',
         eventId: `pix:${saved.external_id}`,
@@ -283,6 +406,18 @@ pushinpayRouter.post(
         payloadId: parsedBody.data.payload_id ?? null,
         meta: { gateway: 'pushinpay', plan_id: plan.id },
       });
+
+      // Log sucesso
+      reqLogger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        provider_id: saved.external_id,
+        transaction_id: saved.id,
+        status: saved.status,
+        pix_trace_id: final_trace_id,
+        qr_code_preview: getQrCodePreview(saved.qr_code),
+        qr_code_base64_len: getQrCodeBase64Length(saved.qr_code_base64),
+      }, '[PIX][CREATE] ok');
 
       res.status(201).json({
         id: saved.external_id,
@@ -295,8 +430,18 @@ pushinpayRouter.post(
         notice_html: PUSHINPAY_NOTICE_HTML,
       });
     } catch (err) {
+      const reqLogger = (req as any).log ?? logger;
+
       if (err instanceof PushinPayError) {
-        res.status(err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502).json({
+        const httpStatus = err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502;
+        reqLogger.error({
+          op: 'create',
+          provider: 'PushinPay',
+          http_status: httpStatus,
+          provider_error_code: (err.responseBody as any)?.code ?? null,
+          provider_error_msg: err.message,
+        }, '[PIX][ERROR] cashIn failed');
+        res.status(httpStatus).json({
           error: err.message,
           details: err.responseBody ?? null,
         });
@@ -304,6 +449,7 @@ pushinpayRouter.post(
       }
 
       const message = err instanceof Error ? err.message : 'Erro inesperado';
+      reqLogger.error({ err, op: 'create' }, '[PIX][ERROR] unexpected');
       res.status(500).json({ error: message });
     }
   }
@@ -312,6 +458,20 @@ pushinpayRouter.post(
 pushinpayRouter.get(
   '/api/payments/pushinpay/transactions/:id',
   async (req: Request, res: Response): Promise<void> => {
+    const provider_id = req.params.id;
+    const pix_trace_id = generatePixTraceId(provider_id, null);
+    const reqLogger = (req as any).log ?? logger;
+
+    // Log entrada
+    reqLogger.info({
+      route: '/api/payments/pushinpay/transactions/:id',
+      op: 'status',
+      provider: 'PushinPay',
+      provider_id,
+      pix_trace_id,
+      request_id: (req as any).id ?? null,
+    }, '[PIX][STATUS] query');
+
     try {
       let gateway: PushinPayGateway;
       try {
@@ -320,15 +480,41 @@ pushinpayRouter.get(
         const message = pushinpayConfigured
           ? 'Gateway PushinPay indisponível'
           : 'Gateway PushinPay não configurado';
+        reqLogger.error({
+          op: 'status',
+          provider: 'PushinPay',
+          pix_trace_id,
+          http_status: 503,
+        }, '[PIX][ERROR] gateway unavailable');
         res.status(503).json({ error: message });
         return;
       }
 
-      const transaction = await gateway.getTransaction(req.params.id);
+      const transaction = await gateway.getTransaction(provider_id);
+
+      // Log sucesso
+      reqLogger.info({
+        op: 'status',
+        provider: 'PushinPay',
+        provider_id,
+        status: transaction.status,
+        pix_trace_id,
+      }, '[PIX][STATUS] ok');
+
       res.json(transaction);
     } catch (err) {
       if (err instanceof PushinPayError) {
-        res.status(err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502).json({
+        const httpStatus = err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502;
+        reqLogger.error({
+          op: 'status',
+          provider: 'PushinPay',
+          provider_id,
+          http_status: httpStatus,
+          provider_error_code: (err.responseBody as any)?.code ?? null,
+          provider_error_msg: err.message,
+          pix_trace_id,
+        }, '[PIX][ERROR] status failed');
+        res.status(httpStatus).json({
           error: err.message,
           details: err.responseBody ?? null,
         });
@@ -336,6 +522,7 @@ pushinpayRouter.get(
       }
 
       const message = err instanceof Error ? err.message : 'Erro inesperado';
+      reqLogger.error({ err, op: 'status', pix_trace_id }, '[PIX][ERROR] unexpected');
       res.status(500).json({ error: message });
     }
   }
@@ -356,7 +543,7 @@ pushinpayWebhookRouter.post(
   '/webhooks/pushinpay/:botSlug',
   async (req: Request, res: Response): Promise<void> => {
     const botSlug = req.params.botSlug;
-    logger.info({ botSlug }, '[payments] Recebendo webhook PushinPay para bot');
+    const reqLogger = (req as any).log ?? logger;
 
     const secretHeader = process.env.PUSHINPAY_WEBHOOK_HEADER;
     const secretValue = process.env.PUSHINPAY_WEBHOOK_SECRET;
@@ -364,6 +551,12 @@ pushinpayWebhookRouter.post(
     if (secretHeader && secretValue) {
       const received = req.get(secretHeader);
       if (received !== secretValue) {
+        reqLogger.warn({
+          op: 'webhook',
+          provider: 'PushinPay',
+          bot_slug: botSlug,
+          http_status: 401,
+        }, '[PIX][WEBHOOK] unauthorized');
         res.status(401).json({ error: 'invalid webhook secret' });
         return;
       }
@@ -371,11 +564,31 @@ pushinpayWebhookRouter.post(
 
     const parsed = webhookPayloadSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
+      reqLogger.warn({
+        op: 'webhook',
+        provider: 'PushinPay',
+        bot_slug: botSlug,
+        http_status: 400,
+        validation_errors: parsed.error.flatten(),
+      }, '[PIX][ERROR] webhook validation failed');
       res.status(400).json({ error: 'payload inválido', details: parsed.error.flatten() });
       return;
     }
 
     const payload = parsed.data;
+    const pix_trace_id = generatePixTraceId(payload.id, null);
+
+    // Log recebimento do webhook
+    reqLogger.info({
+      op: 'webhook',
+      provider: 'PushinPay',
+      bot_slug: botSlug,
+      provider_id: payload.id,
+      status_next: payload.status,
+      raw_status: payload.status,
+      pix_trace_id,
+      request_id: (req as any).id ?? null,
+    }, '[PIX][WEBHOOK] received');
 
     try {
       const updated = await setPaymentStatus('pushinpay', payload.id, payload.status, {
@@ -385,15 +598,37 @@ pushinpayWebhookRouter.post(
       });
 
       if (!updated) {
-        logger.warn({ external_id: payload.id }, '[payments] transação PushinPay não encontrada localmente');
+        reqLogger.warn({
+          op: 'webhook',
+          provider: 'PushinPay',
+          provider_id: payload.id,
+          pix_trace_id,
+        }, '[PIX][WEBHOOK] transaction not found locally');
       }
 
       if (updated && payload.status === 'paid') {
+        const ttc_ms = calculateTtcMs(updated.created_at);
         const mergedMeta = {
           ...(typeof updated.meta === 'object' && updated.meta ? updated.meta : {}),
           gateway: 'pushinpay',
           ...(payload.end_to_end_id ? { end_to_end_id: payload.end_to_end_id } : {}),
         };
+
+        // Log pagamento confirmado
+        reqLogger.info({
+          op: 'webhook',
+          provider: 'PushinPay',
+          provider_id: payload.id,
+          bot_slug: botSlug,
+          telegram_id: updated.telegram_id ?? null,
+          payload_id: updated.payload_id ?? null,
+          transaction_id: updated.id,
+          price_cents: updated.value_cents,
+          status_next: 'paid',
+          pix_trace_id,
+          ttc_ms,
+          end_to_end_id: payload.end_to_end_id ?? null,
+        }, '[PIX][WEBHOOK] payment confirmed');
 
         await recordFunnelEvent({
           event: 'purchase',
@@ -442,14 +677,27 @@ pushinpayWebhookRouter.post(
               body: JSON.stringify(orderPayload),
             });
           } catch (notifyErr) {
-            logger.warn({ err: notifyErr }, '[payments] falha ao notificar UTMify');
+            reqLogger.warn({ err: notifyErr }, '[payments] falha ao notificar UTMify');
           }
         }
       }
 
+      reqLogger.info({
+        op: 'webhook',
+        provider: 'PushinPay',
+        pix_trace_id,
+        http_status: 200,
+      }, '[PIX][WEBHOOK] processed');
+
       res.json({ ok: true });
     } catch (err) {
-      logger.error({ err }, '[payments] erro ao processar webhook PushinPay');
+      reqLogger.error({
+        err,
+        op: 'webhook',
+        provider: 'PushinPay',
+        provider_id: payload.id,
+        pix_trace_id,
+      }, '[PIX][ERROR] webhook processing failed');
       const message = err instanceof Error ? err.message : 'Erro inesperado';
       res.status(500).json({ error: message });
     }
@@ -460,7 +708,7 @@ pushinpayWebhookRouter.post(
 pushinpayWebhookRouter.post(
   '/webhooks/pushinpay',
   async (req: Request, res: Response): Promise<void> => {
-    logger.info('[payments] Recebendo webhook PushinPay global (sem botSlug)');
+    const reqLogger = (req as any).log ?? logger;
 
     const secretHeader = process.env.PUSHINPAY_WEBHOOK_HEADER;
     const secretValue = process.env.PUSHINPAY_WEBHOOK_SECRET;
@@ -468,6 +716,12 @@ pushinpayWebhookRouter.post(
     if (secretHeader && secretValue) {
       const received = req.get(secretHeader);
       if (received !== secretValue) {
+        reqLogger.warn({
+          op: 'webhook',
+          provider: 'PushinPay',
+          bot_slug: null,
+          http_status: 401,
+        }, '[PIX][WEBHOOK] unauthorized');
         res.status(401).json({ error: 'invalid webhook secret' });
         return;
       }
@@ -475,11 +729,31 @@ pushinpayWebhookRouter.post(
 
     const parsed = webhookPayloadSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
+      reqLogger.warn({
+        op: 'webhook',
+        provider: 'PushinPay',
+        bot_slug: null,
+        http_status: 400,
+        validation_errors: parsed.error.flatten(),
+      }, '[PIX][ERROR] webhook validation failed');
       res.status(400).json({ error: 'payload inválido', details: parsed.error.flatten() });
       return;
     }
 
     const payload = parsed.data;
+    const pix_trace_id = generatePixTraceId(payload.id, null);
+
+    // Log recebimento do webhook
+    reqLogger.info({
+      op: 'webhook',
+      provider: 'PushinPay',
+      bot_slug: null,
+      provider_id: payload.id,
+      status_next: payload.status,
+      raw_status: payload.status,
+      pix_trace_id,
+      request_id: (req as any).id ?? null,
+    }, '[PIX][WEBHOOK] received');
 
     try {
       const updated = await setPaymentStatus('pushinpay', payload.id, payload.status, {
@@ -489,15 +763,41 @@ pushinpayWebhookRouter.post(
       });
 
       if (!updated) {
-        logger.warn({ external_id: payload.id }, '[payments] transação PushinPay não encontrada localmente');
+        reqLogger.warn({
+          op: 'webhook',
+          provider: 'PushinPay',
+          provider_id: payload.id,
+          pix_trace_id,
+        }, '[PIX][WEBHOOK] transaction not found locally');
       }
 
       if (updated && payload.status === 'paid') {
+        const ttc_ms = calculateTtcMs(updated.created_at);
         const mergedMeta = {
           ...(typeof updated.meta === 'object' && updated.meta ? updated.meta : {}),
           gateway: 'pushinpay',
           ...(payload.end_to_end_id ? { end_to_end_id: payload.end_to_end_id } : {}),
         };
+
+        // Log pagamento confirmado
+        const botSlug = typeof updated.meta === 'object' && updated.meta && 'bot_slug' in updated.meta
+          ? String(updated.meta.bot_slug)
+          : null;
+
+        reqLogger.info({
+          op: 'webhook',
+          provider: 'PushinPay',
+          provider_id: payload.id,
+          bot_slug: botSlug,
+          telegram_id: updated.telegram_id ?? null,
+          payload_id: updated.payload_id ?? null,
+          transaction_id: updated.id,
+          price_cents: updated.value_cents,
+          status_next: 'paid',
+          pix_trace_id,
+          ttc_ms,
+          end_to_end_id: payload.end_to_end_id ?? null,
+        }, '[PIX][WEBHOOK] payment confirmed');
 
         await recordFunnelEvent({
           event: 'purchase',
@@ -546,14 +846,27 @@ pushinpayWebhookRouter.post(
               body: JSON.stringify(orderPayload),
             });
           } catch (notifyErr) {
-            logger.warn({ err: notifyErr }, '[payments] falha ao notificar UTMify');
+            reqLogger.warn({ err: notifyErr }, '[payments] falha ao notificar UTMify');
           }
         }
       }
 
+      reqLogger.info({
+        op: 'webhook',
+        provider: 'PushinPay',
+        pix_trace_id,
+        http_status: 200,
+      }, '[PIX][WEBHOOK] processed');
+
       res.json({ ok: true });
     } catch (err) {
-      logger.error({ err }, '[payments] erro ao processar webhook PushinPay');
+      reqLogger.error({
+        err,
+        op: 'webhook',
+        provider: 'PushinPay',
+        provider_id: payload.id,
+        pix_trace_id,
+      }, '[PIX][ERROR] webhook processing failed');
       const message = err instanceof Error ? err.message : 'Erro inesperado';
       res.status(500).json({ error: message });
     }

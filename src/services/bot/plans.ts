@@ -10,6 +10,8 @@ import {
   type PushinPayGateway,
 } from '../payments/PushinPayGateway.js';
 import { getGateway } from '../payments/registry.js';
+import { logger } from '../../logger.js';
+import { generatePixTraceId } from '../../utils/pixLogging.js';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -76,6 +78,8 @@ export async function createPixForPlan(
     value_cents: plan.price_cents,
     splitRules: [],
     botSlug: plan.bot_slug,
+    telegram_id: params.telegramId ?? null,
+    payload_id: params.payloadId ?? null,
   });
 
   const createdValue = Number(created?.value);
@@ -101,12 +105,14 @@ export async function createPixForPlan(
   });
 
   const eventId = `pix:${transaction.external_id}`;
+  const pix_trace_id = generatePixTraceId(transaction.external_id, transaction.id);
 
   try {
-    await pool.query(
+    const result = await pool.query(
       `INSERT INTO funnel_events (bot_id, tg_user_id, event, event_id, price_cents, transaction_id, payload_id, meta)
        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::jsonb, '{}'::jsonb))
-       ON CONFLICT (event_id) DO NOTHING`,
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING *`,
       [
         params.botId ?? null,
         params.telegramId ?? null,
@@ -115,11 +121,29 @@ export async function createPixForPlan(
         transaction.value_cents,
         transaction.external_id,
         params.payloadId ?? null,
-        JSON.stringify({ gateway: 'pushinpay' }),
+        JSON.stringify({ gateway: 'pushinpay', bot_slug: plan.bot_slug }),
       ]
     );
+
+    // Log apenas se foi inserido (não duplicado)
+    if (result.rows.length > 0) {
+      logger.child({
+        op: 'funnel',
+        provider: 'PushinPay',
+        provider_id: transaction.external_id,
+        bot_slug: plan.bot_slug,
+        telegram_id: params.telegramId ?? null,
+        payload_id: params.payloadId ?? null,
+        transaction_id: transaction.id,
+        pix_trace_id,
+      }).info({
+        event_name: 'pix_created',
+        event_id: eventId,
+        price_cents: transaction.value_cents,
+      }, '[PIX][FUNNEL] pix_created');
+    }
   } catch (err) {
-    console.warn('[plans][pix] Failed to record funnel event', err);
+    logger.warn({ err, pix_trace_id }, '[plans][pix] Failed to record funnel event');
   }
 
   return { plan, transaction };
