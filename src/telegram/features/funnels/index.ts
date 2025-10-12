@@ -4,7 +4,7 @@ import { MyContext } from '../../grammYContext.js';
 export const funnelsFeature = new Composer<MyContext>();
 
 // Stub: Funnel event handlers will be registered here
-// Events: checkout_start, pix_created, purchase_paid
+// Events: checkout_start, pix_created, purchase
 // These will be triggered via admin APIs or external webhooks
 
 funnelsFeature.use(async (_ctx, next) => {

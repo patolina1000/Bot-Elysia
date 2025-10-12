@@ -8,6 +8,7 @@ import { offerService } from '../services/OfferService.js';
 import { funnelService } from '../services/FunnelService.js';
 import { pool } from '../db/pool.js';
 import { funnelApiRouter } from '../analytics/FunnelApi.js';
+import { pushinpayRouter, pushinpayWebhookRouter } from './payments/pushinpay.js';
 
 export const router = Router();
 
@@ -207,6 +208,8 @@ adminRouter.get('/logs', async (req: Request, res: Response) => {
 });
 
 router.use('/admin', adminRouter);
+router.use(pushinpayRouter);
+router.use(pushinpayWebhookRouter);
 
 // Analytics routes (no auth for now, but can be protected)
 router.use('/analytics', funnelApiRouter);
