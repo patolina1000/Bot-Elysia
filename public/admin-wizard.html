@@ -3339,23 +3339,27 @@
   document.getElementById('btn-ds-reset')?.addEventListener('click', ()=> fillDownsellForm(null));
   document.getElementById('btn-ds-media1-upload')?.addEventListener('click', ()=>{ document.getElementById('ds-media1-file').click(); });
   document.getElementById('ds-media1-file')?.addEventListener('change', async ()=>{
-    const file = (document.getElementById('ds-media1-file') as HTMLInputElement).files?.[0]; if(!file) return;
+    const el = document.getElementById('ds-media1-file');
+    const file = el && el.files ? el.files[0] : null; if(!file) return;
     const formData = new FormData(); formData.append('file', file, file.name);
     const headers=new Headers(); const t=getAdminToken(); if(t) headers.set('Authorization',`Bearer ${t}`);
     const resp = await fetch('/api/admin/upload',{ method:'POST', body: formData, headers });
     const data = await resp.json().catch(()=>({}));
     if(!resp.ok || !data?.ok || !data?.url){ alert('Falha no upload'); return; }
-    (document.getElementById('ds-media1-url') as HTMLInputElement).value = data.url;
+    const url1 = document.getElementById('ds-media1-url');
+    if(url1) url1.value = data.url;
   });
   document.getElementById('btn-ds-media2-upload')?.addEventListener('click', ()=>{ document.getElementById('ds-media2-file').click(); });
   document.getElementById('ds-media2-file')?.addEventListener('change', async ()=>{
-    const file = (document.getElementById('ds-media2-file') as HTMLInputElement).files?.[0]; if(!file) return;
+    const el = document.getElementById('ds-media2-file');
+    const file = el && el.files ? el.files[0] : null; if(!file) return;
     const formData = new FormData(); formData.append('file', file, file.name);
     const headers=new Headers(); const t=getAdminToken(); if(t) headers.set('Authorization',`Bearer ${t}`);
     const resp = await fetch('/api/admin/upload',{ method:'POST', body: formData, headers });
     const data = await resp.json().catch(()=>({}));
     if(!resp.ok || !data?.ok || !data?.url){ alert('Falha no upload'); return; }
-    (document.getElementById('ds-media2-url') as HTMLInputElement).value = data.url;
+    const url2 = document.getElementById('ds-media2-url');
+    if(url2) url2.value = data.url;
   });
 
   // ===== Admin Token healthcheck (fallback visual robusto) =====
