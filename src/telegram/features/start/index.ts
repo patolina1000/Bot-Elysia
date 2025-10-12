@@ -5,6 +5,7 @@ import { mediaService } from '../../../services/MediaService.js';
 import { startService } from './startService.js';
 import { groupMediaForSending, type MediaAsset } from '../../../utils/mediaGrouping.js';
 import { telegramMediaCache } from '../../../services/TelegramMediaCache.js';
+import { buildPlansKeyboard } from '../../../services/bot/plans.js';
 
 export const startFeature = new Composer<MyContext>();
 
@@ -50,6 +51,17 @@ startFeature.command('start', async (ctx) => {
     await ctx.reply(template.text, {
       parse_mode: parseMode,
     });
+
+    try {
+      const keyboard = await buildPlansKeyboard(ctx.bot_slug);
+      if (keyboard) {
+        await ctx.reply('Escolha uma oferta abaixo:', {
+          reply_markup: keyboard,
+        });
+      }
+    } catch (plansError) {
+      ctx.logger.warn({ err: plansError }, '[START] failed to load plans');
+    }
 
     ctx.logger.info({ tgUserId, eventId }, 'Start command completed');
   } catch (err) {
