@@ -10,6 +10,7 @@ import { pool } from '../db/pool.js';
 import { funnelApiRouter } from '../analytics/FunnelApi.js';
 import { pushinpayRouter, pushinpayWebhookRouter } from './payments/pushinpay.js';
 import { plansRouter } from './plans.js';
+import { botSettingsRouter } from './botSettings.js';
 
 export const router = Router();
 
@@ -210,6 +211,7 @@ adminRouter.get('/logs', async (req: Request, res: Response) => {
 
 router.use('/admin', adminRouter);
 router.use(plansRouter);
+router.use(botSettingsRouter);
 router.use(pushinpayRouter);
 router.use(pushinpayWebhookRouter);
 
