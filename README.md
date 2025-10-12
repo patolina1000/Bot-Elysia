@@ -127,6 +127,15 @@ GET /api/payments/pushinpay/transactions/{id}
 
 Use somente em casos pontuais (a PushinPay recomenda aguardar o webhook e evitar polling agressivo).
 
+### Diagnóstico e observabilidade PIX
+
+- Endpoints protegidos: `GET /admin/diag/pix?bot=:slug` e `GET /admin/diag/pix/all` expõem o estado do gateway, planos e matchers por bot.
+- Para filtrar rapidamente os eventos relevantes nos logs de produção, utilize:
+
+```
+grep -E "\[TG\]\[UPDATE]|\[DISPATCH]|\[PIX\]\[(CFG|GUARD|CREATE|UI)\]" -n logs/*.log
+```
+
 ## 📦 Deploy no Render
 
 ### Build Command
