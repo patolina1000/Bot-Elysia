@@ -7,6 +7,9 @@ import { funnelsFeature } from './features/funnels/index.js';
 import { broadcastFeature } from './features/broadcast/index.js';
 import { paymentsFeature } from './features/payments/index.js';
 import { getEncryptionKey } from '../utils/crypto.js';
+import { getBotPaymentGatewayConfig } from '../db/botPaymentConfigs.js';
+import { listPlans } from '../db/plans.js';
+import { resolvePixGateway } from '../services/payments/pixGatewayResolver.js';
 
 type BotFeatures = Record<string, boolean>;
 
@@ -100,6 +103,7 @@ function registerBotFeatures(bot: Bot<MyContext>, config: BotRow, token: string)
     ctx.bot_token = token;
     ctx.logger = botLogger;
     ctx.db = pool;
+    ctx.bot_features = features;
     await next();
   });
 
@@ -110,7 +114,45 @@ function registerBotFeatures(bot: Bot<MyContext>, config: BotRow, token: string)
     botLogger.info('[BOOT] core-start disabled explicitly');
   }
 
-  botLogger.info({ bot_id: config.id, bot_slug: config.slug, features }, '[BOOT] features loaded');
+  void (async () => {
+    try {
+      const [paymentConfig, plans] = await Promise.all([
+        getBotPaymentGatewayConfig(config.slug),
+        listPlans(config.slug).catch(() => []),
+      ]);
+
+      const paymentsEnabled = features['payments'] !== false;
+      const hasGatewayConfig = Boolean(paymentConfig?.token);
+      const hasPlans = plans.some((plan) => plan.is_active);
+
+      botLogger.info(
+        {
+          bot_id: config.id,
+          bot_slug: config.slug,
+          features,
+          payments_enabled: paymentsEnabled,
+          plans_count: plans.length,
+          active_plans: plans.filter((plan) => plan.is_active).length,
+          gateway_token_masked: paymentConfig?.token
+            ? `${String(paymentConfig.token).slice(0, 6)}…(len=${String(paymentConfig.token).length})`
+            : null,
+        },
+        '[BOOT] features loaded'
+      );
+
+      if (!paymentsEnabled && (hasGatewayConfig || hasPlans)) {
+        botLogger.warn({ bot_slug: config.slug }, '[PIX][CFG] payments_flag_off_but_config_present');
+      }
+
+      if (paymentsEnabled) {
+        await resolvePixGateway(config.slug, botLogger).catch((err) => {
+          botLogger.warn({ err }, '[PIX][CFG] failed to resolve gateway on boot');
+        });
+      }
+    } catch (err) {
+      botLogger.error({ err }, '[BOOT] failed to inspect payments config');
+    }
+  })();
 
   if (features['funnels']) {
     bot.use(funnelsFeature);
@@ -120,9 +162,7 @@ function registerBotFeatures(bot: Bot<MyContext>, config: BotRow, token: string)
     bot.use(broadcastFeature);
   }
 
-  if (features['payments']) {
-    bot.use(paymentsFeature);
-  }
+  bot.use(paymentsFeature);
 
   bot.catch((err) => {
     rootLogger.error({ err, bot_id: config.id, bot_slug: config.slug }, 'Bot error');

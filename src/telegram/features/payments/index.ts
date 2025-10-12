@@ -5,11 +5,8 @@ import {
   centsToBRL,
 } from '../../../services/bot/plans.js';
 import { getPaymentByExternalId } from '../../../db/payments.js';
-import {
-  createPushinPayGatewayFromEnv,
-  type PushinPayGateway,
-} from '../../../services/payments/PushinPayGateway.js';
-import { getGateway } from '../../../services/payments/registry.js';
+import { getPlanById } from '../../../db/plans.js';
+import { resolvePixGateway } from '../../../services/payments/pixGatewayResolver.js';
 import { getSettings } from '../../../db/botSettings.js';
 import { generatePixTraceId } from '../../../utils/pixLogging.js';
 
@@ -34,14 +31,6 @@ function escapeHtml(input: string): string {
   });
 }
 
-function resolvePushinPayGateway(): PushinPayGateway {
-  try {
-    return getGateway('pushinpay') as PushinPayGateway;
-  } catch (err) {
-    return createPushinPayGatewayFromEnv();
-  }
-}
-
 paymentsFeature.on('callback_query:data', async (ctx, next) => {
   const data = ctx.callbackQuery?.data ?? '';
   if (!data) {
@@ -49,17 +38,82 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     return;
   }
 
+  ctx.logger.info({ bot_slug: ctx.bot_slug, callback_data: data }, '[DISPATCH] callback received');
+
+  const isPlanAction = data.startsWith('plan:');
+  ctx.logger.info(
+    { bot_slug: ctx.bot_slug, pattern: 'plan:', matched: isPlanAction },
+    '[DISPATCH] checking'
+  );
   if (data.startsWith('plan:')) {
     const rawId = data.slice('plan:'.length);
     const planId = Number.parseInt(rawId, 10);
 
     if (!Number.isFinite(planId)) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data },
+        '[PIX][GUARD] unknown_action'
+      );
       await ctx.answerCallbackQuery({ text: 'Plano inválido.', show_alert: true });
       return;
     }
 
+    const paymentsEnabled = ctx.bot_features?.['payments'] !== false;
+    if (!paymentsEnabled) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data, plan_id: planId },
+        '[PIX][GUARD] payments_disabled'
+      );
+      await ctx.answerCallbackQuery({ text: 'Pagamentos indisponíveis no momento.', show_alert: true });
+      return;
+    }
+
+    const plan = await getPlanById(planId);
+    if (!plan || !plan.is_active || !Number.isFinite(plan.price_cents) || plan.price_cents <= 0) {
+      ctx.logger.warn(
+        {
+          bot_slug: ctx.bot_slug,
+          callback_data: data,
+          plan_id: planId,
+          price_cents: plan?.price_cents ?? null,
+        },
+        '[PIX][GUARD] plan_or_price_missing'
+      );
+      await ctx.answerCallbackQuery({ text: 'Plano inválido.', show_alert: true });
+      return;
+    }
+
+    const resolution = await resolvePixGateway(ctx.bot_slug, ctx.logger);
+    if (!resolution.gateway || !resolution.token) {
+      ctx.logger.warn(
+        {
+          bot_slug: ctx.bot_slug,
+          callback_data: data,
+          plan_id: planId,
+          price_cents: plan.price_cents,
+        },
+        '[PIX][GUARD] gateway_unresolved_or_token_missing'
+      );
+      await ctx.answerCallbackQuery({ text: 'Gateway indisponível no momento.', show_alert: true });
+      return;
+    }
+
+    if (!resolution.webhookUrl) {
+      ctx.logger.warn(
+        {
+          bot_slug: ctx.bot_slug,
+          callback_data: data,
+          plan_id: planId,
+          price_cents: plan.price_cents,
+        },
+        '[PIX][GUARD] webhook_url_missing'
+      );
+      await ctx.answerCallbackQuery({ text: 'Pagamento indisponível. Contate o suporte.', show_alert: true });
+      return;
+    }
+
     const telegramId = ctx.from?.id ?? ctx.chat?.id ?? null;
-    const pix_trace_id = generatePixTraceId(null, null);
+    const pix_trace_id = 'tx:unknown';
 
     try {
       ctx.logger.info({
@@ -68,16 +122,17 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         bot_slug: ctx.bot_slug,
         telegram_id: telegramId,
         payload_id: null,
-        plan_id: planId,
+        plan_id: plan.id,
+        price_cents: plan.price_cents,
         pix_trace_id,
       }, '[PIX][CREATE] telegram callback');
 
-      const { plan, transaction } = await createPixForPlan({
-        planId,
+      const { transaction } = await createPixForPlan({
+        plan,
+        gateway: resolution.gateway,
         telegramId,
         payloadId: null,
         botId: ctx.bot_id,
-        botSlug: ctx.bot_slug,
       });
 
       if (!transaction.qr_code) {
@@ -150,14 +205,17 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
 
       await ctx.answerCallbackQuery();
     } catch (err) {
-      ctx.logger.error({
-        err,
-        op: 'create',
-        provider: 'PushinPay',
-        data,
-        plan_id: planId,
-        pix_trace_id,
-      }, '[PIX][ERROR] telegram create failed');
+      ctx.logger.error(
+        {
+          err,
+          op: 'create',
+          provider: 'PushinPay',
+          data,
+          plan_id: planId,
+          pix_trace_id,
+        },
+        '[PIX][ERROR] telegram create failed'
+      );
       await ctx.answerCallbackQuery({
         text: 'Erro ao gerar PIX. Tente novamente em instantes.',
         show_alert: true,
@@ -167,7 +225,12 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     return;
   }
 
-  if (data.startsWith('qr:')) {
+  const isQrAction = data.startsWith('qr:');
+  ctx.logger.info(
+    { bot_slug: ctx.bot_slug, pattern: 'qr:', matched: isQrAction },
+    '[DISPATCH] checking'
+  );
+  if (isQrAction) {
     const txid = data.slice('qr:'.length);
 
     try {
@@ -208,7 +271,12 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     return;
   }
 
-  if (data.startsWith('paid:')) {
+  const isPaidAction = data.startsWith('paid:');
+  ctx.logger.info(
+    { bot_slug: ctx.bot_slug, pattern: 'paid:', matched: isPaidAction },
+    '[DISPATCH] checking'
+  );
+  if (isPaidAction) {
     const txid = data.slice('paid:'.length);
     const pix_trace_id = generatePixTraceId(txid, null);
 
@@ -222,7 +290,16 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     }, '[PIX][STATUS] telegram check');
 
     try {
-      const gateway = resolvePushinPayGateway();
+      const resolution = await resolvePixGateway(ctx.bot_slug, ctx.logger);
+      const gateway = resolution.gateway;
+      if (!gateway) {
+        ctx.logger.warn(
+          { bot_slug: ctx.bot_slug, callback_data: data },
+          '[PIX][GUARD] gateway_unresolved_or_token_missing'
+        );
+        await ctx.answerCallbackQuery({ text: 'Gateway indisponível no momento.', show_alert: true });
+        return;
+      }
       const info = await gateway.getTransaction(txid);
       const status = String(info?.status ?? 'created');
       const normalized = status.toLowerCase();
@@ -280,6 +357,11 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     }
 
     return;
+  }
+
+  const purchaseLike = /^(buy|pix|plan|offer)/i.test(data);
+  if (purchaseLike) {
+    ctx.logger.warn({ bot_slug: ctx.bot_slug, callback_data: data }, '[PIX][DISPATCH] no handler matched');
   }
 
   await next();

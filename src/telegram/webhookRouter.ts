@@ -30,6 +30,28 @@ webhookRouter.post('/tg/:slug/webhook', async (req: Request, res: Response): Pro
     }
 
     const bot = await getOrCreateBotBySlug(slug);
+
+    const updateObj = (update && typeof update === 'object' ? (update as Record<string, any>) : {}) ?? {};
+    const callbackQuery = updateObj.callback_query ?? null;
+    const messageFromCallback = callbackQuery?.message ?? null;
+    const baseMessage = updateObj.message ?? messageFromCallback ?? null;
+    const chatId = baseMessage?.chat?.id ?? null;
+    const fromId = callbackQuery?.from?.id ?? baseMessage?.from?.id ?? null;
+    const requestId = (req as any).id ?? req.requestId ?? null;
+
+    logger.info(
+      {
+        bot_slug: slug,
+        update_type: updateType,
+        has_callback: Boolean(callbackQuery),
+        callback_data: typeof callbackQuery?.data === 'string' ? callbackQuery.data : null,
+        chat_id: chatId,
+        from_id: fromId,
+        request_id: requestId,
+      },
+      '[TG][UPDATE] inbound'
+    );
+
     await bot.handleUpdate(update, { source: 'webhook' } as any);
   } catch (err) {
     logger.error({ slug, err }, 'Failed to handle update');

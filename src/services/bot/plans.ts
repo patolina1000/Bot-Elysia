@@ -1,15 +1,11 @@
 import type { InlineKeyboardMarkup } from 'grammy/types';
-import { listPlans, getPlanById, type BotPlan } from '../../db/plans.js';
+import { listPlans, type BotPlan } from '../../db/plans.js';
 import {
   insertOrUpdatePayment,
   type PaymentTransaction,
 } from '../../db/payments.js';
 import { pool } from '../../db/pool.js';
-import {
-  createPushinPayGatewayFromEnv,
-  type PushinPayGateway,
-} from '../payments/PushinPayGateway.js';
-import { getGateway } from '../payments/registry.js';
+import { type PushinPayGateway } from '../payments/PushinPayGateway.js';
 import { logger } from '../../logger.js';
 import { generatePixTraceId } from '../../utils/pixLogging.js';
 
@@ -22,38 +18,65 @@ export function centsToBRL(value: number): string {
   return currencyFormatter.format(value / 100);
 }
 
-function resolvePushinPayGateway(): PushinPayGateway {
-  try {
-    return getGateway('pushinpay') as PushinPayGateway;
-  } catch (err) {
-    return createPushinPayGatewayFromEnv();
-  }
-}
-
 export async function buildPlansKeyboard(botSlug: string): Promise<InlineKeyboardMarkup | null> {
+  const log = logger.child({ bot_slug: botSlug });
   const plans = await listPlans(botSlug);
+  log.info(
+    {
+      bot_slug: botSlug,
+      plans: plans.map((plan) => ({
+        id: plan.id,
+        name: plan.plan_name,
+        price_cents: plan.price_cents,
+        is_active: plan.is_active,
+      })),
+    },
+    '[PIX][CFG] plans_loaded'
+  );
+
   const activePlans = plans.filter((plan) => plan.is_active);
 
   if (activePlans.length === 0) {
     return null;
   }
 
-  return {
-    inline_keyboard: activePlans.map((plan) => [
+  const buttons = activePlans.map((plan) => [
+    {
+      text: `${plan.plan_name} - ${centsToBRL(plan.price_cents)}`,
+      callback_data: `plan:${plan.id}`,
+    },
+  ]);
+
+  log.info(
+    {
+      bot_slug: botSlug,
+      buttons: buttons.map(([button]) => ({ text: button.text, cb: button.callback_data })),
+    },
+    '[PIX][UI] building buttons'
+  );
+
+  const mismatched = buttons.flat().filter((button) => !button.callback_data?.startsWith('plan:'));
+  if (mismatched.length > 0) {
+    log.warn(
       {
-        text: `${plan.plan_name} - ${centsToBRL(plan.price_cents)}`,
-        callback_data: `plan:${plan.id}`,
+        bot_slug: botSlug,
+        mismatched: mismatched.map((button) => button.callback_data),
       },
-    ]),
+      '[PIX][UI] callback mismatch'
+    );
+  }
+
+  return {
+    inline_keyboard: buttons,
   } satisfies InlineKeyboardMarkup;
 }
 
 export interface CreatePixForPlanParams {
-  planId: number;
+  plan: BotPlan;
+  gateway: PushinPayGateway;
   telegramId?: number | null;
   payloadId?: string | null;
   botId?: string | null;
-  botSlug?: string | null;
 }
 
 export interface CreatePixForPlanResult {
@@ -64,17 +87,8 @@ export interface CreatePixForPlanResult {
 export async function createPixForPlan(
   params: CreatePixForPlanParams
 ): Promise<CreatePixForPlanResult> {
-  const plan = await getPlanById(params.planId);
-  if (!plan || !plan.is_active) {
-    throw new Error('Plano inválido ou inativo');
-  }
-
-  if (params.botSlug && plan.bot_slug !== params.botSlug) {
-    throw new Error('Plano não pertence a este bot');
-  }
-
-  const gateway = resolvePushinPayGateway();
-  const created = await gateway.createPix({
+  const plan = params.plan;
+  const created = await params.gateway.createPix({
     value_cents: plan.price_cents,
     splitRules: [],
     botSlug: plan.bot_slug,

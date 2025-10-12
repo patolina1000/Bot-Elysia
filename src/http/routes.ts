@@ -13,6 +13,7 @@ import { plansRouter } from './plans.js';
 import { botSettingsRouter } from './botSettings.js';
 import { miniappQrRouter } from './miniapp/qr.js';
 import { uploadR2Router } from './uploadR2.js';
+import { buildPixDiag, buildPixDiagForAll } from '../services/payments/pixDiagnostics.js';
 
 export const router = Router();
 
@@ -173,6 +174,37 @@ adminRouter.post('/checkout/start', async (req: Request, res: Response): Promise
       return;
     }
     req.log?.error({ err }, 'Error creating checkout start event');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+adminRouter.get('/diag/pix', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const botSlug = (req.query.bot as string | undefined) ?? (req.query.slug as string | undefined);
+    if (!botSlug) {
+      res.status(400).json({ error: 'Missing bot slug' });
+      return;
+    }
+
+    const diag = await buildPixDiag(botSlug);
+    if (!diag) {
+      res.status(404).json({ error: 'Bot not found' });
+      return;
+    }
+
+    res.json(diag);
+  } catch (err) {
+    req.log?.error({ err }, '[PIX][DIAG] failed to build diagnostics');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+adminRouter.get('/diag/pix/all', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const diagnostics = await buildPixDiagForAll();
+    res.json({ bots: diagnostics });
+  } catch (err) {
+    _req.log?.error({ err }, '[PIX][DIAG] failed to build diagnostics');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
