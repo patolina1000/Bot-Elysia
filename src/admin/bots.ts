@@ -417,9 +417,10 @@ adminBotsRouter.get(
   '/admin/api/downsells/metrics',
   authAdminMiddleware,
   async (req: Request, res: Response) => {
+    const botSlug = String(req.query.bot_slug ?? '').trim();
+    if (!botSlug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
+    
     try {
-      const botSlug = String(req.query.bot_slug ?? '').trim();
-      if (!botSlug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
       const stats = await getDownsellsStats(botSlug);
       return res.json({ ok: true, stats });
     } catch (error: any) {
