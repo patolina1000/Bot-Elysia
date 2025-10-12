@@ -47,6 +47,74 @@ async function recordFunnelEvent(params: {
   );
 }
 
+type RawTrackingRow = {
+  utm_source?: unknown;
+  utm_medium?: unknown;
+  utm_campaign?: unknown;
+  utm_content?: unknown;
+  utm_term?: unknown;
+  src?: unknown;
+  sck?: unknown;
+};
+
+async function tryLoadUtmByPayload(payloadId?: string | null): Promise<RawTrackingRow | null> {
+  if (!payloadId) {
+    return null;
+  }
+
+  try {
+    const check = await pool.query("select to_regclass('public.payload_tracking') as t");
+    if (!check.rows[0] || !check.rows[0].t) {
+      return null;
+    }
+
+    const result = await pool.query(
+      `select utm_source, utm_medium, utm_campaign, utm_content, utm_term, src, sck
+         from payload_tracking
+        where payload_id = $1
+        order by created_at desc nulls last
+        limit 1`,
+      [payloadId]
+    );
+
+    return result.rows[0] ?? null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function normalizeUtm(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const input = raw as Record<string, unknown>;
+  const normalized: Record<string, string> = {};
+  const map: Record<string, string> = {
+    utm_source: 'utm_source',
+    utm_medium: 'utm_medium',
+    utm_campaign: 'utm_campaign',
+    utm_content: 'utm_content',
+    utm_term: 'utm_term',
+    src: 'src',
+    sck: 'sck',
+  };
+
+  for (const [sourceKey, targetKey] of Object.entries(map)) {
+    const value = input[sourceKey];
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    const normalizedValue = String(value).trim().toLowerCase().replace(/\s+/g, '-');
+    if (normalizedValue.length > 0) {
+      normalized[targetKey] = normalizedValue;
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
 export const pushinpayRouter = Router();
 
 const createPixSchema = z.object({
@@ -78,6 +146,22 @@ pushinpayRouter.post(
       const responseValue = Number(pix.value);
       const valueCents = Number.isFinite(responseValue) ? Math.trunc(responseValue) : body.value_cents;
 
+      const baseMeta: Record<string, unknown> =
+        body.meta && typeof body.meta === 'object' ? { ...body.meta } : {};
+
+      let trackingParameters = normalizeUtm(
+        'trackingParameters' in baseMeta ? baseMeta.trackingParameters : undefined
+      );
+
+      if (!trackingParameters) {
+        const utmRow = await tryLoadUtmByPayload(body.payload_id ?? null);
+        trackingParameters = normalizeUtm(utmRow) ?? null;
+      }
+
+      if (trackingParameters) {
+        baseMeta.trackingParameters = trackingParameters;
+      }
+
       const saved = await insertOrUpdatePayment({
         gateway: 'pushinpay',
         external_id: pix.id,
@@ -89,7 +173,7 @@ pushinpayRouter.post(
         telegram_id: body.telegram_id ?? null,
         payload_id: body.payload_id ?? null,
         plan_name: body.plan_name ?? null,
-        meta: body.meta ?? {},
+        meta: baseMeta,
       });
 
       await recordFunnelEvent({
