@@ -10,6 +10,7 @@ import {
   type PushinPayGateway,
 } from '../../../services/payments/PushinPayGateway.js';
 import { getGateway } from '../../../services/payments/registry.js';
+import { getSettings } from '../../../db/botSettings.js';
 
 export const paymentsFeature = new Composer<MyContext>();
 
@@ -68,6 +69,18 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
 
       if (!transaction.qr_code) {
         throw new Error('Código PIX indisponível.');
+      }
+
+      const botSlug = ctx.bot_slug;
+      if (botSlug) {
+        try {
+          const settings = await getSettings(botSlug);
+          if (settings?.pix_image_url) {
+            await ctx.replyWithPhoto(settings.pix_image_url);
+          }
+        } catch (settingsError) {
+          ctx.logger.warn({ err: settingsError, botSlug }, '[PAYMENTS] Falha ao enviar imagem do PIX');
+        }
       }
 
       const instructions = [

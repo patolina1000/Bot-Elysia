@@ -894,6 +894,18 @@
         <div class="placeholder">Informe o slug do bot e clique em "Carregar planos".</div>
       </div>
       <hr />
+      <h3>Imagem para o PIX</h3>
+      <p class="description muted tiny">URL pública (ex.: do seu R2). Esta imagem será enviada no Telegram ao gerar o PIX.</p>
+      <div class="form-row" style="gap:12px; align-items:flex-end; flex-wrap:wrap;">
+        <div class="field" style="flex:1 1 240px;">
+          <label for="pix-img-url">URL da imagem</label>
+          <input id="pix-img-url" type="url" placeholder="https://.../uploads/pix-help.png" autocomplete="off" />
+        </div>
+        <button id="btn-pix-preview" type="button" class="btn-secondary">Pré-visualizar</button>
+        <button id="btn-pix-save" type="button">Salvar imagem</button>
+      </div>
+      <div id="pix-img-preview" class="mt-2"></div>
+      <hr />
       <h3>Cadastro de plano</h3>
       <div class="form-row">
         <input type="hidden" id="plan-id" />
@@ -987,6 +999,10 @@
       const planNameInput = document.getElementById('plan-name');
       const planPriceInput = document.getElementById('plan-price');
       const planSaveBtn = document.getElementById('btn-save-plan');
+      const pixImageUrlInput = document.getElementById('pix-img-url');
+      const pixPreviewBtn = document.getElementById('btn-pix-preview');
+      const pixSaveBtn = document.getElementById('btn-pix-save');
+      const pixPreviewBox = document.getElementById('pix-img-preview');
       const pixModal = document.getElementById('pix-modal');
       const pixTitle = document.getElementById('pix-title');
       const pixQr = document.getElementById('pix-qr');
@@ -995,6 +1011,8 @@
       const pixCopyBtn = document.getElementById('btn-copy-code');
       const pixCloseBtn = document.getElementById('btn-close-pix');
       const pixNoticeDefault = pixNotice ? pixNotice.innerHTML : '';
+
+      renderPixPreview();
 
       let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
       if (ADMIN_TOKEN) {
@@ -1109,6 +1127,50 @@
         planNameInput?.focus();
       }
 
+      function renderPixPreview() {
+        if (!pixPreviewBox) {
+          return;
+        }
+
+        const url = (pixImageUrlInput?.value || '').trim();
+        pixPreviewBox.innerHTML = '';
+
+        if (!url) {
+          const empty = document.createElement('span');
+          empty.className = 'muted tiny';
+          empty.textContent = 'Nenhuma imagem configurada.';
+          pixPreviewBox.appendChild(empty);
+          return;
+        }
+
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = 'Imagem do PIX';
+        img.style.maxWidth = '420px';
+        img.style.borderRadius = '12px';
+        img.style.border = '1px solid #e5e7eb';
+        img.style.boxShadow = '0 12px 24px rgba(15, 23, 42, 0.18)';
+        img.loading = 'lazy';
+        pixPreviewBox.appendChild(img);
+      }
+
+      async function loadPixSettings(slug) {
+        if (!pixImageUrlInput) {
+          return;
+        }
+
+        try {
+          const settings = await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/settings`);
+          const value = typeof settings?.pix_image_url === 'string' ? settings.pix_image_url : '';
+          pixImageUrlInput.value = value;
+          renderPixPreview();
+        } catch (error) {
+          console.warn('[pix] falha ao carregar imagem', error);
+          pixImageUrlInput.value = '';
+          renderPixPreview();
+        }
+      }
+
       async function loadPlans(options = {}) {
         if (!plansList) {
           return;
@@ -1134,6 +1196,8 @@
         }
 
         setPlansPlaceholder('Carregando planos...');
+
+        await loadPixSettings(slug);
 
         try {
           const data = await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/plans`);
@@ -1201,6 +1265,29 @@
           const message = error instanceof Error ? error.message : 'Erro ao carregar planos.';
           setPlansPlaceholder(message);
           showToast(message);
+        }
+      }
+
+      async function savePixImage() {
+        const slug = (plansBotSlugInput?.value || '').trim();
+        if (!slug) {
+          alert('Informe o slug do bot.');
+          return;
+        }
+
+        const url = (pixImageUrlInput?.value || '').trim();
+
+        try {
+          await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pix_image_url: url || null }),
+          });
+          renderPixPreview();
+          showToast('Imagem do PIX salva!');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao salvar imagem do PIX.';
+          alert(message);
         }
       }
 
@@ -2076,6 +2163,14 @@
 
       planSaveBtn?.addEventListener('click', () => {
         void savePlan();
+      });
+
+      pixPreviewBtn?.addEventListener('click', () => {
+        renderPixPreview();
+      });
+
+      pixSaveBtn?.addEventListener('click', () => {
+        void savePixImage();
       });
 
       pixCloseBtn?.addEventListener('click', () => {
