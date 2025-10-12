@@ -40,6 +40,15 @@ miniappQrRouter.get('/miniapp/qr', async (req: Request, res: Response): Promise<
     .btn-copy{background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#081018}
     .btn-done{background:#1f2838;color:#dfe9f7;border:1px solid #2b364a}
     .foot{margin-top:12px;font-size:11px;color:#8fa6bf}
+    .foot-hero{
+      margin-top:16px;
+      text-align:center;
+      font-size:18px;
+      font-weight:900;
+      background:linear-gradient(135deg,var(--accent1),var(--accent2));
+      -webkit-background-clip:text;
+      color:transparent;
+    }
   </style>
 </head>
 <body>
@@ -58,7 +67,7 @@ miniappQrRouter.get('/miniapp/qr', async (req: Request, res: Response): Promise<
         <button class="btn btn-copy" id="copy">Copiar código</button>
         <button class="btn btn-done" id="done">Fechar</button>
       </div>
-      <div class="foot" style="margin-top:10px"><strong>Entrega garantida ✅</strong></div>
+      <div class="foot foot-hero">Entrega garantida ✅</div>
     </div>
   </div>
   <script>
