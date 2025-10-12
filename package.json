@@ -12,6 +12,7 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/runMigrations.ts",
+    "verify:downsells": "tsx scripts/verify-downsells-schema.ts",
     "jobs:campaigns": "tsx src/jobs/runCampaigns.ts",
     "jobs:housekeeping": "tsx src/jobs/housekeeping.ts",
     "check:core-start": "tsx scripts/check-core-start.ts"
