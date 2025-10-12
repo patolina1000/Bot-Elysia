@@ -4,10 +4,12 @@ import { logger } from './logger.js';
 import { pool } from './db/pool.js';
 import { telegramMediaCache } from './services/TelegramMediaCache.js';
 import { getLastSentByBot, profileSend } from './services/TelegramSendProfiler.js';
+import { scheduleDownsellsWorker } from './jobs/downsellsWorker.js';
 
 const app = createApp();
 
 telegramMediaCache.scheduleHourlyWarmup(logger);
+scheduleDownsellsWorker(logger);
 
 const keepAliveInput = Number(process.env.TG_KEEPALIVE_SEC ?? '25');
 const KEEPALIVE_SEC = Number.isFinite(keepAliveInput) && keepAliveInput > 0 ? keepAliveInput : 25;

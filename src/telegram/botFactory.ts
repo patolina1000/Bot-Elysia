@@ -6,6 +6,7 @@ import { startFeature } from './features/start/index.js';
 import { funnelsFeature } from './features/funnels/index.js';
 import { broadcastFeature } from './features/broadcast/index.js';
 import { paymentsFeature } from './features/payments/index.js';
+import { downsellsFeature } from './features/downsells/index.js';
 import { getEncryptionKey } from '../utils/crypto.js';
 import { getBotPaymentGatewayConfig } from '../db/botPaymentConfigs.js';
 import { listPlans } from '../db/plans.js';
@@ -162,7 +163,10 @@ function registerBotFeatures(bot: Bot<MyContext>, config: BotRow, token: string)
     bot.use(broadcastFeature);
   }
 
-  bot.use(paymentsFeature);
+  if (features['payments'] !== false) {
+    bot.use(paymentsFeature);
+    bot.use(downsellsFeature);
+  }
 
   bot.catch((err) => {
     rootLogger.error({ err, bot_id: config.id, bot_slug: config.slug }, 'Bot error');
