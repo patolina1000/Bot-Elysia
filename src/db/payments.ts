@@ -137,3 +137,19 @@ export async function setPaymentStatus(
 
   return mapRow(result.rows[0]);
 }
+
+export async function getPaymentByExternalId(
+  gateway: string,
+  externalId: string
+): Promise<PaymentTransaction | null> {
+  const result = await pool.query(
+    `SELECT *
+       FROM payment_transactions
+      WHERE gateway = $1 AND external_id = $2
+      LIMIT 1`,
+    [gateway, externalId]
+  );
+
+  const row = result.rows[0];
+  return row ? mapRow(row) : null;
+}
