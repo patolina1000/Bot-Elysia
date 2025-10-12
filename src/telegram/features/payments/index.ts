@@ -70,19 +70,23 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         throw new Error('Código PIX indisponível.');
       }
 
-      const message = [
-        '✅ <b>Como realizar o pagamento</b>:',
-        '1) Abra o app do seu banco',
-        '2) Escolha <b>Pix</b> → <b>Pix Copia e Cola</b>',
-        '3) Cole o código abaixo e confirme',
+      const instructions = [
+        '✅ Como realizar o pagamento:',
         '',
-        `<b>Plano:</b> ${escapeHtml(plan.plan_name)}`,
-        `<b>Valor:</b> ${escapeHtml(centsToBRL(plan.price_cents))}`,
-        `<pre>${escapeHtml(transaction.qr_code)}</pre>`,
+        '1️⃣ Abra o aplicativo do seu banco.',
+        '2️⃣ Selecione a opção “Pagar” ou “Pix”.',
+        '3️⃣ Escolha “Pix Copia e Cola”.',
+        '4️⃣ Cole o código abaixo e confirme o pagamento com segurança.',
       ].join('\n');
+      await ctx.reply(instructions);
 
-      await ctx.reply(message, {
+      await ctx.reply('Copie o código abaixo:');
+
+      await ctx.reply(`<pre>${escapeHtml(transaction.qr_code)}</pre>`, {
         parse_mode: 'HTML',
+      });
+
+      await ctx.reply('Após efetuar o pagamento, clique no botão abaixo ⤵️', {
         reply_markup: {
           inline_keyboard: [
             [
