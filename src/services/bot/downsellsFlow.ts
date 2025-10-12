@@ -34,7 +34,7 @@ export async function createPixForDownsell(params: {
     gateway: 'pushinpay',
     external_id: px.id,
     status: px.status,
-    value_cents: px.value * 100 ?? ds.price_cents,
+    value_cents: px.value != null ? px.value * 100 : ds.price_cents,
     qr_code: px.qr_code ?? null,
     qr_code_base64: px.qr_code_base64 ?? null,
     webhook_url: px.webhook_url ?? null,

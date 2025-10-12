@@ -3,6 +3,13 @@ import { authAdminMiddleware } from '../http/middleware/authAdmin.js';
 import { adminBotsDb } from './botsDb.js';
 import { telegramMediaCache } from '../services/TelegramMediaCache.js';
 import { getRecentSends, getSendStats } from '../services/TelegramSendProfiler.js';
+import {
+  listDownsellsByBot,
+  upsertDownsell,
+  deleteDownsell,
+  scheduleDownsellForUser,
+  type UpsertDownsellInput,
+} from '../db/downsells.js';
 
 export const adminBotsRouter = Router();
 
@@ -191,6 +198,110 @@ adminBotsRouter.get(
   (_req: Request, res: Response) => {
     const stats = getSendStats();
     res.json({ ok: true, stats });
+  }
+);
+
+// ---------------- Downsells Admin API ----------------
+adminBotsRouter.get(
+  '/admin/api/downsells',
+  authAdminMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const botSlug = String(req.query.bot_slug ?? '').trim();
+      if (!botSlug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
+      const items = await listDownsellsByBot(botSlug);
+      return res.json({ ok: true, items });
+    } catch (error) {
+      req.log?.error({ error }, '[downsells] list failed');
+      return res.status(500).json({ ok: false, error: 'downsells_list_failed' });
+    }
+  }
+);
+
+adminBotsRouter.post(
+  '/admin/api/downsells/upsert',
+  authAdminMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body as Partial<UpsertDownsellInput>;
+      if (!body?.bot_slug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
+      if (!body?.trigger_kind || !['after_start','after_pix'].includes(body.trigger_kind as string)) {
+        return res.status(422).json({ ok: false, error: 'invalid_trigger' });
+      }
+      const delay = Number(body.delay_minutes);
+      if (!Number.isFinite(delay) || delay < 5 || delay > 60) {
+        return res.status(422).json({ ok: false, error: 'invalid_delay' });
+      }
+      const price = Number(body.price_cents);
+      if (!Number.isFinite(price) || price < 50) {
+        return res.status(422).json({ ok: false, error: 'invalid_price' });
+      }
+      if (!body.title) return res.status(422).json({ ok: false, error: 'missing_title' });
+
+      const item = await upsertDownsell({
+        id: body.id,
+        bot_slug: body.bot_slug,
+        trigger_kind: body.trigger_kind as 'after_start' | 'after_pix',
+        delay_minutes: delay,
+        title: body.title,
+        price_cents: price,
+        message_text: body.message_text ?? null,
+        media1_url: body.media1_url ?? null,
+        media1_type: (body.media1_type ?? null) as any,
+        media2_url: body.media2_url ?? null,
+        media2_type: (body.media2_type ?? null) as any,
+        is_active: body.is_active ?? true,
+      });
+      return res.json({ ok: true, item });
+    } catch (error) {
+      req.log?.error({ error }, '[downsells] upsert failed');
+      return res.status(500).json({ ok: false, error: 'downsells_upsert_failed' });
+    }
+  }
+);
+
+adminBotsRouter.delete(
+  '/admin/api/downsells/:id',
+  authAdminMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const id = Number(req.params.id);
+      const botSlug = String(req.query.bot_slug ?? '').trim();
+      if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'invalid_id' });
+      if (!botSlug) return res.status(400).json({ ok: false, error: 'missing_bot_slug' });
+      const ok = await deleteDownsell(id, botSlug);
+      return res.json({ ok });
+    } catch (error) {
+      req.log?.error({ error }, '[downsells] delete failed');
+      return res.status(500).json({ ok: false, error: 'downsells_delete_failed' });
+    }
+  }
+);
+
+// Envio imediato para teste (agenda para agora)
+adminBotsRouter.post(
+  '/admin/api/downsells/test-send',
+  authAdminMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body as any;
+      const downsell_id = Number(body?.downsell_id);
+      const bot_slug = String(body?.bot_slug ?? '').trim();
+      const telegram_id = Number(body?.telegram_id);
+      if (!Number.isFinite(downsell_id)) return res.status(422).json({ ok: false, error: 'invalid_downsell_id' });
+      if (!bot_slug) return res.status(422).json({ ok: false, error: 'missing_bot_slug' });
+      if (!Number.isFinite(telegram_id)) return res.status(422).json({ ok: false, error: 'invalid_telegram_id' });
+      const item = await scheduleDownsellForUser({
+        downsell_id,
+        bot_slug,
+        telegram_id,
+        scheduled_at: new Date(),
+      });
+      return res.json({ ok: true, item });
+    } catch (error) {
+      req.log?.error({ error }, '[downsells] test-send failed');
+      return res.status(500).json({ ok: false, error: 'downsells_test_send_failed' });
+    }
   }
 );
 

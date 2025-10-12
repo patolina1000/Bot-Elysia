@@ -31,7 +31,7 @@ downsellsFeature.on('callback_query:data', async (ctx, next) => {
     const caption =
       `✅ PIX criado para **${title}**\n` +
       `Valor: *${brl}*\n\n` +
-      (settings?.pix_image_text ?? 'Pague escaneando o QR code abaixo.');
+      'Pague escaneando o QR code abaixo.';
 
     if (transaction.qr_code_base64) {
       const buf = Buffer.from(transaction.qr_code_base64, 'base64');
