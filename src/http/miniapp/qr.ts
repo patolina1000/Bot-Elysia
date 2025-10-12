@@ -58,9 +58,7 @@ miniappQrRouter.get('/miniapp/qr', async (req: Request, res: Response): Promise<
         <button class="btn btn-copy" id="copy">Copiar código</button>
         <button class="btn btn-done" id="done">Fechar</button>
       </div>
-      <div class="foot" style="margin-top:10px">
-        <strong>Aviso:</strong> A PUSHIN PAY atua exclusivamente como processadora de pagamentos e não possui qualquer responsabilidade pela entrega, suporte, conteúdo, qualidade ou cumprimento das obrigações relacionadas aos produtos ou serviços oferecidos pelo vendedor.
-      </div>
+      <div class="foot" style="margin-top:10px"><strong>Entrega garantida ✅</strong></div>
     </div>
   </div>
   <script>
