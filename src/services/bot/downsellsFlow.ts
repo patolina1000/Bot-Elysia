@@ -1,7 +1,6 @@
 import { insertOrUpdatePayment, type PaymentTransaction } from '../../db/payments.js';
 import { getDownsell } from '../../db/downsells.js';
-import { getGateway } from '../payments/registry.js';
-import { createPushinPayGatewayFromEnv } from '../payments/PushinPayGateway.js';
+import { resolvePixGateway } from '../payments/pixGatewayResolver.js';
 
 export function centsToBRL(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v / 100);
@@ -17,28 +16,36 @@ export async function createPixForDownsell(params: {
     throw new Error('Downsell não encontrado ou inativo');
   }
 
-  // Gateway (global por enquanto; mantém compatibilidade)
-  let gateway;
-  try {
-    gateway = getGateway('pushinpay');
-  } catch {
-    gateway = createPushinPayGatewayFromEnv();
+  const resolution = await resolvePixGateway(params.bot_slug);
+  if (!resolution.gateway) {
+    throw new Error('pushinpay_gateway_unavailable');
   }
 
-  const px = await gateway.createPix({
+  const px = await resolution.gateway.createPix({
     value_cents: ds.price_cents,
-    webhookPath: '/api/pushinpay/webhook',
+    botSlug: params.bot_slug,
+    telegram_id: params.telegram_id,
+    payload_id: null,
   });
+
+  const createdValue = Number(px?.value);
+  const valueCents = Number.isFinite(createdValue) ? Math.trunc(createdValue) : ds.price_cents;
 
   const tx = await insertOrUpdatePayment({
     gateway: 'pushinpay',
-    external_id: px.id,
-    status: px.status,
-    value_cents: px.value != null ? px.value * 100 : ds.price_cents,
-    qr_code: px.qr_code ?? null,
-    qr_code_base64: px.qr_code_base64 ?? null,
-    webhook_url: px.webhook_url ?? null,
-    end_to_end_id: px.end_to_end_id ?? null,
+    external_id: String(px?.id ?? ''),
+    status: typeof px?.status === 'string' ? px.status : 'created',
+    value_cents: valueCents,
+    qr_code: typeof px?.qr_code === 'string' ? px.qr_code : null,
+    qr_code_base64: typeof px?.qr_code_base64 === 'string' ? px.qr_code_base64 : null,
+    webhook_url:
+      typeof px?.webhook_url === 'string'
+        ? px.webhook_url
+        : typeof resolution.webhookUrl === 'string'
+        ? resolution.webhookUrl
+        : null,
+    end_to_end_id:
+      typeof (px as any)?.end_to_end_id === 'string' ? (px as any).end_to_end_id : null,
     payer_name: null,
     payer_doc: null,
     telegram_id: params.telegram_id,
