@@ -3358,39 +3358,35 @@
     (document.getElementById('ds-media2-url') as HTMLInputElement).value = data.url;
   });
 
-  // ===== Admin Token healthcheck =====
-  const tokStatus = document.getElementById('admin-token-status');
-  const tokInput = document.getElementById('admin-token');
-  const tokBtn = document.getElementById('apply-token');
-
-  function adminHeadersBare(){
-    const h = new Headers();
-    const t = getAdminToken?.();
-    if(t) h.set('Authorization', `Bearer ${t}`);
-    return h;
-  }
-
-  async function checkAdminTokenVisual(){
-    try{
-      const resp = await fetch('/admin/api/ping', { headers: adminHeadersBare() });
-      const ok = resp.ok;
-      const data = await resp.json().catch(()=>({}));
-      if(ok && data?.ok){
-        tokStatus.textContent = `Token válido • ${data.botsCount} bot(s)`;
-        tokStatus.className = 'badge ok';
-      } else {
-        tokStatus.textContent = 'Token inválido';
+  // ===== Admin Token healthcheck (fallback visual robusto) =====
+  (function adminTokenHealthcheckBoot(){
+    const tokStatus = document.getElementById('admin-token-status');
+    function adminHeadersBare(){
+      const h = new Headers();
+      try { const t = getAdminToken && getAdminToken(); if (t) h.set('Authorization', `Bearer ${t}`); } catch {}
+      return h;
+    }
+    async function checkAdminTokenVisual(){
+      try{
+        const resp = await fetch('/admin/api/ping', { headers: adminHeadersBare() });
+        const data = await resp.json().catch(()=>({}));
+        if (resp.ok && data && data.ok){
+          tokStatus.textContent = `Token válido • ${data.botsCount} bot(s)`;
+          tokStatus.className = 'badge ok';
+        } else {
+          tokStatus.textContent = 'Token inválido';
+          tokStatus.className = 'badge bad';
+        }
+      } catch {
+        tokStatus.textContent = 'Sem resposta do servidor';
         tokStatus.className = 'badge bad';
       }
-    }catch(_e){
-      tokStatus.textContent = 'Sem resposta do servidor';
-      tokStatus.className = 'badge bad';
     }
-  }
-
-  // checar ao carregar e sempre que clicar "Usar token"
-  document.addEventListener('DOMContentLoaded', checkAdminTokenVisual);
-  tokBtn?.addEventListener('click', () => setTimeout(checkAdminTokenVisual, 300));
+    // roda ao carregar e após clicar em "Usar token"
+    document.addEventListener('DOMContentLoaded', checkAdminTokenVisual);
+    (document.getElementById('admin-token-apply') || document.getElementById('apply-token') || document.querySelector('#admin-card button'))
+      ?.addEventListener('click', () => setTimeout(checkAdminTokenVisual, 200));
+  })();
 
   // ===== Métricas (Telegram & Downsells) =====
   const mSummary = document.getElementById('metrics-summary');
