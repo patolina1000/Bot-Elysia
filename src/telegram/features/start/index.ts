@@ -47,11 +47,25 @@ startFeature.command('start', async (ctx) => {
       await sendStartMediasFirst(ctx, mediaAssets, template.parse_mode ?? null);
     }
 
+    // Envia múltiplas mensagens iniciais se houver start_messages
     const parseMode = template.parse_mode === 'HTML' ? 'HTML' : 'Markdown';
-    ctx.logger.info({ tgUserId }, '[START][text] sending');
-    await ctx.reply(template.text, {
-      parse_mode: parseMode,
-    });
+    const messages = template.start_messages && template.start_messages.length > 0
+      ? template.start_messages
+      : [template.text];
+
+    ctx.logger.info({ tgUserId, messagesCount: messages.length }, '[START][text] sending');
+    for (const message of messages) {
+      if (!message || !message.trim()) {
+        continue;
+      }
+      await ctx.reply(message, {
+        parse_mode: parseMode,
+      });
+      // Pequeno delay entre mensagens para garantir ordem
+      if (messages.length > 1) {
+        await delay(100);
+      }
+    }
 
     try {
       const keyboard = await buildPlansKeyboard(ctx.bot_slug);

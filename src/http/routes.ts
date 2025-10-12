@@ -71,6 +71,10 @@ adminRouter.post('/bots', async (req: Request, res: Response): Promise<void> => 
 const updateStartTemplateSchema = z.object({
   text: z.string().min(1),
   parse_mode: z.enum(['Markdown', 'HTML']).default('Markdown'),
+  start_messages: z
+    .array(z.string())
+    .max(3, 'Máximo de 3 mensagens iniciais')
+    .optional(),
   media: z
     .array(
       z.object({
@@ -87,7 +91,13 @@ adminRouter.put('/bots/:id/templates/start', async (req: Request, res: Response)
     const { id } = req.params;
     const body = updateStartTemplateSchema.parse(req.body);
 
-    await startService.saveStartTemplate(id, body.text, body.parse_mode, body.media);
+    await startService.saveStartTemplate(
+      id,
+      body.text,
+      body.parse_mode,
+      body.media,
+      body.start_messages
+    );
 
     res.json({ success: true });
   } catch (err) {

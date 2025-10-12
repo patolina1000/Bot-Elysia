@@ -18,6 +18,7 @@ export interface StartTemplateMedia {
 export interface StartTemplateResponse {
   parse_mode: string;
   text: string;
+  start_messages?: string[];
   medias: StartTemplateMedia[];
   prices?: unknown;
 }
@@ -56,7 +57,7 @@ async function listBotsMinimal(): Promise<AdminBotMinimal[]> {
 async function getStartTemplate(botId: string): Promise<StartTemplateResponse | null> {
   const [templateResult, mediaResult] = await Promise.all([
     pool.query(
-      `SELECT parse_mode, text FROM templates_start WHERE bot_id = $1`,
+      `SELECT parse_mode, text, start_messages FROM templates_start WHERE bot_id = $1`,
       [botId]
     ),
     pool.query(
@@ -80,9 +81,18 @@ async function getStartTemplate(botId: string): Promise<StartTemplateResponse | 
     return null;
   }
 
+  // Normaliza start_messages para o admin
+  let messages: string[] = [];
+  if (Array.isArray(templateRow.start_messages) && templateRow.start_messages.length > 0) {
+    messages = templateRow.start_messages.map((m: any) => String(m).trim()).filter(Boolean);
+  } else if (templateRow.text) {
+    messages = [String(templateRow.text)];
+  }
+
   return {
     parse_mode: templateRow.parse_mode,
-    text: templateRow.text,
+    text: templateRow.text || '',
+    start_messages: messages,
     medias,
   };
 }
