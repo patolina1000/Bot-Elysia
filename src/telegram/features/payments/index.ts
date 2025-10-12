@@ -114,7 +114,9 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
             [
               {
                 text: 'Qr code',
-                callback_data: `qr:${transaction.external_id}`,
+                web_app: {
+                  url: `${process.env.APP_BASE_URL}/miniapp/qr?tx=${encodeURIComponent(transaction.external_id)}`,
+                },
               },
             ],
           ],
