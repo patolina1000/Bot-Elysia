@@ -1007,6 +1007,46 @@
       color: var(--aw-fg) !important;
       border-color: #e5e7eb !important;
     }
+
+    /* ===== Planos por bot: força o nome do plano a ficar visível ===== */
+    /* Muitos templates usam text-muted/opacidade para o título do item. */
+    #admin-wizard .list-group-item {
+      color: var(--aw-fg) !important;
+    }
+    /* Qualquer texto do item que não seja botão deve ficar preto e 100% opaco */
+    #admin-wizard .list-group-item :not(.btn) {
+      color: var(--aw-fg) !important;
+      opacity: 1 !important;
+      filter: none !important;
+    }
+    /* Coberturas comuns para nomes/títulos */
+    #admin-wizard .list-group-item .plan-name,
+    #admin-wizard .list-group-item .plan-title,
+    #admin-wizard .list-group-item .title,
+    #admin-wizard .list-group-item .name,
+    #admin-wizard .list-group-item strong,
+    #admin-wizard .list-group-item b {
+      color: var(--aw-fg) !important;
+      opacity: 1 !important;
+    }
+    /* Classes de “texto fraco” muito usadas em UI libs */
+    #admin-wizard .list-group-item .text-muted,
+    #admin-wizard .list-group-item .text-secondary,
+    #admin-wizard .list-group-item [class*="text-gray"],
+    #admin-wizard .list-group-item [class*="text-slate"] {
+      color: var(--aw-fg) !important;
+      opacity: 1 !important;
+    }
+    /* Itens marcados como disabled devem continuar legíveis */
+    #admin-wizard .list-group-item.disabled,
+    #admin-wizard .list-group-item [aria-disabled="true"] {
+      opacity: 1 !important;
+      color: var(--aw-fg) !important;
+    }
+    /* Não mexer nos botões (mantém contraste original do tema) */
+    #admin-wizard .list-group-item .btn {
+      opacity: 1 !important;
+    }
   </style>
 </head>
 <body id="admin-wizard">
