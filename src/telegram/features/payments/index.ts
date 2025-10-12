@@ -4,6 +4,7 @@ import {
   createPixForPlan,
   centsToBRL,
 } from '../../../services/bot/plans.js';
+import { scheduleTriggeredDownsells } from '../../../services/bot/downsellsScheduler.js';
 import { getPaymentByExternalId } from '../../../db/payments.js';
 import { getPlanById } from '../../../db/plans.js';
 import { resolvePixGateway } from '../../../services/payments/pixGatewayResolver.js';
@@ -204,6 +205,19 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       });
 
       await ctx.answerCallbackQuery();
+
+      try {
+        if (ctx.bot_slug && ctx.from?.id) {
+          await scheduleTriggeredDownsells({
+            bot_slug: ctx.bot_slug,
+            telegram_id: ctx.from.id,
+            trigger: 'after_pix',
+            logger: ctx.logger,
+          });
+        }
+      } catch (err) {
+        ctx.logger?.warn({ err }, '[DOWNSELL][AFTER_PIX] schedule failed');
+      }
     } catch (err) {
       ctx.logger.error(
         {
