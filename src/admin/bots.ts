@@ -3,6 +3,7 @@ import { authAdminMiddleware } from '../http/middleware/authAdmin.js';
 import { adminBotsDb } from './botsDb.js';
 import { telegramMediaCache } from '../services/TelegramMediaCache.js';
 import { getRecentSends, getSendStats } from '../services/TelegramSendProfiler.js';
+import { pool } from '../db/pool.js';
 import {
   listDownsellsByBot,
   upsertDownsell,
@@ -16,6 +17,33 @@ import {
 } from '../db/downsells.js';
 
 export const adminBotsRouter = Router();
+
+// Lista compacta de bots para desenhar as abas
+adminBotsRouter.get(
+  '/admin/api/bots',
+  authAdminMiddleware,
+  async (_req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, slug, name, warmup_chat_id
+         FROM bots
+         ORDER BY created_at DESC`
+      );
+      res.json({ 
+        ok: true, 
+        items: r.rows.map(x => ({
+          id: Number(x.id), 
+          slug: x.slug, 
+          name: x.name ?? x.slug, 
+          warmup_chat_id: x.warmup_chat_id ?? null
+        })) 
+      });
+    } catch (error) {
+      _req.log?.error({ error }, 'Failed to list bots for tabs');
+      res.status(500).json({ ok: false, error: 'failed_to_list_bots' });
+    }
+  }
+);
 
 adminBotsRouter.get('/admin/bots', authAdminMiddleware, async (req: Request, res: Response) => {
   try {
