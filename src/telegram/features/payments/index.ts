@@ -87,8 +87,11 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         '✅ Como realizar o pagamento:',
         '',
         '1️⃣ Abra o aplicativo do seu banco.',
+        '',
         '2️⃣ Selecione a opção “Pagar” ou “Pix”.',
+        '',
         '3️⃣ Escolha “Pix Copia e Cola”.',
+        '',
         '4️⃣ Cole o código abaixo e confirme o pagamento com segurança.',
       ].join('\n');
       await ctx.reply(instructions);
@@ -104,13 +107,13 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
           inline_keyboard: [
             [
               {
-                text: '✅ EFETUEI O PAGAMENTO',
+                text: 'EFETUEI O PAGAMENTO',
                 callback_data: `paid:${transaction.external_id}`,
               },
             ],
             [
               {
-                text: '🖼 Qr code',
+                text: 'Qr code',
                 callback_data: `qr:${transaction.external_id}`,
               },
             ],
