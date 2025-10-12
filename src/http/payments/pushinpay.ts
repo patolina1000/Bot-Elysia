@@ -9,6 +9,8 @@ import {
 } from '../../services/payments/PushinPayGateway.js';
 import { insertOrUpdatePayment, setPaymentStatus } from '../../db/payments.js';
 import { pool } from '../../db/pool.js';
+import { getPlanById } from '../../db/plans.js';
+import { authAdminMiddleware } from '../middleware/authAdmin.js';
 
 const PUSHINPAY_NOTICE_HTML = `<div class="text-xs opacity-70 mt-3">\n  <strong>Aviso:</strong> A PUSHIN PAY atua exclusivamente como processadora de pagamentos e não possui qualquer responsabilidade pela entrega, suporte, conteúdo, qualidade ou cumprimento das obrigações relacionadas aos produtos ou serviços oferecidos pelo vendedor.\n</div>`;
 
@@ -125,6 +127,12 @@ const createPixSchema = z.object({
   meta: z.record(z.unknown()).optional(),
 });
 
+const createPixByPlanSchema = z.object({
+  plan_id: z.coerce.number().int().positive(),
+  telegram_id: z.coerce.number().int().optional(),
+  payload_id: z.string().min(1).optional(),
+});
+
 pushinpayRouter.post(
   '/api/payments/pushinpay/cash-in',
   async (req: Request, res: Response): Promise<void> => {
@@ -201,6 +209,87 @@ pushinpayRouter.post(
         return;
       }
 
+      if (err instanceof PushinPayError) {
+        res.status(err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502).json({
+          error: err.message,
+          details: err.responseBody ?? null,
+        });
+        return;
+      }
+
+      const message = err instanceof Error ? err.message : 'Erro inesperado';
+      res.status(500).json({ error: message });
+    }
+  }
+);
+
+pushinpayRouter.post(
+  '/api/payments/pushinpay/cash-in/by-plan',
+  authAdminMiddleware,
+  async (req: Request, res: Response): Promise<void> => {
+    const parsedBody = createPixByPlanSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) {
+      res.status(400).json({ error: 'Payload inválido', details: parsedBody.error.flatten() });
+      return;
+    }
+
+    try {
+      const plan = await getPlanById(parsedBody.data.plan_id);
+      if (!plan || !plan.is_active) {
+        res.status(404).json({ error: 'plano não encontrado ou inativo' });
+        return;
+      }
+
+      let gateway: PushinPayGateway;
+      try {
+        gateway = getGateway('pushinpay') as PushinPayGateway;
+      } catch (err) {
+        const message = pushinpayConfigured
+          ? 'Gateway PushinPay indisponível'
+          : 'Gateway PushinPay não configurado';
+        res.status(503).json({ error: message });
+        return;
+      }
+
+      const pix = await gateway.createPix({ value_cents: plan.price_cents, splitRules: [] });
+      const responseValue = Number(pix.value);
+      const valueCents = Number.isFinite(responseValue) ? Math.trunc(responseValue) : plan.price_cents;
+
+      const saved = await insertOrUpdatePayment({
+        gateway: 'pushinpay',
+        external_id: pix.id,
+        status: typeof pix.status === 'string' ? pix.status : 'created',
+        value_cents: valueCents,
+        qr_code: typeof pix.qr_code === 'string' ? pix.qr_code : null,
+        qr_code_base64: typeof pix.qr_code_base64 === 'string' ? pix.qr_code_base64 : null,
+        webhook_url: typeof pix.webhook_url === 'string' ? pix.webhook_url : null,
+        telegram_id: parsedBody.data.telegram_id ?? null,
+        payload_id: parsedBody.data.payload_id ?? null,
+        plan_name: plan.plan_name,
+        meta: { planFromAdmin: true, bot_slug: plan.bot_slug },
+      });
+
+      await recordFunnelEvent({
+        event: 'pix_created',
+        eventId: `pix:${saved.external_id}`,
+        telegramId: parsedBody.data.telegram_id ?? null,
+        transactionId: saved.external_id,
+        priceCents: saved.value_cents,
+        payloadId: parsedBody.data.payload_id ?? null,
+        meta: { gateway: 'pushinpay', plan_id: plan.id },
+      });
+
+      res.status(201).json({
+        id: saved.external_id,
+        status: saved.status,
+        plan_name: plan.plan_name,
+        value_cents: saved.value_cents,
+        qr_code: saved.qr_code,
+        qr_code_base64: saved.qr_code_base64,
+        webhook_url: saved.webhook_url,
+        notice_html: PUSHINPAY_NOTICE_HTML,
+      });
+    } catch (err) {
       if (err instanceof PushinPayError) {
         res.status(err.httpStatus && err.httpStatus >= 400 ? err.httpStatus : 502).json({
           error: err.message,
