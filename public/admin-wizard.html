@@ -793,9 +793,27 @@
     input:focus, textarea:focus, select:focus{outline:none; box-shadow:0 0 0 3px var(--ring), 0 0 0 1px #2b3b57}
     button{background:linear-gradient(135deg,var(--primary1),var(--primary2)); color:#081018;border:none;border-radius:12px;padding:10px 14px;font-weight:800}
     button.secondary, .btn-secondary{background:#1f2838;color:#dfe9f7;border:1px solid #2b364a}
-    /* Modal "Novo bot" */
-    .modal, dialog{background:var(--card)!important;color:var(--text)!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:20px!important}
-    .modal h3, dialog h3{font-weight:900}
+    /* Modal "Novo bot" — versão CLARA para melhor leitura */
+    :root{ --modal-bg:#ffffff; --modal-text:#0b1220; --modal-border:#e8edf7; }
+    .modal, dialog{
+      background:var(--modal-bg)!important;
+      color:var(--modal-text)!important;
+      border:1px solid var(--modal-border)!important;
+      border-radius:20px!important;
+      box-shadow:0 20px 70px rgba(2,19,48,.35), 0 2px 8px rgba(2,19,48,.12)!important;
+    }
+    .modal h3, dialog h3{font-weight:900; color:var(--modal-text)!important}
+    dialog label{ color:#334155 }
+    dialog input, dialog textarea, dialog select{
+      background:#ffffff; color:var(--modal-text);
+      border:1px solid #d0d7e2; border-radius:10px; padding:10px;
+    }
+    dialog input:focus, dialog textarea:focus, dialog select:focus{
+      outline:none; box-shadow:0 0 0 3px rgba(47,128,237,.18), 0 0 0 1px #3b82f6;
+      border-color:#3b82f6;
+    }
+    /* botão secundário dentro do modal (ex.: Cancelar) */
+    dialog .secondary{ background:#eef2f9; color:#0b1220; border:1px solid #d0d7e2; }
   </style>
 </head>
 <body>
