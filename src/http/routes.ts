@@ -11,6 +11,7 @@ import { funnelApiRouter } from '../analytics/FunnelApi.js';
 import { pushinpayRouter, pushinpayWebhookRouter } from './payments/pushinpay.js';
 import { plansRouter } from './plans.js';
 import { botSettingsRouter } from './botSettings.js';
+import { miniappQrRouter } from './miniapp/qr.js';
 
 export const router = Router();
 
@@ -214,6 +215,9 @@ router.use(plansRouter);
 router.use(botSettingsRouter);
 router.use(pushinpayRouter);
 router.use(pushinpayWebhookRouter);
+
+// Mini App (QR viewer)
+router.use(miniappQrRouter);
 
 // Analytics routes (no auth for now, but can be protected)
 router.use('/analytics', funnelApiRouter);
