@@ -116,14 +116,27 @@ export class PushinPayGateway implements PaymentGateway {
 }
 
 export function createPushinPayGatewayFromEnv(): PushinPayGateway {
-  const token = process.env.PUSHINPAY_TOKEN;
+  const token = process.env.PUSHINPAY_TOKEN ?? process.env.ADMIN_API_TOKEN ?? null;
   if (!token) {
-    throw new Error('PUSHINPAY_TOKEN ausente');
+    throw new Error('Credencial da PushinPay ausente: defina PUSHINPAY_TOKEN (recomendado).');
   }
 
-  const envValue = (process.env.PUSHINPAY_ENV ?? 'production').toLowerCase();
-  const envOption = envValue === 'sandbox' ? 'sandbox' : 'production';
-  const webhookBase = process.env.PUBLIC_BASE_URL ?? process.env.APP_BASE_URL ?? null;
+  const rawEnv = (process.env.PUSHINPAY_ENV ?? '').toLowerCase();
+  const envOption: 'production' | 'sandbox' = rawEnv
+    ? rawEnv === 'sandbox'
+      ? 'sandbox'
+      : 'production'
+    : String(process.env.NODE_ENV ?? '').toLowerCase() === 'production'
+    ? 'production'
+    : 'sandbox';
+
+  const webhookBase = process.env.APP_BASE_URL ?? null;
+
+  if (!process.env.PUSHINPAY_TOKEN && process.env.ADMIN_API_TOKEN) {
+    console.warn(
+      '[PushinPay] WARNING: usando ADMIN_API_TOKEN como token do gateway. Configure PUSHINPAY_TOKEN assim que possível.'
+    );
+  }
 
   return new PushinPayGateway({ token, env: envOption, webhookBase });
 }
