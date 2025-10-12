@@ -1,7 +1,6 @@
 import { Composer, InputFile } from 'grammy';
 import type { MyContext } from '../../grammYContext.js';
 import { createPixForDownsell, centsToBRL } from '../../../services/bot/downsellsFlow.js';
-import { getSettings } from '../../../db/botSettings.js';
 
 export const downsellsFeature = new Composer<MyContext>();
 
@@ -27,25 +26,49 @@ downsellsFeature.on('callback_query:data', async (ctx, next) => {
 
     const brl = centsToBRL(transaction.value_cents);
 
-    const settings = await getSettings(ctx.bot_slug!);
     const caption =
       `✅ PIX criado para **${title}**\n` +
       `Valor: *${brl}*\n\n` +
       'Pague escaneando o QR code abaixo.';
 
-    if (transaction.qr_code_base64) {
-      const buf = Buffer.from(transaction.qr_code_base64, 'base64');
+    const fallbackMessage =
+      `✅ PIX criado para **${title}**\n` +
+      `Valor: *${brl}*\n\n` +
+      'Copia e Cola:\n' +
+      `\`${transaction.qr_code ?? 'indisponível'}\``;
+
+    const sendPhotoFromBase64 = async (): Promise<boolean> => {
+      const raw = transaction.qr_code_base64;
+      if (!raw) return false;
+      const base64Content = raw.includes('base64,') ? raw.split('base64,')[1] ?? '' : raw;
+      if (!base64Content) return false;
+      const buf = Buffer.from(base64Content, 'base64');
       await ctx.replyWithPhoto(new InputFile(buf, 'pix.png'), {
         caption,
         parse_mode: 'Markdown',
       });
-    } else if (transaction.qr_code) {
-      await ctx.replyWithPhoto(transaction.qr_code, {
-        caption,
-        parse_mode: 'Markdown',
-      });
-    } else {
-      await ctx.reply(`PIX criado: ${brl}\n\nCopie e cole: ${transaction.qr_code ?? 'indisponível'}`);
+      return true;
+    };
+
+    try {
+      const sent = await sendPhotoFromBase64();
+      if (!sent) {
+        if (transaction.qr_code) {
+          await ctx.reply(fallbackMessage, { parse_mode: 'Markdown' });
+        } else {
+          await ctx.answerCallbackQuery({
+            text: 'QR indisponível no momento. Use o código Pix Copia e Cola.',
+            show_alert: true,
+          });
+        }
+      }
+    } catch (err) {
+      ctx.logger.warn({ err, downsellId }, '[DOWNSELL][PIX] failed to send qr image');
+      if (transaction.qr_code) {
+        await ctx.reply(fallbackMessage, { parse_mode: 'Markdown' });
+      } else {
+        await ctx.answerCallbackQuery({ text: 'Erro ao gerar a imagem do QR.', show_alert: true });
+      }
     }
   } catch (err) {
     ctx.logger.error({ err, downsellId }, '[DOWNSELL][PIX] erro ao gerar');
