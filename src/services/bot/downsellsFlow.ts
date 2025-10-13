@@ -2,10 +2,6 @@ import { insertOrUpdatePayment, type PaymentTransaction } from '../../db/payment
 import { getDownsell } from '../../db/downsells.js';
 import { resolvePixGateway } from '../payments/pixGatewayResolver.js';
 
-export function centsToBRL(v: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v / 100);
-}
-
 export async function createPixForDownsell(params: {
   bot_slug: string;
   telegram_id: number;
