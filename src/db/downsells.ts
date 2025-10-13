@@ -261,39 +261,83 @@ export interface DownsellStats {
   last_seen?: string | null;
 }
 
-export async function getDownsellsStats(botSlug: string): Promise<Record<string, DownsellStats>> {
-  const res = await pool.query(
-    `
-      SELECT bot_slug, scheduled, sent, canceled, error, pix, purchased, last_seen
-      FROM public.admin_downsell_metrics
-      WHERE bot_slug = $1
-    `,
-    [botSlug]
-  );
+const DONSELLS_METRICS_VIEW_SQL = `
+  CREATE OR REPLACE VIEW public.admin_downsell_metrics AS
+  SELECT
+    COALESCE(meta->>'bot_slug','') AS bot_slug,
+    SUM(CASE WHEN event_name = 'downs_scheduled' THEN 1 ELSE 0 END) AS scheduled,
+    SUM(CASE WHEN event_name = 'downs_sent'      THEN 1 ELSE 0 END) AS sent,
+    SUM(CASE WHEN event_name = 'downs_canceled'  THEN 1 ELSE 0 END) AS canceled,
+    SUM(CASE WHEN event_name = 'downs_error'     THEN 1 ELSE 0 END) AS error,
+    SUM(CASE WHEN event_name = 'pix_created'     THEN 1 ELSE 0 END) AS pix,
+    SUM(CASE WHEN event_name = 'purchase'        THEN 1 ELSE 0 END) AS purchased,
+    MAX(occurred_at) AS last_seen
+  FROM public.funnel_events
+  WHERE occurred_at >= NOW() - INTERVAL '7 days'
+  GROUP BY 1;
+`;
 
+const DONSELLS_METRICS_QUERY = `
+  SELECT bot_slug, scheduled, sent, canceled, error, pix, purchased, last_seen
+  FROM public.admin_downsell_metrics
+  WHERE bot_slug = $1
+`;
+
+function mapDownsellStatsRow(row: any): DownsellStats {
+  return {
+    scheduled: Number(row.scheduled ?? 0),
+    sent: Number(row.sent ?? 0),
+    canceled: Number(row.canceled ?? 0),
+    error: Number(row.error ?? 0),
+    pix: Number(row.pix ?? 0),
+    purchased: Number(row.purchased ?? 0),
+    last_seen:
+      row.last_seen instanceof Date
+        ? row.last_seen.toISOString()
+        : row.last_seen
+        ? String(row.last_seen)
+        : null,
+  };
+}
+
+async function fetchDownsellStats(botSlug: string): Promise<Record<string, DownsellStats>> {
+  const res = await pool.query(DONSELLS_METRICS_QUERY, [botSlug]);
   if (res.rows.length === 0) {
     return {};
   }
 
   const stats: Record<string, DownsellStats> = {};
   for (const row of res.rows) {
-    stats['__aggregate__'] = {
-      scheduled: Number(row.scheduled ?? 0),
-      sent: Number(row.sent ?? 0),
-      canceled: Number(row.canceled ?? 0),
-      error: Number(row.error ?? 0),
-      pix: Number(row.pix ?? 0),
-      purchased: Number(row.purchased ?? 0),
-      last_seen:
-        row.last_seen instanceof Date
-          ? row.last_seen.toISOString()
-          : row.last_seen
-          ? String(row.last_seen)
-          : null,
-    };
+    stats['__aggregate__'] = mapDownsellStatsRow(row);
   }
 
   return stats;
+}
+
+export async function getDownsellsStats(botSlug: string): Promise<Record<string, DownsellStats>> {
+  try {
+    return await fetchDownsellStats(botSlug);
+  } catch (error: any) {
+    const code = error?.code || error?.name;
+    if (code === '42P01') {
+      console.warn('[downsells] metrics view missing; creating public.admin_downsell_metrics and retrying once', {
+        botSlug,
+      });
+      try {
+        await pool.query(DONSELLS_METRICS_VIEW_SQL);
+        return await fetchDownsellStats(botSlug);
+      } catch (innerError: any) {
+        const innerCode = innerError?.code || innerError?.name;
+        console.warn('[downsells] failed to create metrics view; returning empty', {
+          botSlug,
+          code: innerCode,
+          error: innerError,
+        });
+        return {};
+      }
+    }
+    throw error;
+  }
 }
 
 // ===== VARIANTS (A/B) =====
