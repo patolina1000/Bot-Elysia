@@ -1435,7 +1435,12 @@
       }
     }
   </style>
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Adapter de datas para Chart.js (compatível com v4) -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <!-- (opcional) locale pt-BR -->
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@2/locale/pt-BR/index.min.js"></script>
 </head>
 <body id="admin-wizard">
   <div class="layout">
@@ -1766,17 +1771,80 @@
         cachedSendMetrics = [];
       }
 
-      function upsertLatencyChart({ labels = [], datasets = [] }) {
+      function upsertLatencyChart({ datasets = [] } = {}) {
         const canvas = getLatencyCanvas();
         if (!canvas) {
           return null;
         }
 
+        const options = {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: { xAxisKey: 'ts', yAxisKey: 'tg_ms' },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                usePointStyle: true,
+                padding: 10,
+                font: { size: 11 },
+              },
+            },
+            tooltip: {
+              mode: 'nearest',
+              intersect: false,
+            },
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'minute',
+                tooltipFormat: 'dd/MM HH:mm:ss',
+              },
+              adapters: {
+                date: { locale: window.dateFnsLocalePtBR || undefined },
+              },
+              title: {
+                display: true,
+                text: 'Horário',
+                font: { size: 11 },
+              },
+              ticks: {
+                font: { size: 10 },
+              },
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'ms',
+                font: { size: 11 },
+              },
+              ticks: {
+                font: { size: 10 },
+              },
+            },
+          },
+        };
+
         let chart = latencyChartInstance || (canvas ? Chart.getChart(canvas) : null);
         if (chart) {
           latencyChartInstance = chart;
-          chart.data.labels = labels;
           chart.data.datasets = datasets;
+          chart.options.responsive = options.responsive;
+          chart.options.maintainAspectRatio = options.maintainAspectRatio;
+          chart.options.parsing = options.parsing;
+          chart.options.plugins = {
+            ...(chart.options.plugins || {}),
+            legend: { ...options.plugins.legend },
+            tooltip: { ...options.plugins.tooltip },
+          };
+          chart.options.scales = {
+            x: { ...options.scales.x },
+            y: { ...options.scales.y },
+          };
           chart.update('none');
           const computed = window.getComputedStyle(canvas);
           const hidden = canvas.offsetParent === null || computed.display === 'none' || computed.visibility === 'hidden';
@@ -1793,59 +1861,12 @@
         existing?.destroy();
 
         const ctx = canvas.getContext('2d');
-        chart = new Chart(ctx, {
+        const config = {
           type: 'line',
-          data: { labels, datasets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'bottom',
-                labels: {
-                  usePointStyle: true,
-                  padding: 10,
-                  font: { size: 11 },
-                },
-              },
-              tooltip: {
-                mode: 'nearest',
-                intersect: false,
-              },
-            },
-            scales: {
-              x: {
-                type: 'time',
-                time: {
-                  unit: 'minute',
-                  displayFormats: {
-                    minute: 'HH:mm',
-                  },
-                },
-                title: {
-                  display: true,
-                  text: 'Timestamp',
-                  font: { size: 11 },
-                },
-                ticks: {
-                  font: { size: 10 },
-                },
-              },
-              y: {
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Latência (ms)',
-                  font: { size: 11 },
-                },
-                ticks: {
-                  font: { size: 10 },
-                },
-              },
-            },
-          },
-        });
+          data: { datasets },
+          options,
+        };
+        chart = new Chart(ctx, config);
 
         latencyChartInstance = chart;
 
@@ -2746,26 +2767,43 @@
         await scheduleMetricsRefresh({ slug, limit, silent: false });
       }
 
+      function renderLatencyPlaceholder(message = 'Nenhum envio registrado ainda.') {
+        const canvas = getLatencyCanvas();
+        if (!canvas) {
+          return;
+        }
+
+        destroyLatencyChart();
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return;
+        }
+
+        const width = canvas.width || canvas.clientWidth || 0;
+        const height = canvas.height || canvas.clientHeight || 0;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(message, width / 2, height / 2);
+      }
+
       // metrics: build datasets for chart
       function renderSendMetricsChart(items) {
         const canvas = getLatencyCanvas();
         if (!canvas) return;
 
-        if (items.length === 0) {
-          destroyLatencyChart();
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.clearRect(0, 0, canvas.width || canvas.clientWidth || 0, canvas.height || canvas.clientHeight || 0);
-            ctx.fillStyle = '#9ca3af';
-            ctx.font = '13px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('Nenhum envio registrado ainda.', (canvas.width || canvas.clientWidth || 0) / 2, (canvas.height || canvas.clientHeight || 0) / 2);
-          }
+        if (!Array.isArray(items) || items.length === 0) {
+          renderLatencyPlaceholder();
           if (cachedCacheItems.length > 0) {
             renderCacheTable(cachedCacheItems);
           }
           return;
         }
+
+        cachedSendMetrics = items;
 
         // group by route
         const routeMap = {};
@@ -2787,10 +2825,23 @@
 
         const datasets = Object.keys(routeMap).map((route, idx) => {
           const color = colorPalette[route] || defaultColors[idx % defaultColors.length];
-          const data = routeMap[route].map(item => ({
-            x: new Date(item.ts),
-            y: item.tg_ms || 0,
-          }));
+          const data = routeMap[route]
+            .map(item => {
+              if (!item || !item.ts) {
+                return null;
+              }
+              const value = Number(item.tg_ms);
+              return {
+                ts: item.ts,
+                tg_ms: Number.isFinite(value) ? value : 0,
+              };
+            })
+            .filter(Boolean)
+            .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+
+          if (data.length === 0) {
+            return null;
+          }
 
           return {
             label: route,
@@ -2802,14 +2853,9 @@
             pointHoverRadius: 5,
             tension: 0.2,
           };
-        });
+        }).filter(Boolean);
 
-        const labels = Array.from(new Set(items.map(item => {
-          const date = new Date(item.ts);
-          return Number.isFinite(date.getTime()) ? date.getTime() : null;
-        }).filter(ts => ts !== null))).sort((a, b) => a - b).map(ts => new Date(ts));
-
-        upsertLatencyChart({ labels, datasets });
+        upsertLatencyChart({ datasets });
         ensureLatencyChartVisible();
         if (cachedCacheItems.length > 0) {
           renderCacheTable(cachedCacheItems);
