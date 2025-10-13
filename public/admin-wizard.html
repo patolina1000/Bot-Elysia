@@ -1125,7 +1125,305 @@
     #admin-wizard .list-group-item .btn {
       opacity: 1 !important;
     }
+
+    /* ========== Nova seção: Envio & Cache de mídias ========== */
+    .metrics-section {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .metrics-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .metrics-header h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .metrics-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .metrics-controls select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      font-size: 13px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .metrics-controls button {
+      padding: 6px 14px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .metrics-controls button:hover {
+      background: #5a67d8;
+    }
+
+    .metrics-controls button:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .metrics-grid {
+        grid-template-columns: 2fr 1fr;
+      }
+    }
+
+    .metrics-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .metrics-card h4 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 280px;
+    }
+
+    .kpi-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .kpi-route {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .kpi-route-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .kpi-stats {
+      display: flex;
+      gap: 12px;
+      justify-content: space-around;
+    }
+
+    .kpi-stat {
+      text-align: center;
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      color: #9ca3af;
+      font-weight: 500;
+    }
+
+    .kpi-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-top: 2px;
+    }
+
+    /* Tabela de cache melhorada */
+    .cache-table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .cache-table-header h4 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .cache-filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .cache-filters input,
+    .cache-filters select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      font-size: 13px;
+    }
+
+    .cache-filters input {
+      min-width: 180px;
+    }
+
+    .table-wrap {
+      max-height: 520px;
+      overflow: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .cache-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+
+    .cache-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #f9fafb;
+      backdrop-filter: blur(8px);
+    }
+
+    .cache-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .cache-table td {
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #1f2937;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+    }
+
+    .cache-table tbody tr:hover {
+      background: #f9fafb;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .pill.warm {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .pill.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+
+    .badge.stale {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    .btn-warmup {
+      padding: 4px 10px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .btn-warmup:hover {
+      background: #5a67d8;
+    }
+
+    .btn-warmup:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .route-used {
+      font-size: 11px;
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    @media (max-width: 720px) {
+      .metrics-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .chart-container {
+        height: 220px;
+      }
+      
+      .kpi-stats {
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .table-wrap {
+        max-height: 400px;
+      }
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body id="admin-wizard">
   <div class="layout">
@@ -1186,14 +1484,70 @@
           </div>
         </div>
 
-        <div class="form-section">
-          <div style="font-weight:600; color:#1f2937;">Cache de mídias (diagnóstico)</div>
-          <div id="media-cache-table">
-            <div class="placeholder">Selecione um bot para visualizar o cache.</div>
+        <div class="form-section metrics-section">
+          <!-- Header com título e controles -->
+          <div class="metrics-header">
+            <h3>📊 Envio &amp; Cache de mídias</h3>
+            <div class="metrics-controls">
+              <select id="metrics-bot-select" aria-label="Selecionar bot">
+                <option value="">Selecione um bot</option>
+              </select>
+              <select id="metrics-limit-select" aria-label="Janela de eventos">
+                <option value="100">Últimos 100</option>
+                <option value="500">Últimos 500</option>
+                <option value="1000">Últimos 1000</option>
+              </select>
+              <button id="btn-refresh-metrics" type="button" aria-label="Atualizar métricas">Atualizar</button>
+            </div>
           </div>
-          <div style="margin-top:16px; display:flex; flex-direction:column; gap:8px;">
-            <button id="btn-metrics" type="button" class="btn-secondary">Ver métricas de envio (últimos 100)</button>
-            <div id="metrics-box"></div>
+
+          <!-- Grid: Gráfico + KPIs -->
+          <div class="metrics-grid">
+            <!-- Card: Gráfico de latência -->
+            <div class="metrics-card">
+              <h4>Latência de envios (ms)</h4>
+              <div class="chart-container">
+                <canvas id="send-latency-chart" aria-label="Gráfico de latência de envios"></canvas>
+              </div>
+            </div>
+
+            <!-- Card: KPIs p50/p95/p99 por rota -->
+            <div class="metrics-card">
+              <h4>Percentis por rota</h4>
+              <div id="kpi-container" class="kpi-grid">
+                <div class="placeholder" style="text-align:center; color:#9ca3af; padding:24px; font-style:italic;">
+                  Selecione um bot e clique em Atualizar
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabela de cache com filtros -->
+          <div>
+            <div class="cache-table-header">
+              <h4>Cache de mídias</h4>
+              <div class="cache-filters">
+                <input id="cache-search" type="text" placeholder="Buscar por key..." aria-label="Buscar cache por key">
+                <select id="cache-type-filter" aria-label="Filtrar por tipo de mídia">
+                  <option value="">Todos os tipos</option>
+                  <option value="photo">photo</option>
+                  <option value="video">video</option>
+                  <option value="audio">audio</option>
+                  <option value="document">document</option>
+                  <option value="voice">voice</option>
+                </select>
+                <select id="cache-status-filter" aria-label="Filtrar por status">
+                  <option value="">Todos os status</option>
+                  <option value="warm">warm</option>
+                  <option value="error">error</option>
+                </select>
+              </div>
+            </div>
+            <div id="media-cache-table-container">
+              <div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">
+                Selecione um bot para visualizar o cache.
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1349,10 +1703,23 @@
       const warmupChatInput = document.getElementById('warmup-chat-id');
       const saveWarmupBtn = document.getElementById('save-warmup');
       const doWarmupBtn = document.getElementById('do-warmup');
-      const mediaCacheTable = document.getElementById('media-cache-table');
-      const metricsBtn = document.getElementById('btn-metrics');
-      const metricsBox = document.getElementById('metrics-box');
+      
+      // metrics: new UI elements
+      const metricsBotSelect = document.getElementById('metrics-bot-select');
+      const metricsLimitSelect = document.getElementById('metrics-limit-select');
+      const btnRefreshMetrics = document.getElementById('btn-refresh-metrics');
+      const sendLatencyChart = document.getElementById('send-latency-chart');
+      const kpiContainer = document.getElementById('kpi-container');
+      const mediaCacheTableContainer = document.getElementById('media-cache-table-container');
+      const cacheSearch = document.getElementById('cache-search');
+      const cacheTypeFilter = document.getElementById('cache-type-filter');
+      const cacheStatusFilter = document.getElementById('cache-status-filter');
       let mediaCacheRequestId = 0;
+      
+      // metrics: state
+      let latencyChartInstance = null;
+      let cachedSendMetrics = [];
+      let cachedCacheItems = [];
       const nbSlugInput = document.getElementById('nb-slug');
       const nbTokenInput = document.getElementById('nb-token');
       const nbTitleInput = document.getElementById('nb-title');
@@ -1487,16 +1854,6 @@
         return (number / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
       }
 
-      function renderMediaCachePlaceholder(message) {
-        if (!mediaCacheTable) {
-          return;
-        }
-        mediaCacheTable.innerHTML = '';
-        const placeholder = document.createElement('div');
-        placeholder.className = 'placeholder';
-        placeholder.textContent = message;
-        mediaCacheTable.appendChild(placeholder);
-      }
 
       function setPlansPlaceholder(message) {
         if (!plansList) {
@@ -1852,17 +2209,31 @@
         }
       }
 
+      // map last route by key: find which route was last used for each media_key
+      function mapRouteUsedByKey(sendMetrics) {
+        const routeByKey = {};
+        // iterate in reverse (newest first) to get the most recent usage
+        for (let i = sendMetrics.length - 1; i >= 0; i--) {
+          const item = sendMetrics[i];
+          const key = item.media_key;
+          if (key && !routeByKey[key]) {
+            routeByKey[key] = item.route || '';
+          }
+        }
+        return routeByKey;
+      }
+
       async function refreshMediaCache(slug) {
-        if (!mediaCacheTable) {
+        if (!mediaCacheTableContainer) {
           return;
         }
         if (!slug) {
-          renderMediaCachePlaceholder('Configure o slug do bot para visualizar o cache.');
+          mediaCacheTableContainer.innerHTML = '<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">Selecione um bot para visualizar o cache.</div>';
           return;
         }
 
         const requestId = ++mediaCacheRequestId;
-        renderMediaCachePlaceholder('Carregando cache…');
+        mediaCacheTableContainer.innerHTML = '<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">Carregando cache…</div>';
 
         try {
           const data = await fetchJSON(`/admin/api/bots/${encodeURIComponent(slug)}/media-cache`);
@@ -1870,135 +2241,381 @@
             return;
           }
           const items = Array.isArray(data?.items) ? data.items : [];
+          cachedCacheItems = items;
+          
           if (items.length === 0) {
-            renderMediaCachePlaceholder('Nenhum item no cache ainda.');
+            mediaCacheTableContainer.innerHTML = '<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">Nenhum item no cache ainda.</div>';
             return;
           }
 
-          const table = document.createElement('table');
-          const thead = document.createElement('thead');
-          const headRow = document.createElement('tr');
-          ['key', 'type', 'status', 'file_id', 'last_warmed'].forEach((label) => {
-            const th = document.createElement('th');
-            th.textContent = label;
-            headRow.appendChild(th);
-          });
-          thead.appendChild(headRow);
-          table.appendChild(thead);
-
-          const tbody = document.createElement('tbody');
-          items.forEach((item) => {
-            const row = document.createElement('tr');
-
-            const keyCell = document.createElement('td');
-            keyCell.textContent = item.media_key || '';
-            row.appendChild(keyCell);
-
-            const typeCell = document.createElement('td');
-            typeCell.textContent = item.media_type || '';
-            row.appendChild(typeCell);
-
-            const statusCell = document.createElement('td');
-            statusCell.textContent = item.status || '';
-            row.appendChild(statusCell);
-
-            const fileCell = document.createElement('td');
-            fileCell.textContent = item.file_id || '';
-            row.appendChild(fileCell);
-
-            const warmedCell = document.createElement('td');
-            const warmedValue = item.last_warmed_at ? String(item.last_warmed_at) : '';
-            warmedCell.textContent = warmedValue;
-            row.appendChild(warmedCell);
-
-            tbody.appendChild(row);
-          });
-
-          table.appendChild(tbody);
-          mediaCacheTable.innerHTML = '';
-          mediaCacheTable.appendChild(table);
+          renderCacheTable(items);
         } catch (error) {
           if (requestId !== mediaCacheRequestId) {
             return;
           }
           const message = error instanceof Error ? error.message : 'Erro ao carregar cache.';
-          renderMediaCachePlaceholder(message);
+          mediaCacheTableContainer.innerHTML = `<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">${escapeHtml(message)}</div>`;
         }
       }
 
-      metricsBtn?.addEventListener('click', loadMetrics);
+      function renderCacheTable(items) {
+        if (!mediaCacheTableContainer) return;
+        
+        // map last route used by key
+        const routeByKey = mapRouteUsedByKey(cachedSendMetrics);
+        
+        const table = document.createElement('table');
+        table.className = 'cache-table';
+        
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        ['Key', 'Type', 'Status', 'Em uso via', 'File ID', 'Last Warmed', 'Ações'].forEach((label) => {
+          const th = document.createElement('th');
+          th.textContent = label;
+          th.setAttribute('aria-label', label);
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
 
-      async function loadMetrics() {
-        if (!metricsBox) {
+        const tbody = document.createElement('tbody');
+        items.forEach((item) => {
+          const row = document.createElement('tr');
+          row.dataset.key = item.media_key || '';
+          row.dataset.type = item.media_type || '';
+          row.dataset.status = item.status || '';
+
+          // key
+          const keyCell = document.createElement('td');
+          keyCell.textContent = item.media_key || '';
+          keyCell.style.fontFamily = 'monospace';
+          keyCell.style.fontSize = '12px';
+          keyCell.style.wordBreak = 'break-all';
+          row.appendChild(keyCell);
+
+          // type
+          const typeCell = document.createElement('td');
+          typeCell.textContent = item.media_type || '';
+          row.appendChild(typeCell);
+
+          // status pill
+          const statusCell = document.createElement('td');
+          const statusPill = document.createElement('span');
+          statusPill.className = `pill ${item.status === 'warm' ? 'warm' : 'error'}`;
+          statusPill.textContent = item.status || '';
+          statusCell.appendChild(statusPill);
+          row.appendChild(statusCell);
+
+          // em uso via (route)
+          const routeCell = document.createElement('td');
+          const route = routeByKey[item.media_key] || '';
+          if (route) {
+            const routeSpan = document.createElement('span');
+            routeSpan.className = 'route-used';
+            routeSpan.textContent = route;
+            routeCell.appendChild(routeSpan);
+          } else {
+            routeCell.textContent = '-';
+            routeCell.style.color = '#d1d5db';
+          }
+          row.appendChild(routeCell);
+
+          // file_id
+          const fileCell = document.createElement('td');
+          fileCell.textContent = item.file_id || '';
+          fileCell.style.fontFamily = 'monospace';
+          fileCell.style.fontSize = '11px';
+          fileCell.style.wordBreak = 'break-all';
+          row.appendChild(fileCell);
+
+          // last_warmed with badge if stale (> 7 days)
+          const warmedCell = document.createElement('td');
+          const warmedValue = item.last_warmed_at ? String(item.last_warmed_at) : '';
+          warmedCell.textContent = warmedValue;
+          warmedCell.style.fontSize = '12px';
+          
+          // check if stale (>7 days)
+          if (item.last_warmed_at) {
+            const warmedDate = new Date(item.last_warmed_at);
+            const now = new Date();
+            const diffDays = (now - warmedDate) / (1000 * 60 * 60 * 24);
+            if (diffDays > 7) {
+              const staleBadge = document.createElement('span');
+              staleBadge.className = 'badge stale';
+              staleBadge.textContent = '7d+';
+              staleBadge.title = 'Cache desatualizado (mais de 7 dias)';
+              warmedCell.appendChild(staleBadge);
+            }
+          }
+          row.appendChild(warmedCell);
+
+          // warmup action button
+          const actionCell = document.createElement('td');
+          const warmupBtn = document.createElement('button');
+          warmupBtn.className = 'btn-warmup';
+          warmupBtn.textContent = 'Aquecer';
+          warmupBtn.setAttribute('aria-label', `Aquecer mídia ${item.media_key}`);
+          warmupBtn.onclick = async () => {
+            // warmup action: call POST /admin/api/bots/:slug/warmup?key=...
+            await handleWarmupSingle(item.media_key);
+          };
+          actionCell.appendChild(warmupBtn);
+          row.appendChild(actionCell);
+
+          tbody.appendChild(row);
+        });
+
+        table.appendChild(tbody);
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-wrap';
+        wrapper.appendChild(table);
+        
+        mediaCacheTableContainer.innerHTML = '';
+        mediaCacheTableContainer.appendChild(wrapper);
+      }
+
+      // warmup action: single key
+      async function handleWarmupSingle(key) {
+        const bot = state.bots.find(b => b.id === state.currentBotId);
+        if (!bot || !bot.slug) {
+          showToast('Nenhum bot selecionado.');
           return;
         }
-        metricsBtn?.setAttribute('disabled', 'disabled');
-        metricsBox.innerHTML = '<div class="placeholder">Carregando métricas…</div>';
+        
         try {
-          const [listData, statsData] = await Promise.all([
-            fetchJSON('/admin/api/metrics/telegram-sends?limit=100'),
-            fetchJSON('/admin/api/metrics/telegram-sends/stats'),
+          const url = `/admin/api/bots/${encodeURIComponent(bot.slug)}/warmup?key=${encodeURIComponent(key)}`;
+          const response = await fetchJSON(url, { method: 'POST' });
+          showToast(`Aquecimento de "${key}" concluído!`);
+          
+          // refresh cache and metrics
+          await Promise.all([
+            refreshMediaCache(bot.slug),
+            onRefreshMetrics(),
           ]);
-          const items = Array.isArray(listData?.items) ? listData.items : [];
-          const stats = statsData?.stats || {};
-
-          const routeStats = stats.routes || {};
-          const routesHtml = Object.keys(routeStats).length
-            ? `<ul>${Object.keys(routeStats)
-                .map((route) => {
-                  const info = routeStats[route] || {};
-                  const count = info.count ?? 0;
-                  const p50 = info.p50_ms ?? '-';
-                  const p95 = info.p95_ms ?? '-';
-                  const p99 = info.p99_ms ?? '-';
-                  return `<li><strong>${escapeHtml(route)}</strong>: count=${escapeHtml(count)} p50=${escapeHtml(p50)}ms p95=${escapeHtml(p95)}ms p99=${escapeHtml(p99)}ms</li>`;
-                })
-                .join('')}</ul>`
-            : '<div class="placeholder">Sem métricas por rota ainda.</div>';
-
-          const rows = items
-            .map((item) => {
-              return `<tr>
-                <td>${escapeHtml(item.ts)}</td>
-                <td>${escapeHtml(item.bot_slug)}</td>
-                <td>${escapeHtml(item.chat_id)}</td>
-                <td>${escapeHtml(item.media_key || '')}</td>
-                <td>${escapeHtml(item.route)}</td>
-                <td>${item.ok ? 'ok' : 'erro'}</td>
-                <td>${escapeHtml(item.tg_ms)}ms</td>
-                <td>${escapeHtml(item.gapGlobal_ms)}ms</td>
-                <td>${escapeHtml(item.gapChat_ms)}ms</td>
-                <td>${escapeHtml(item.error || '')}</td>
-              </tr>`;
-            })
-            .join('');
-
-          const tableHtml = items.length
-            ? `<div style="overflow:auto; max-height:320px; border:1px solid #e5e7eb; border-radius:8px;">
-                <table class="table" style="width:100%; min-width:720px; border-collapse:collapse;">
-                  <thead>
-                    <tr>
-                      <th>ts</th><th>bot</th><th>chat</th><th>key</th><th>rota</th>
-                      <th>status</th><th>tg_ms</th><th>gapGlobal</th><th>gapChat</th><th>erro</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rows}</tbody>
-                </table>
-              </div>`
-            : '<div class="placeholder">Nenhum envio registrado ainda.</div>';
-
-          metricsBox.innerHTML = `
-            <div><strong>Resumo:</strong> total=${escapeHtml(stats.total ?? 0)}</div>
-            ${routesHtml}
-            ${tableHtml}
-          `;
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Falha ao carregar métricas.';
-          metricsBox.innerHTML = `<div class="placeholder">${escapeHtml(message)}</div>`;
+          const message = error instanceof Error ? error.message : 'Erro ao aquecer mídia.';
+          showToast(message);
+        }
+      }
+
+      // metrics: load send metrics from API
+      async function loadSendMetrics({ slug, limit }) {
+        const params = new URLSearchParams();
+        if (limit) params.set('limit', String(limit));
+        const url = `/admin/api/metrics/telegram-sends?${params.toString()}`;
+        const data = await fetchJSON(url);
+        let items = Array.isArray(data?.items) ? data.items : [];
+        
+        // filter by slug if provided (server-side may not support it)
+        if (slug) {
+          items = items.filter(item => item.bot_slug === slug);
+        }
+        
+        cachedSendMetrics = items;
+        return items;
+      }
+
+      // metrics: load send stats (p50/p95/p99 by route)
+      async function loadSendStats({ slug }) {
+        const data = await fetchJSON('/admin/api/metrics/telegram-sends/stats');
+        const stats = data?.stats || {};
+        const routeStats = stats.routes || {};
+        
+        // filter routes by slug if needed (server may not support it)
+        // for now, return all routes; UI will show only relevant ones
+        return routeStats;
+      }
+
+      // metrics: render KPIs (p50/p95/p99 by route)
+      function renderKPIs(routeStats) {
+        if (!kpiContainer) return;
+        
+        const routes = Object.keys(routeStats);
+        if (routes.length === 0) {
+          kpiContainer.innerHTML = '<div class="placeholder" style="text-align:center; color:#9ca3af; padding:24px; font-style:italic;">Nenhuma métrica disponível ainda.</div>';
+          return;
+        }
+        
+        // main routes to show
+        const priorityRoutes = ['file_id', 'url_fallback', 'file_id_after_warm'];
+        const displayRoutes = priorityRoutes.filter(r => routes.includes(r));
+        const otherRoutes = routes.filter(r => !priorityRoutes.includes(r));
+        const finalRoutes = [...displayRoutes, ...otherRoutes].slice(0, 5); // max 5 routes
+        
+        const html = finalRoutes.map(route => {
+          const info = routeStats[route] || {};
+          const p50 = info.p50_ms ?? '-';
+          const p95 = info.p95_ms ?? '-';
+          const p99 = info.p99_ms ?? '-';
+          
+          return `
+            <div class="kpi-route">
+              <div class="kpi-route-name">${escapeHtml(route)}</div>
+              <div class="kpi-stats">
+                <div class="kpi-stat">
+                  <div class="kpi-label">p50</div>
+                  <div class="kpi-value">${escapeHtml(p50)}<span style="font-size:11px; font-weight:400;">ms</span></div>
+                </div>
+                <div class="kpi-stat">
+                  <div class="kpi-label">p95</div>
+                  <div class="kpi-value">${escapeHtml(p95)}<span style="font-size:11px; font-weight:400;">ms</span></div>
+                </div>
+                <div class="kpi-stat">
+                  <div class="kpi-label">p99</div>
+                  <div class="kpi-value">${escapeHtml(p99)}<span style="font-size:11px; font-weight:400;">ms</span></div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        kpiContainer.innerHTML = html;
+      }
+
+      // metrics: main refresh handler
+      async function onRefreshMetrics() {
+        const slug = metricsBotSelect?.value || '';
+        const limit = Number.parseInt(metricsLimitSelect?.value || '100', 10);
+        
+        if (!slug) {
+          showToast('Selecione um bot primeiro.');
+          return;
+        }
+        
+        if (btnRefreshMetrics) btnRefreshMetrics.disabled = true;
+        
+        try {
+          const [sendMetrics, routeStats] = await Promise.all([
+            loadSendMetrics({ slug, limit }),
+            loadSendStats({ slug }),
+          ]);
+          
+          renderSendMetricsChart(sendMetrics);
+          renderKPIs(routeStats);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao carregar métricas.';
           showToast(message);
         } finally {
-          metricsBtn?.removeAttribute('disabled');
+          if (btnRefreshMetrics) btnRefreshMetrics.disabled = false;
         }
+      }
+
+      // metrics: build datasets for chart
+      function renderSendMetricsChart(items) {
+        if (!sendLatencyChart) return;
+        
+        if (items.length === 0) {
+          // destroy existing chart
+          if (latencyChartInstance) {
+            latencyChartInstance.destroy();
+            latencyChartInstance = null;
+          }
+          const ctx = sendLatencyChart.getContext('2d');
+          ctx.clearRect(0, 0, sendLatencyChart.width, sendLatencyChart.height);
+          ctx.fillStyle = '#9ca3af';
+          ctx.font = '13px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('Nenhum envio registrado ainda.', sendLatencyChart.width / 2, sendLatencyChart.height / 2);
+          return;
+        }
+        
+        // group by route
+        const routeMap = {};
+        items.forEach(item => {
+          const route = item.route || 'unknown';
+          if (!routeMap[route]) routeMap[route] = [];
+          routeMap[route].push(item);
+        });
+        
+        // colors for routes
+        const colorPalette = {
+          file_id: '#10b981',
+          url_fallback: '#f59e0b',
+          file_id_after_warm: '#3b82f6',
+          warmup_to_channel: '#8b5cf6',
+          keepalive_ping: '#ef4444',
+        };
+        const defaultColors = ['#64748b', '#06b6d4', '#ec4899', '#84cc16'];
+        
+        const datasets = Object.keys(routeMap).map((route, idx) => {
+          const color = colorPalette[route] || defaultColors[idx % defaultColors.length];
+          const data = routeMap[route].map(item => ({
+            x: new Date(item.ts),
+            y: item.tg_ms || 0,
+          }));
+          
+          return {
+            label: route,
+            data,
+            borderColor: color,
+            backgroundColor: color + '33',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            tension: 0.2,
+          };
+        });
+        
+        // destroy previous chart if exists
+        if (latencyChartInstance) {
+          latencyChartInstance.destroy();
+        }
+        
+        const ctx = sendLatencyChart.getContext('2d');
+        latencyChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: { datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  usePointStyle: true,
+                  padding: 10,
+                  font: { size: 11 },
+                },
+              },
+              tooltip: {
+                mode: 'nearest',
+                intersect: false,
+              },
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'minute',
+                  displayFormats: {
+                    minute: 'HH:mm',
+                  },
+                },
+                title: {
+                  display: true,
+                  text: 'Timestamp',
+                  font: { size: 11 },
+                },
+                ticks: {
+                  font: { size: 10 },
+                },
+              },
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Latência (ms)',
+                  font: { size: 11 },
+                },
+                ticks: {
+                  font: { size: 10 },
+                },
+              },
+            },
+          },
+        });
       }
 
       async function fetchJSON(url, opts = {}) {
@@ -2100,6 +2717,9 @@
 
           renderTabs();
           updateNoBotsVisibility();
+          
+          // metrics: populate bot select
+          populateMetricsBotSelect();
 
           if (targetId) {
             await selectBot(targetId);
@@ -2159,6 +2779,12 @@
         history.replaceState(null, '', `#bot=${botId}`);
         renderTabs();
         updateNoBotsVisibility();
+        
+        // metrics: sync bot select
+        if (metricsBotSelect && targetBot.slug) {
+          metricsBotSelect.value = targetBot.slug;
+        }
+        
         await loadBotPane(botId);
       }
 
@@ -2597,6 +3223,62 @@
           copyBtn.disabled = true;
         }
       }
+
+      // metrics: event listeners
+      btnRefreshMetrics?.addEventListener('click', () => {
+        void onRefreshMetrics();
+      });
+
+      // metrics: populate bot select when bots load
+      function populateMetricsBotSelect() {
+        if (!metricsBotSelect) return;
+        
+        const currentValue = metricsBotSelect.value;
+        metricsBotSelect.innerHTML = '<option value="">Selecione um bot</option>';
+        
+        state.bots.forEach(bot => {
+          const option = document.createElement('option');
+          option.value = bot.slug || '';
+          option.textContent = `${bot.title || bot.slug || 'Bot'} (${bot.slug})`;
+          metricsBotSelect.appendChild(option);
+        });
+        
+        // restore selection
+        if (currentValue) {
+          metricsBotSelect.value = currentValue;
+        }
+      }
+
+      // metrics: debounce helper
+      function debounce(fn, delay) {
+        let timeoutId;
+        return function (...args) {
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => fn.apply(this, args), delay);
+        };
+      }
+
+      // metrics: filter cache table
+      function filterCacheTable() {
+        const searchValue = (cacheSearch?.value || '').toLowerCase().trim();
+        const typeValue = cacheTypeFilter?.value || '';
+        const statusValue = cacheStatusFilter?.value || '';
+        
+        const filteredItems = cachedCacheItems.filter(item => {
+          const keyMatch = !searchValue || (item.media_key || '').toLowerCase().includes(searchValue);
+          const typeMatch = !typeValue || item.media_type === typeValue;
+          const statusMatch = !statusValue || item.status === statusValue;
+          return keyMatch && typeMatch && statusMatch;
+        });
+        
+        renderCacheTable(filteredItems);
+      }
+
+      const debouncedFilterCache = debounce(filterCacheTable, 300);
+
+      cacheSearch?.addEventListener('input', debouncedFilterCache);
+      cacheTypeFilter?.addEventListener('change', filterCacheTable);
+      cacheStatusFilter?.addEventListener('change', filterCacheTable);
 
       saveWarmupBtn?.addEventListener('click', async () => {
         const bot = getCurrentBot();
