@@ -1,6 +1,6 @@
 import { Composer } from 'grammy';
 import type { MyContext } from '../../grammYContext.js';
-import { createPixForDownsell } from '../../../services/bot/downsellsFlow.js';
+import { createPixForDownsell, centsToBRL } from '../../../services/bot/downsellsFlow.js';
 import { getSettings } from '../../../db/botSettings.js';
 
 export const downsellsFeature = new Composer<MyContext>();
@@ -24,6 +24,10 @@ function escapeHtml(input: string): string {
   });
 }
 
+function renderTemplate(tpl: string, ctx: Record<string, string>): string {
+  return tpl.replace(/{title}/g, ctx.title ?? '').replace(/{price_brl}/g, ctx.price_brl ?? '');
+}
+
 // Callback: gerar PIX para downsell
 downsellsFeature.on('callback_query:data', async (ctx, next) => {
   const data = ctx.callbackQuery?.data ?? '';
@@ -38,7 +42,7 @@ downsellsFeature.on('callback_query:data', async (ctx, next) => {
 
   try {
     await ctx.answerCallbackQuery({ text: 'Gerando PIX…' });
-    const { transaction } = await createPixForDownsell({
+    const { transaction, title } = await createPixForDownsell({
       bot_slug: ctx.bot_slug!,
       telegram_id: ctx.from!.id,
       downsell_id: downsellId,
@@ -50,27 +54,34 @@ downsellsFeature.on('callback_query:data', async (ctx, next) => {
       if (settings?.pix_image_url) {
         await ctx.replyWithPhoto(settings.pix_image_url);
       }
+      // 2) Texto do downsell (EDITÁVEL por bot)
+      const brl = centsToBRL(transaction.value_cents);
+      const defaultInstructions = [
+        '✅ Como realizar o pagamento:',
+        '',
+        '1️⃣ Abra o aplicativo do seu banco.',
+        '',
+        '2️⃣ Selecione a opção “Pagar” ou “Pix”.',
+        '',
+        '3️⃣ Escolha “Pix Copia e Cola”.',
+        '',
+        '4️⃣ Cole o código abaixo e confirme o pagamento com segurança.',
+      ].join('\n');
+      const custom = settings?.pix_downsell_text as string | undefined;
+      const body = renderTemplate(custom ?? defaultInstructions, {
+        title,
+        price_brl: brl,
+      });
+      await ctx.reply(body);
     } catch (settingsError) {
       ctx.logger?.warn({ err: settingsError, bot_slug: ctx.bot_slug }, '[DOWNSELL][PIX] pix_image_url failed');
     }
 
-    // 2) Instruções + Pix Copia e Cola
-    const instructions = [
-      '✅ Como realizar o pagamento:',
-      '',
-      '1️⃣ Abra o aplicativo do seu banco.',
-      '',
-      '2️⃣ Selecione a opção “Pagar” ou “Pix”.',
-      '',
-      '3️⃣ Escolha “Pix Copia e Cola”.',
-      '',
-      '4️⃣ Cole o código abaixo e confirme o pagamento com segurança.',
-    ].join('\n');
-    await ctx.reply(instructions);
+    // 3) Pix Copia e Cola
     await ctx.reply('Copie o código abaixo:');
     await ctx.reply(`<pre>${escapeHtml(transaction.qr_code ?? 'indisponível')}</pre>`, { parse_mode: 'HTML' });
 
-    // 3) Botões: EFETUEI O PAGAMENTO + Mini App do QR
+    // 4) Botões: EFETUEI O PAGAMENTO + Mini App do QR
     await ctx.reply('Após efetuar o pagamento, clique no botão abaixo ⤵️', {
       reply_markup: {
         inline_keyboard: [
