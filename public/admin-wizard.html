@@ -1277,6 +1277,18 @@
       color: #1f2937;
     }
 
+    .cache-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .cache-actions .btn-secondary {
+      font-size: 13px;
+      padding: 6px 12px;
+    }
+
     .cache-filters {
       display: flex;
       gap: 8px;
@@ -1526,21 +1538,24 @@
           <div>
             <div class="cache-table-header">
               <h4>Cache de mídias</h4>
-              <div class="cache-filters">
-                <input id="cache-search" type="text" placeholder="Buscar por key..." aria-label="Buscar cache por key">
-                <select id="cache-type-filter" aria-label="Filtrar por tipo de mídia">
-                  <option value="">Todos os tipos</option>
-                  <option value="photo">photo</option>
-                  <option value="video">video</option>
-                  <option value="audio">audio</option>
-                  <option value="document">document</option>
-                  <option value="voice">voice</option>
-                </select>
-                <select id="cache-status-filter" aria-label="Filtrar por status">
-                  <option value="">Todos os status</option>
-                  <option value="warm">warm</option>
-                  <option value="error">error</option>
-                </select>
+              <div class="cache-actions">
+                <button id="btn-warmup-all" type="button" class="btn-secondary hidden">Aquecer tudo</button>
+                <div class="cache-filters">
+                  <input id="cache-search" type="text" placeholder="Buscar por key..." aria-label="Buscar cache por key">
+                  <select id="cache-type-filter" aria-label="Filtrar por tipo de mídia">
+                    <option value="">Todos os tipos</option>
+                    <option value="photo">photo</option>
+                    <option value="video">video</option>
+                    <option value="audio">audio</option>
+                    <option value="document">document</option>
+                    <option value="voice">voice</option>
+                  </select>
+                  <select id="cache-status-filter" aria-label="Filtrar por status">
+                    <option value="">Todos os status</option>
+                    <option value="warm">warm</option>
+                    <option value="error">error</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div id="media-cache-table-container">
@@ -1711,15 +1726,23 @@
       const sendLatencyChart = document.getElementById('send-latency-chart');
       const kpiContainer = document.getElementById('kpi-container');
       const mediaCacheTableContainer = document.getElementById('media-cache-table-container');
+      const warmupAllBtn = document.getElementById('btn-warmup-all');
       const cacheSearch = document.getElementById('cache-search');
       const cacheTypeFilter = document.getElementById('cache-type-filter');
       const cacheStatusFilter = document.getElementById('cache-status-filter');
       let mediaCacheRequestId = 0;
+
+      if (warmupAllBtn && !warmupAllBtn.getAttribute('data-default-label')) {
+        warmupAllBtn.setAttribute('data-default-label', warmupAllBtn.textContent?.trim() || 'Aquecer tudo');
+      }
       
       // metrics: state
       let latencyChartInstance = null;
       let cachedSendMetrics = [];
       let cachedCacheItems = [];
+      function getSelectedMetricsLimit() {
+        return Number.parseInt(metricsLimitSelect?.value || '100', 10);
+      }
       const nbSlugInput = document.getElementById('nb-slug');
       const nbTokenInput = document.getElementById('nb-token');
       const nbTitleInput = document.getElementById('nb-title');
@@ -1854,13 +1877,36 @@
         return (number / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
       }
 
-      function renderMediaCachePlaceholder(message = 'Selecione um bot para visualizar o cache.') {
+      function resetWarmupAllButton() {
+        if (!warmupAllBtn) return;
+        const defaultLabel = warmupAllBtn.getAttribute('data-default-label') || 'Aquecer tudo';
+        warmupAllBtn.disabled = false;
+        warmupAllBtn.textContent = defaultLabel;
+      }
+
+      function setWarmupAllButtonVisibility(shouldShow) {
+        if (!warmupAllBtn) return;
+        if (!shouldShow) {
+          resetWarmupAllButton();
+        }
+        warmupAllBtn.classList.toggle('hidden', !shouldShow);
+      }
+
+      function renderMediaCachePlaceholder(message = 'Selecione um bot para visualizar o cache.', options = {}) {
         if (!mediaCacheTableContainer) {
           return;
         }
+        const { state = 'idle' } = options;
         const safeMessage = escapeHtml(message);
         mediaCacheTableContainer.innerHTML =
-          `<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">${safeMessage}</div>`;
+          `<div class="placeholder" data-state="${escapeHtml(state)}" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">${safeMessage}</div>`;
+
+        if (state === 'empty') {
+          resetWarmupAllButton();
+          setWarmupAllButtonVisibility(true);
+        } else {
+          setWarmupAllButtonVisibility(false);
+        }
       }
 
 
@@ -2237,12 +2283,12 @@
           return;
         }
         if (!slug) {
-          renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.');
+          renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.', { state: 'idle' });
           return;
         }
 
         const requestId = ++mediaCacheRequestId;
-        renderMediaCachePlaceholder('Carregando cache…');
+        renderMediaCachePlaceholder('Carregando cache…', { state: 'loading' });
 
         try {
           const data = await fetchJSON(`/admin/api/bots/${encodeURIComponent(slug)}/media-cache`);
@@ -2253,7 +2299,7 @@
           cachedCacheItems = items;
 
           if (items.length === 0) {
-            renderMediaCachePlaceholder('Nenhum item no cache ainda.');
+            renderMediaCachePlaceholder('Sem itens no cache ainda. Sugestão: clique Aquecer tudo.', { state: 'empty' });
             return;
           }
 
@@ -2262,14 +2308,16 @@
           if (requestId !== mediaCacheRequestId) {
             return;
           }
-          const message = error instanceof Error ? error.message : 'Erro ao carregar cache.';
-          renderMediaCachePlaceholder(message);
+          const detail = error instanceof Error ? error.message : 'falha inesperada.';
+          renderMediaCachePlaceholder(`Erro ao carregar cache: ${detail}`, { state: 'error' });
         }
       }
 
       function renderCacheTable(items) {
         if (!mediaCacheTableContainer) return;
-        
+
+        setWarmupAllButtonVisibility(false);
+
         // map last route used by key
         const routeByKey = mapRouteUsedByKey(cachedSendMetrics);
         
@@ -2396,15 +2444,49 @@
           const url = `/admin/api/bots/${encodeURIComponent(bot.slug)}/warmup?key=${encodeURIComponent(key)}`;
           const response = await fetchJSON(url, { method: 'POST' });
           showToast(`Aquecimento de "${key}" concluído!`);
-          
+
           // refresh cache and metrics
+          const limit = getSelectedMetricsLimit();
           await Promise.all([
             refreshMediaCache(bot.slug),
-            onRefreshMetrics(),
+            fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true }),
           ]);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Erro ao aquecer mídia.';
           showToast(message);
+        }
+      }
+
+      async function handleWarmupAll() {
+        const bot = state.bots.find(b => b.id === state.currentBotId);
+        if (!bot || !bot.slug) {
+          showToast('Nenhum bot selecionado.');
+          return;
+        }
+        if (!warmupAllBtn) {
+          return;
+        }
+
+        const limit = getSelectedMetricsLimit();
+        if (!bot.warmup_chat_id) {
+          showToast('Configure o chat de warmup antes de aquecer.');
+          return;
+        }
+        warmupAllBtn.disabled = true;
+        warmupAllBtn.textContent = 'Aquecendo…';
+
+        try {
+          await fetchJSON(`/admin/api/bots/${encodeURIComponent(bot.slug)}/warmup`, { method: 'POST' });
+          showToast('Aquecer tudo concluído!');
+          await Promise.all([
+            refreshMediaCache(bot.slug),
+            fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true }),
+          ]);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao aquecer mídias.';
+          showToast(message);
+        } finally {
+          resetWarmupAllButton();
         }
       }
 
@@ -2483,31 +2565,44 @@
       }
 
       // metrics: main refresh handler
-      async function onRefreshMetrics() {
-        const slug = metricsBotSelect?.value || '';
-        const limit = Number.parseInt(metricsLimitSelect?.value || '100', 10);
-        
+      async function fetchAndRenderMetrics({ slug, limit, silent = false }) {
         if (!slug) {
-          showToast('Selecione um bot primeiro.');
+          if (!silent) {
+            showToast('Selecione um bot primeiro.');
+          }
           return;
         }
-        
-        if (btnRefreshMetrics) btnRefreshMetrics.disabled = true;
-        
+
+        if (!silent && btnRefreshMetrics) {
+          btnRefreshMetrics.disabled = true;
+        }
+
         try {
           const [sendMetrics, routeStats] = await Promise.all([
             loadSendMetrics({ slug, limit }),
             loadSendStats({ slug }),
           ]);
-          
+
           renderSendMetricsChart(sendMetrics);
           renderKPIs(routeStats);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Erro ao carregar métricas.';
-          showToast(message);
+          if (!silent) {
+            showToast(message);
+          } else {
+            console.error('Erro ao atualizar métricas automaticamente:', error);
+          }
         } finally {
-          if (btnRefreshMetrics) btnRefreshMetrics.disabled = false;
+          if (!silent && btnRefreshMetrics) {
+            btnRefreshMetrics.disabled = false;
+          }
         }
+      }
+
+      async function onRefreshMetrics() {
+        const slug = metricsBotSelect?.value || '';
+        const limit = getSelectedMetricsLimit();
+        await fetchAndRenderMetrics({ slug, limit, silent: false });
       }
 
       // metrics: build datasets for chart
@@ -2663,7 +2758,7 @@
         noBotsEl.classList.toggle('hidden', hasBots);
         paneEl.classList.toggle('hidden', !hasBots || !state.currentBotId);
         if (!hasBots || !state.currentBotId) {
-          renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.');
+          renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.', { state: 'idle' });
           if (plansBotSlugInput) {
             plansBotSlugInput.value = '';
           }
@@ -3219,8 +3314,10 @@
 
         if (bot.slug) {
           void refreshMediaCache(bot.slug);
+          const limit = getSelectedMetricsLimit();
+          void fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true });
         } else {
-          renderMediaCachePlaceholder('Configure o slug do bot para visualizar o cache.');
+          renderMediaCachePlaceholder('Configure o slug do bot para visualizar o cache.', { state: 'idle' });
         }
 
         const origin = window.location.origin.replace(/\/$/, '');
@@ -3288,6 +3385,9 @@
       cacheSearch?.addEventListener('input', debouncedFilterCache);
       cacheTypeFilter?.addEventListener('change', filterCacheTable);
       cacheStatusFilter?.addEventListener('change', filterCacheTable);
+      warmupAllBtn?.addEventListener('click', () => {
+        void handleWarmupAll();
+      });
 
       saveWarmupBtn?.addEventListener('click', async () => {
         const bot = getCurrentBot();
@@ -3339,7 +3439,11 @@
             : [];
           alert(`Warmup executado (${response?.count ?? 0} itens)\n${lines.join('\n')}`);
           if (bot.slug) {
-            await refreshMediaCache(bot.slug);
+            const limit = getSelectedMetricsLimit();
+            await Promise.all([
+              refreshMediaCache(bot.slug),
+              fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true }),
+            ]);
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Erro ao aquecer mídias.';
