@@ -8,6 +8,7 @@ import { webhookRouter } from './telegram/webhookRouter.js';
 import { mountAdminUpload } from './admin/upload.js';
 import { adminBotsRouter } from './admin/bots.js';
 import { createBotRouter } from './admin/createBot.js';
+import { registerAdminDownsellsRoutes } from './admin/downsells.js';
 
 export function createApp() {
   const app = express();
@@ -37,6 +38,7 @@ export function createApp() {
   mountAdminUpload(app);
   app.use(createBotRouter);
   app.use(adminBotsRouter);
+  registerAdminDownsellsRoutes(app);
 
   // Routes
   app.use(webhookRouter);
