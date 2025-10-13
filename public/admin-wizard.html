@@ -1197,8 +1197,8 @@
       </div>
     </header>
 
-    <!-- Abas por bot -->
-    <div id="bot-tabs" class="tabs"></div>
+    <!-- Abas por bot (removida a barra duplicada #bot-tabs; manteremos apenas a barra inferior #tabs-scroll) -->
+    <!-- <div id="bot-tabs" class="tabs"></div> -->
 
     <main class="card">
       <div class="card-header">
@@ -3564,7 +3564,7 @@
       ctx.stroke();
     }
 
-    // ===== Abas por bot =====
+    // ===== Abas por bot (topo) — desativada: mantemos só a barra #tabs-scroll =====
     const _botTabs = document.getElementById('bot-tabs');
 
     // elementos de slug existentes nas seções
@@ -3582,7 +3582,9 @@
 
     // carrega lista e desenha abas
     async function _initBotTabs(){
+      // Se a barra superior não existir, não faz nada (mantemos apenas #tabs-scroll)
       try{
+        if(!_botTabs) return;
         const resp = await fetch('/admin/api/bots',{ headers: _adminHeadersBare() });
         const data = await resp.json().catch(()=>({}));
         if(!resp.ok || !data?.ok || !Array.isArray(data.items)){ return; }
@@ -3596,7 +3598,7 @@
         const first = _getHashBot() && bots.find(b=>b.slug===_getHashBot()) ? _getHashBot() : bots[0].slug;
         _selectBotTab(first);
 
-        _botTabs.addEventListener('click', (ev)=>{
+        _botTabs && _botTabs.addEventListener('click', (ev)=>{
           const btn = ev.target.closest('.tab'); if(!btn) return;
           _selectBotTab(btn.getAttribute('data-slug'));
         });
@@ -3604,6 +3606,7 @@
     }
 
     function _setActiveTab(slug){
+      if(!_botTabs) return;
       _botTabs.querySelectorAll('.tab').forEach(el=>{
         el.classList.toggle('active', el.getAttribute('data-slug')===slug);
       });
@@ -3683,6 +3686,7 @@
     }
 
     // inicializar quando a página carrega
+    // A barra superior foi desativada; ainda assim mantemos a função guardada caso o elemento exista.
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', _initBotTabs);
     } else {
