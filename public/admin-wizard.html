@@ -83,6 +83,12 @@
       font-size: 14px;
     }
 
+    .as-readonly {
+      cursor: not-allowed;
+      opacity: 0.85;
+      background-color: #f9fafb;
+    }
+
     button,
     select,
     textarea,
@@ -1235,7 +1241,7 @@
       <div class="form-row">
         <div class="field">
           <label for="plans-bot-slug">Bot slug</label>
-          <input id="plans-bot-slug" type="text" placeholder="ex.: hadrielle-maria" autocomplete="off" />
+          <input id="plans-bot-slug" type="text" placeholder="ex.: hadrielle-maria" autocomplete="off" readonly title="Este slug é sincronizado automaticamente pela aba selecionada." />
         </div>
         <button id="btn-load-plans" type="button">Carregar planos</button>
       </div>
@@ -1378,6 +1384,46 @@
       const btnPixUpload = document.getElementById('btn-pix-upload');
       const offersText = document.getElementById('offers-text');
       const btnOffersSave = document.getElementById('btn-offers-save');
+
+      if (plansBotSlugInput) {
+        // lock manual slug: read-only + input prevention
+        plansBotSlugInput.readOnly = true;
+        plansBotSlugInput.classList.add('as-readonly');
+        if (!plansBotSlugInput.title) {
+          plansBotSlugInput.title = 'Este slug é sincronizado automaticamente pela aba selecionada.';
+        }
+        const preventManualInput = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        };
+        ['beforeinput', 'paste', 'drop'].forEach((type) => {
+          plansBotSlugInput.addEventListener(type, preventManualInput);
+        });
+        plansBotSlugInput.addEventListener('keydown', (event) => {
+          const allowedKeys = [
+            'Tab',
+            'Shift',
+            'Meta',
+            'Alt',
+            'Control',
+            'ArrowLeft',
+            'ArrowRight',
+            'ArrowUp',
+            'ArrowDown',
+            'Home',
+            'End',
+            'PageUp',
+            'PageDown',
+            'Escape',
+          ];
+          if (allowedKeys.includes(event.key)) {
+            return;
+          }
+          if (event.key.length === 1 || ['Backspace', 'Delete', 'Enter'].includes(event.key)) {
+            preventManualInput(event);
+          }
+        });
+      }
 
       renderPixPreview();
 
