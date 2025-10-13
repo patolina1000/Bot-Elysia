@@ -423,14 +423,9 @@ adminBotsRouter.get(
     try {
       const stats = await getDownsellsStats(botSlug);
       return res.json({ ok: true, stats });
-    } catch (error: any) {
-      // Se a tabela/visão não existe, retorna métricas vazias ao invés de quebrar
-      if (error?.code === '42P01') {
-        req.log?.warn({ error, botSlug }, '[downsells] metrics table not found, returning empty');
-        return res.json({ ok: true, stats: {} });
-      }
-      req.log?.error({ error }, '[downsells] metrics failed');
-      return res.status(500).json({ ok: false, error: 'downsells_metrics_failed' });
+    } catch (error) {
+      req.log?.warn({ error, botSlug }, '[downsells] metrics table not available, returning empty');
+      return res.json({ ok: true, stats: {} });
     }
   }
 );
