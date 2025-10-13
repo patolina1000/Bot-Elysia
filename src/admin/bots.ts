@@ -423,8 +423,9 @@ adminBotsRouter.get(
     try {
       const stats = await getDownsellsStats(botSlug);
       return res.json({ ok: true, stats });
-    } catch (error) {
-      req.log?.warn({ error, botSlug }, '[downsells] metrics table not available, returning empty');
+    } catch (error: any) {
+      const code = error?.code || error?.name;
+      req.log?.warn({ error, code, botSlug }, '[downsells] metrics table not available, returning empty');
       return res.json({ ok: true, stats: {} });
     }
   }

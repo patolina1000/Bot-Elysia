@@ -49,9 +49,17 @@ botSettingsRouter.get(
 
     try {
       const settings = await getSettings(parsedParams.data.slug);
-      res.json(settings);
-    } catch (err) {
-      req.log?.error({ err }, '[bot-settings] erro ao buscar configurações');
+      res.json({
+        ok: true,
+        settings: {
+          ...settings,
+          offers_text: settings.offers_text ?? '',
+          pix_downsell_text: settings.pix_downsell_text ?? '',
+        },
+      });
+    } catch (err: any) {
+      const code = err?.code || err?.name;
+      req.log?.error({ err, code }, '[bot-settings] erro ao buscar configurações');
       const message = err instanceof Error ? err.message : 'Erro ao buscar configurações';
       res.status(500).json({ error: message });
     }
