@@ -3,8 +3,8 @@ import { pool } from './pool.js';
 export interface BotSettings {
   bot_slug: string;
   pix_image_url: string | null;
-  offers_text: string | null;
-  pix_downsell_text?: string | null;
+  offers_text: string;
+  pix_downsell_text: string;
 }
 
 export async function getSettings(botSlug: string): Promise<BotSettings> {
@@ -12,8 +12,8 @@ export async function getSettings(botSlug: string): Promise<BotSettings> {
     `select
        bot_slug,
        pix_image_url,
-       offers_text,
-       coalesce(pix_downsell_text, null) as pix_downsell_text
+       coalesce(offers_text, '') as offers_text,
+       coalesce(pix_downsell_text, '') as pix_downsell_text
      from bot_settings
      where bot_slug = $1
      limit 1`,
@@ -24,14 +24,12 @@ export async function getSettings(botSlug: string): Promise<BotSettings> {
     return {
       bot_slug: String(result.rows[0].bot_slug),
       pix_image_url: result.rows[0].pix_image_url ? String(result.rows[0].pix_image_url) : null,
-      offers_text: result.rows[0].offers_text ? String(result.rows[0].offers_text) : null,
-      pix_downsell_text: result.rows[0].pix_downsell_text
-        ? String(result.rows[0].pix_downsell_text)
-        : result.rows[0].pix_downsell_text,
+      offers_text: String(result.rows[0].offers_text ?? ''),
+      pix_downsell_text: String(result.rows[0].pix_downsell_text ?? ''),
     };
   }
 
-  return { bot_slug: botSlug, pix_image_url: null, offers_text: null, pix_downsell_text: null };
+  return { bot_slug: botSlug, pix_image_url: null, offers_text: '', pix_downsell_text: '' };
 }
 
 export async function saveSettings(
@@ -57,9 +55,7 @@ export async function saveSettings(
   return {
     bot_slug: String(result.rows[0].bot_slug),
     pix_image_url: result.rows[0].pix_image_url ? String(result.rows[0].pix_image_url) : null,
-    offers_text: result.rows[0].offers_text ? String(result.rows[0].offers_text) : null,
-    pix_downsell_text: result.rows[0].pix_downsell_text
-      ? String(result.rows[0].pix_downsell_text)
-      : result.rows[0].pix_downsell_text,
+    offers_text: String(result.rows[0].offers_text ?? ''),
+    pix_downsell_text: String(result.rows[0].pix_downsell_text ?? ''),
   };
 }
