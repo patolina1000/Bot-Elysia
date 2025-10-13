@@ -8,28 +8,16 @@ export interface BotSettings {
 }
 
 export async function getSettings(botSlug: string): Promise<BotSettings> {
-  const result = await pool.query(
-    `select
-       bot_slug,
-       pix_image_url,
-       coalesce(offers_text, '') as offers_text,
-       coalesce(pix_downsell_text, '') as pix_downsell_text
-     from bot_settings
-     where bot_slug = $1
-     limit 1`,
-    [botSlug]
-  );
+  const result = await pool.query(`select * from bot_settings where bot_slug = $1 limit 1`, [botSlug]);
 
-  if (result.rows[0]) {
-    return {
-      bot_slug: String(result.rows[0].bot_slug),
-      pix_image_url: result.rows[0].pix_image_url ? String(result.rows[0].pix_image_url) : null,
-      offers_text: String(result.rows[0].offers_text ?? ''),
-      pix_downsell_text: String(result.rows[0].pix_downsell_text ?? ''),
-    };
-  }
+  const row: any = result.rows?.[0] ?? {};
 
-  return { bot_slug: botSlug, pix_image_url: null, offers_text: '', pix_downsell_text: '' };
+  return {
+    bot_slug: String(row.bot_slug ?? botSlug),
+    pix_image_url: row.pix_image_url ? String(row.pix_image_url) : null,
+    offers_text: String(row.offers_text ?? ''),
+    pix_downsell_text: String(row.pix_downsell_text ?? ''),
+  };
 }
 
 export async function saveSettings(
