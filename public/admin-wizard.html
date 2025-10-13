@@ -1344,6 +1344,23 @@
       <p class="plan-hint">* Valores são convertidos para centavos; mínimo R$ 0,50.</p>
     </section>
 
+    <section id="pix-downsell-card" class="simple-card">
+      <div>
+        <h2>Texto do PIX (Downsell)</h2>
+        <p class="description">Configure o texto exibido acima do "Pix Copia e Cola" no fluxo de downsell.</p>
+      </div>
+      <div class="form-row" style="gap:12px; flex-wrap:wrap;">
+        <div class="field" style="flex:1 1 320px; min-width:240px;">
+          <label for="pix-downsell-text">Texto personalizado</label>
+          <textarea id="pix-downsell-text" rows="8" maxlength="1000"
+            placeholder="✅ Como realizar o pagamento:\n\n1️⃣ Abra o aplicativo do seu banco.\n2️⃣ Selecione “Pagar” ou “Pix”.\n3️⃣ Escolha “Pix Copia e Cola”.\n4️⃣ Cole o código abaixo e confirme o pagamento.\n\n{title} — {price_brl}"></textarea>
+          <small class="muted">
+            <strong>Placeholders:</strong> <code>{title}</code>, <code>{price_brl}</code>. Máximo de 1000 caracteres.
+          </small>
+        </div>
+      </div>
+    </section>
+
     <section id="downsells-card" class="simple-card">
       <div>
         <h2>Downsells por bot</h2>
@@ -1630,6 +1647,7 @@
       const btnPixUpload = document.getElementById('btn-pix-upload');
       const offersText = document.getElementById('offers-text');
       const btnOffersSave = document.getElementById('btn-offers-save');
+      const pixDownsellText = document.getElementById('pix-downsell-text');
 
       renderPixPreview();
 
@@ -1773,6 +1791,25 @@
         pixPreviewBox.appendChild(img);
       }
 
+      function setPixDownsellValue(value) {
+        if (!pixDownsellText) {
+          return;
+        }
+        if (typeof value !== 'string') {
+          pixDownsellText.value = '';
+          return;
+        }
+        pixDownsellText.value = value.slice(0, 1000);
+      }
+
+      function getPixDownsellPayload() {
+        const raw = (pixDownsellText?.value || '').trim();
+        if (!raw) {
+          return null;
+        }
+        return raw.slice(0, 1000);
+      }
+
       async function loadPixSettings(slug) {
         if (!pixImageUrlInput) {
           return;
@@ -1785,6 +1822,7 @@
           if (offersText) {
             offersText.value = typeof settings?.offers_text === 'string' ? settings.offers_text : '';
           }
+          setPixDownsellValue(settings?.pix_downsell_text || '');
           renderPixPreview();
         } catch (error) {
           console.warn('[pix] falha ao carregar imagem', error);
@@ -1792,6 +1830,7 @@
           if (offersText) {
             offersText.value = '';
           }
+          setPixDownsellValue('');
           renderPixPreview();
         }
       }
@@ -1906,9 +1945,10 @@
           await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/settings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               pix_image_url: url || null,
-              offers_text: offersText?.value || null
+              offers_text: offersText?.value || null,
+              pix_downsell_text: getPixDownsellPayload(),
             }),
           });
           renderPixPreview();
@@ -2933,9 +2973,10 @@
           await fetchJSON(`/api/bots/${encodeURIComponent(slug)}/settings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               pix_image_url: pixImageUrlInput?.value || null,
-              offers_text: offersText?.value || null
+              offers_text: offersText?.value || null,
+              pix_downsell_text: getPixDownsellPayload(),
             }),
           });
           showToast('Texto salvo!');
