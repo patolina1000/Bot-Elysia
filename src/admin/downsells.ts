@@ -8,7 +8,10 @@ type DownsellMediaType = 'photo' | 'video' | 'audio';
 
 type DownsellPayload = {
   bot_slug: string;
-  price_cents: number;
+  price_cents?: number;
+  price?: string | number;
+  price_brl?: string | number;
+  price_reais?: string | number;
   copy: string;
   media_url?: string | null;
   media_type?: DownsellMediaType | null;
@@ -20,6 +23,40 @@ type DownsellPayload = {
 function sanitizeStr(value: unknown, max = 5000): string {
   const str = String(value ?? '').trim();
   return str.length > max ? str.slice(0, max) : str;
+}
+
+function parsePriceToCents(value: unknown): number {
+  if (value === null || value === undefined) {
+    return Number.NaN;
+  }
+
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return Number.NaN;
+  }
+
+  const cleaned = trimmed.replace(/\s+/g, '').replace(/[^0-9,.-]/g, '');
+  if (!cleaned) {
+    return Number.NaN;
+  }
+
+  const hasComma = cleaned.includes(',');
+  let normalized = cleaned.replace(',', '.');
+
+  if (hasComma) {
+    normalized = normalized.replace(/\.(?=.*\.)/g, '');
+  } else {
+    const parts = normalized.split('.');
+    if (parts.length > 2) {
+      const decimals = parts.pop() ?? '';
+      normalized =
+        parts.join('') +
+        (decimals.length > 2 ? decimals : decimals ? `.${decimals}` : '');
+    }
+  }
+
+  const number = Number(normalized);
+  return Number.isFinite(number) ? Math.round(number * 100) : Number.NaN;
 }
 
 async function ensureDownsellSchema(): Promise<void> {
@@ -74,9 +111,28 @@ export function registerAdminDownsellsRoutes(app: Express): void {
             ? (rawMediaType as DownsellMediaType)
             : null;
         const trigger: DownsellTrigger = payload.trigger === 'after_pix' ? 'after_pix' : 'after_start';
-        const priceCents = Number.isFinite(payload?.price_cents)
+        let priceCents = Number.isFinite(payload?.price_cents as number)
           ? Number(payload!.price_cents)
           : Number.NaN;
+
+        if (!Number.isFinite(priceCents)) {
+          const fallbackSource = payload as {
+            price?: unknown;
+            price_brl?: unknown;
+            price_reais?: unknown;
+          };
+          const rawReais =
+            fallbackSource?.price ??
+            fallbackSource?.price_brl ??
+            fallbackSource?.price_reais ??
+            null;
+          if (rawReais !== null && rawReais !== undefined) {
+            const parsed = parsePriceToCents(rawReais);
+            if (Number.isFinite(parsed)) {
+              priceCents = parsed;
+            }
+          }
+        }
         const sortOrder = Number.isFinite(payload?.sort_order as number)
           ? Number(payload!.sort_order)
           : 0;
@@ -89,7 +145,10 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           return res.status(400).json({ ok: false, error: 'copy obrigatória' });
         }
         if (!Number.isFinite(priceCents) || priceCents < 0) {
-          return res.status(400).json({ ok: false, error: 'price_cents inválido' });
+          return res.status(400).json({
+            ok: false,
+            error: "price inválido: envie price_cents (centavos) ou price (reais, ex: 19,90)",
+          });
         }
 
         const insertQuery = `
