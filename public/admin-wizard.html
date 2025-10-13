@@ -1723,7 +1723,6 @@
       const metricsBotSelect = document.getElementById('metrics-bot-select');
       const metricsLimitSelect = document.getElementById('metrics-limit-select');
       const btnRefreshMetrics = document.getElementById('btn-refresh-metrics');
-      const sendLatencyChart = document.getElementById('send-latency-chart');
       const kpiContainer = document.getElementById('kpi-container');
       const mediaCacheTableContainer = document.getElementById('media-cache-table-container');
       const warmupAllBtn = document.getElementById('btn-warmup-all');
@@ -1738,8 +1737,152 @@
       
       // metrics: state
       let latencyChartInstance = null;
+      let latencyChartNeedsResize = false;
       let cachedSendMetrics = [];
       let cachedCacheItems = [];
+
+      function getLatencyCanvas() {
+        return document.getElementById('send-latency-chart');
+      }
+
+      function destroyLatencyChart() {
+        if (latencyChartInstance) {
+          latencyChartInstance.destroy();
+          latencyChartInstance = null;
+        }
+
+        const zombieInstance = Chart.getChart('send-latency-chart');
+        if (zombieInstance) {
+          zombieInstance.destroy();
+        }
+
+        const canvas = getLatencyCanvas();
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+        }
+
+        latencyChartNeedsResize = false;
+        cachedSendMetrics = [];
+      }
+
+      function upsertLatencyChart({ labels = [], datasets = [] }) {
+        const canvas = getLatencyCanvas();
+        if (!canvas) {
+          return null;
+        }
+
+        let chart = latencyChartInstance || Chart.getChart('send-latency-chart');
+        if (chart) {
+          latencyChartInstance = chart;
+          chart.data.labels = labels;
+          chart.data.datasets = datasets;
+          chart.update('none');
+          const computed = window.getComputedStyle(canvas);
+          const hidden = canvas.offsetParent === null || computed.display === 'none' || computed.visibility === 'hidden';
+          if (hidden) {
+            latencyChartNeedsResize = true;
+          } else {
+            chart.resize();
+            latencyChartNeedsResize = false;
+          }
+          return chart;
+        }
+
+        const existing = Chart.getChart('send-latency-chart');
+        if (existing) {
+          existing.destroy();
+        }
+
+        const ctx = canvas.getContext('2d');
+        chart = new Chart(ctx, {
+          type: 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  usePointStyle: true,
+                  padding: 10,
+                  font: { size: 11 },
+                },
+              },
+              tooltip: {
+                mode: 'nearest',
+                intersect: false,
+              },
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'minute',
+                  displayFormats: {
+                    minute: 'HH:mm',
+                  },
+                },
+                title: {
+                  display: true,
+                  text: 'Timestamp',
+                  font: { size: 11 },
+                },
+                ticks: {
+                  font: { size: 10 },
+                },
+              },
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Latência (ms)',
+                  font: { size: 11 },
+                },
+                ticks: {
+                  font: { size: 10 },
+                },
+              },
+            },
+          },
+        });
+
+        latencyChartInstance = chart;
+
+        const computed = window.getComputedStyle(canvas);
+        const hidden = canvas.offsetParent === null || computed.display === 'none' || computed.visibility === 'hidden';
+        if (hidden) {
+          latencyChartNeedsResize = true;
+        } else {
+          latencyChartInstance.resize();
+          latencyChartNeedsResize = false;
+        }
+
+        return chart;
+      }
+
+      function ensureLatencyChartVisible() {
+        if (!latencyChartNeedsResize || !latencyChartInstance) {
+          return;
+        }
+
+        const canvas = getLatencyCanvas();
+        if (!canvas) {
+          latencyChartNeedsResize = false;
+          return;
+        }
+
+        const computed = window.getComputedStyle(canvas);
+        const hidden = canvas.offsetParent === null || computed.display === 'none' || computed.visibility === 'hidden';
+        if (!hidden) {
+          latencyChartInstance.resize();
+          latencyChartNeedsResize = false;
+        }
+      }
       function getSelectedMetricsLimit() {
         return Number.parseInt(metricsLimitSelect?.value || '100', 10);
       }
@@ -2449,7 +2592,7 @@
           const limit = getSelectedMetricsLimit();
           await Promise.all([
             refreshMediaCache(bot.slug),
-            fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true }),
+            scheduleMetricsRefresh({ slug: bot.slug, limit, silent: true }),
           ]);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Erro ao aquecer mídia.';
@@ -2480,7 +2623,7 @@
           showToast('Aquecer tudo concluído!');
           await Promise.all([
             refreshMediaCache(bot.slug),
-            fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true }),
+            scheduleMetricsRefresh({ slug: bot.slug, limit, silent: true }),
           ]);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Erro ao aquecer mídias.';
@@ -2599,31 +2742,35 @@
         }
       }
 
+      const scheduleMetricsRefresh = debounceAsync(fetchAndRenderMetrics, 250);
+
       async function onRefreshMetrics() {
         const slug = metricsBotSelect?.value || '';
         const limit = getSelectedMetricsLimit();
-        await fetchAndRenderMetrics({ slug, limit, silent: false });
+        await scheduleMetricsRefresh({ slug, limit, silent: false });
       }
 
       // metrics: build datasets for chart
       function renderSendMetricsChart(items) {
-        if (!sendLatencyChart) return;
-        
+        const canvas = getLatencyCanvas();
+        if (!canvas) return;
+
         if (items.length === 0) {
-          // destroy existing chart
-          if (latencyChartInstance) {
-            latencyChartInstance.destroy();
-            latencyChartInstance = null;
+          destroyLatencyChart();
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width || canvas.clientWidth || 0, canvas.height || canvas.clientHeight || 0);
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '13px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Nenhum envio registrado ainda.', (canvas.width || canvas.clientWidth || 0) / 2, (canvas.height || canvas.clientHeight || 0) / 2);
           }
-          const ctx = sendLatencyChart.getContext('2d');
-          ctx.clearRect(0, 0, sendLatencyChart.width, sendLatencyChart.height);
-          ctx.fillStyle = '#9ca3af';
-          ctx.font = '13px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText('Nenhum envio registrado ainda.', sendLatencyChart.width / 2, sendLatencyChart.height / 2);
+          if (cachedCacheItems.length > 0) {
+            renderCacheTable(cachedCacheItems);
+          }
           return;
         }
-        
+
         // group by route
         const routeMap = {};
         items.forEach(item => {
@@ -2631,7 +2778,7 @@
           if (!routeMap[route]) routeMap[route] = [];
           routeMap[route].push(item);
         });
-        
+
         // colors for routes
         const colorPalette = {
           file_id: '#10b981',
@@ -2641,14 +2788,14 @@
           keepalive_ping: '#ef4444',
         };
         const defaultColors = ['#64748b', '#06b6d4', '#ec4899', '#84cc16'];
-        
+
         const datasets = Object.keys(routeMap).map((route, idx) => {
           const color = colorPalette[route] || defaultColors[idx % defaultColors.length];
           const data = routeMap[route].map(item => ({
             x: new Date(item.ts),
             y: item.tg_ms || 0,
           }));
-          
+
           return {
             label: route,
             data,
@@ -2660,66 +2807,17 @@
             tension: 0.2,
           };
         });
-        
-        // destroy previous chart if exists
-        if (latencyChartInstance) {
-          latencyChartInstance.destroy();
+
+        const labels = Array.from(new Set(items.map(item => {
+          const date = new Date(item.ts);
+          return Number.isFinite(date.getTime()) ? date.getTime() : null;
+        }).filter(ts => ts !== null))).sort((a, b) => a - b).map(ts => new Date(ts));
+
+        upsertLatencyChart({ labels, datasets });
+        ensureLatencyChartVisible();
+        if (cachedCacheItems.length > 0) {
+          renderCacheTable(cachedCacheItems);
         }
-        
-        const ctx = sendLatencyChart.getContext('2d');
-        latencyChartInstance = new Chart(ctx, {
-          type: 'line',
-          data: { datasets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'bottom',
-                labels: {
-                  usePointStyle: true,
-                  padding: 10,
-                  font: { size: 11 },
-                },
-              },
-              tooltip: {
-                mode: 'nearest',
-                intersect: false,
-              },
-            },
-            scales: {
-              x: {
-                type: 'time',
-                time: {
-                  unit: 'minute',
-                  displayFormats: {
-                    minute: 'HH:mm',
-                  },
-                },
-                title: {
-                  display: true,
-                  text: 'Timestamp',
-                  font: { size: 11 },
-                },
-                ticks: {
-                  font: { size: 10 },
-                },
-              },
-              y: {
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Latência (ms)',
-                  font: { size: 11 },
-                },
-                ticks: {
-                  font: { size: 10 },
-                },
-              },
-            },
-          },
-        });
       }
 
       async function fetchJSON(url, opts = {}) {
@@ -2757,6 +2855,9 @@
         }
         noBotsEl.classList.toggle('hidden', hasBots);
         paneEl.classList.toggle('hidden', !hasBots || !state.currentBotId);
+        if (paneEl && !paneEl.classList.contains('hidden')) {
+          requestAnimationFrame(() => ensureLatencyChartVisible());
+        }
         if (!hasBots || !state.currentBotId) {
           renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.', { state: 'idle' });
           if (plansBotSlugInput) {
@@ -2765,6 +2866,7 @@
           if (plansList) {
             setPlansPlaceholder('Informe o slug do bot e clique em "Carregar planos".');
           }
+          destroyLatencyChart();
         }
       }
 
@@ -2883,12 +2985,13 @@
         history.replaceState(null, '', `#bot=${botId}`);
         renderTabs();
         updateNoBotsVisibility();
-        
+
         // metrics: sync bot select
         if (metricsBotSelect && targetBot.slug) {
           metricsBotSelect.value = targetBot.slug;
         }
-        
+
+        destroyLatencyChart();
         await loadBotPane(botId);
       }
 
@@ -2903,6 +3006,7 @@
           const keepDirty = state.dirty.has(botId);
           pane.fill(botId, normalizeTemplate(data), { keepDirty });
           paneEl.classList.remove('hidden');
+          requestAnimationFrame(() => ensureLatencyChartVisible());
         } catch (err) {
           alert(err instanceof Error ? err.message : 'Erro ao carregar template.');
         }
@@ -3315,7 +3419,7 @@
         if (bot.slug) {
           void refreshMediaCache(bot.slug);
           const limit = getSelectedMetricsLimit();
-          void fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true });
+          void scheduleMetricsRefresh({ slug: bot.slug, limit, silent: true });
         } else {
           renderMediaCachePlaceholder('Configure o slug do bot para visualizar o cache.', { state: 'idle' });
         }
@@ -3338,17 +3442,17 @@
       // metrics: populate bot select when bots load
       function populateMetricsBotSelect() {
         if (!metricsBotSelect) return;
-        
+
         const currentValue = metricsBotSelect.value;
         metricsBotSelect.innerHTML = '<option value="">Selecione um bot</option>';
-        
+
         state.bots.forEach(bot => {
           const option = document.createElement('option');
           option.value = bot.slug || '';
           option.textContent = `${bot.title || bot.slug || 'Bot'} (${bot.slug})`;
           metricsBotSelect.appendChild(option);
         });
-        
+
         // restore selection
         if (currentValue) {
           metricsBotSelect.value = currentValue;
@@ -3361,6 +3465,41 @@
         return function (...args) {
           clearTimeout(timeoutId);
           timeoutId = setTimeout(() => fn.apply(this, args), delay);
+        };
+      }
+
+      function debounceAsync(fn, delay) {
+        let timeoutId = null;
+        let pendingPromise = null;
+        let pendingResolve;
+        let pendingReject;
+        let lastArgs = null;
+        let chain = Promise.resolve();
+
+        return function (...args) {
+          lastArgs = args;
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          if (!pendingPromise) {
+            pendingPromise = new Promise((resolve, reject) => {
+              pendingResolve = resolve;
+              pendingReject = reject;
+            });
+          }
+          timeoutId = setTimeout(() => {
+            timeoutId = null;
+            const currentArgs = lastArgs;
+            lastArgs = null;
+            const resolve = pendingResolve;
+            const reject = pendingReject;
+            pendingPromise = null;
+            pendingResolve = pendingReject = null;
+            const execution = chain.then(() => fn.apply(this, currentArgs));
+            chain = execution.catch(() => {});
+            execution.then(resolve, reject);
+          }, delay);
+          return pendingPromise;
         };
       }
 
@@ -3442,7 +3581,7 @@
             const limit = getSelectedMetricsLimit();
             await Promise.all([
               refreshMediaCache(bot.slug),
-              fetchAndRenderMetrics({ slug: bot.slug, limit, silent: true }),
+              scheduleMetricsRefresh({ slug: bot.slug, limit, silent: true }),
             ]);
           }
         } catch (error) {
