@@ -1751,12 +1751,10 @@
           latencyChartInstance = null;
         }
 
-        const zombieInstance = Chart.getChart('send-latency-chart');
-        if (zombieInstance) {
-          zombieInstance.destroy();
-        }
-
         const canvas = getLatencyCanvas();
+        const zombieInstance = canvas ? Chart.getChart(canvas) : null;
+        zombieInstance?.destroy();
+
         if (canvas) {
           const ctx = canvas.getContext('2d');
           if (ctx) {
@@ -1774,7 +1772,7 @@
           return null;
         }
 
-        let chart = latencyChartInstance || Chart.getChart('send-latency-chart');
+        let chart = latencyChartInstance || (canvas ? Chart.getChart(canvas) : null);
         if (chart) {
           latencyChartInstance = chart;
           chart.data.labels = labels;
@@ -1791,10 +1789,8 @@
           return chart;
         }
 
-        const existing = Chart.getChart('send-latency-chart');
-        if (existing) {
-          existing.destroy();
-        }
+        const existing = canvas ? Chart.getChart(canvas) : null;
+        existing?.destroy();
 
         const ctx = canvas.getContext('2d');
         chart = new Chart(ctx, {
