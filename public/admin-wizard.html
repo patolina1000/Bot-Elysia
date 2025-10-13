@@ -1854,11 +1854,13 @@
         return (number / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
       }
 
-      function renderMediaCachePlaceholder(message) {
-        if (!mediaCacheTableContainer) return;
-        const msg = message || 'Selecione um bot para visualizar o cache.';
+      function renderMediaCachePlaceholder(message = 'Selecione um bot para visualizar o cache.') {
+        if (!mediaCacheTableContainer) {
+          return;
+        }
+        const safeMessage = escapeHtml(message);
         mediaCacheTableContainer.innerHTML =
-          `<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">${escapeHtml(msg)}</div>`;
+          `<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">${safeMessage}</div>`;
       }
 
 
