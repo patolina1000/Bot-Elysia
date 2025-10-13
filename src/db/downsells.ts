@@ -258,58 +258,42 @@ export interface DownsellStats {
   error: number;
   pix: number;
   purchased: number;
+  last_seen?: string | null;
 }
 
-export async function getDownsellsStats(botSlug: string): Promise<Record<number, DownsellStats>> {
+export async function getDownsellsStats(botSlug: string): Promise<Record<string, DownsellStats>> {
   const res = await pool.query(
     `
-    WITH q AS (
-      SELECT
-        downsell_id,
-        COUNT(*) FILTER (WHERE status='scheduled') AS scheduled,
-        COUNT(*) FILTER (WHERE status='sent') AS sent,
-        COUNT(*) FILTER (WHERE status='canceled') AS canceled,
-        COUNT(*) FILTER (WHERE status='error') AS error
-      FROM downsells_queue
+      SELECT bot_slug, scheduled, sent, canceled, error, pix, purchased, last_seen
+      FROM public.admin_downsell_metrics
       WHERE bot_slug = $1
-      GROUP BY downsell_id
-    ),
-    p AS (
-      SELECT
-        (meta->>'downsell_id')::bigint AS downsell_id,
-        COUNT(*) FILTER (WHERE meta->>'origin' = 'downsell') AS pix,
-        COUNT(*) FILTER (WHERE meta->>'origin' = 'downsell' AND status IN ('paid','approved','completed','success')) AS purchased
-      FROM payments
-      WHERE (meta->>'downsell_id') IS NOT NULL
-      GROUP BY (meta->>'downsell_id')::bigint
-    )
-    SELECT d.id AS downsell_id,
-           COALESCE(q.scheduled,0) AS scheduled,
-           COALESCE(q.sent,0) AS sent,
-           COALESCE(q.canceled,0) AS canceled,
-           COALESCE(q.error,0) AS error,
-           COALESCE(p.pix,0) AS pix,
-           COALESCE(p.purchased,0) AS purchased
-    FROM downsells d
-    LEFT JOIN q ON q.downsell_id = d.id
-    LEFT JOIN p ON p.downsell_id = d.id
-    WHERE d.bot_slug = $1
     `,
     [botSlug]
   );
 
-  const out: Record<number, DownsellStats> = {};
-  for (const r of res.rows) {
-    out[Number(r.downsell_id)] = {
-      scheduled: Number(r.scheduled ?? 0),
-      sent: Number(r.sent ?? 0),
-      canceled: Number(r.canceled ?? 0),
-      error: Number(r.error ?? 0),
-      pix: Number(r.pix ?? 0),
-      purchased: Number(r.purchased ?? 0),
+  if (res.rows.length === 0) {
+    return {};
+  }
+
+  const stats: Record<string, DownsellStats> = {};
+  for (const row of res.rows) {
+    stats['__aggregate__'] = {
+      scheduled: Number(row.scheduled ?? 0),
+      sent: Number(row.sent ?? 0),
+      canceled: Number(row.canceled ?? 0),
+      error: Number(row.error ?? 0),
+      pix: Number(row.pix ?? 0),
+      purchased: Number(row.purchased ?? 0),
+      last_seen:
+        row.last_seen instanceof Date
+          ? row.last_seen.toISOString()
+          : row.last_seen
+          ? String(row.last_seen)
+          : null,
     };
   }
-  return out;
+
+  return stats;
 }
 
 // ===== VARIANTS (A/B) =====

@@ -3269,7 +3269,7 @@
   const Bm1 = document.getElementById('ds-B-m1'); const Bm1t = document.getElementById('ds-B-m1t');
   const Bm2 = document.getElementById('ds-B-m2'); const Bm2t = document.getElementById('ds-B-m2t');
 
-  let downsStats = {}; // { [downsell_id]: {scheduled, sent, canceled, error, pix, purchased} }
+  let downsStats = {}; // { [downsell_id]: {..}, __aggregate__?: {scheduled, sent, canceled, error, pix, purchased} }
 
   // Helper para BRL -> centavos (aceita vírgula e ponto)
   function toCents(v) {
@@ -3330,8 +3330,19 @@
       downsList.innerHTML = '<div class="placeholder">Nenhum downsell ainda.</div>';
       return;
     }
+    const aggregate = downsStats.__aggregate__ || null;
+    const fallbackStats = aggregate
+      ? {
+          scheduled: Number(aggregate.scheduled ?? 0),
+          sent: Number(aggregate.sent ?? 0),
+          canceled: Number(aggregate.canceled ?? 0),
+          error: Number(aggregate.error ?? 0),
+          pix: Number(aggregate.pix ?? 0),
+          purchased: Number(aggregate.purchased ?? 0),
+        }
+      : { scheduled: 0, sent: 0, canceled: 0, error: 0, pix: 0, purchased: 0 };
     downsList.innerHTML = items.map(it => {
-      const st = downsStats[it.id] || {scheduled:0, sent:0, canceled:0, error:0, pix:0, purchased:0};
+      const st = downsStats[it.id] || fallbackStats;
       return `<div class="card-section" style="display:flex; justify-content:space-between; gap:12px; align-items:center">
         <div style="flex:1">
           <div><strong>${it.title}</strong> — ${brl(it.price_cents)}</div>
@@ -3699,14 +3710,32 @@
           box.style.cssText = 'background:#f9fafb; border-radius:8px; padding:12px; margin-bottom:16px;';
           cont.parentElement.insertBefore(box, cont);
         }
-        const agg = Object.values(data.stats).reduce((acc, s)=>({
-          scheduled: acc.scheduled + (s.scheduled||0),
-          sent: acc.sent + (s.sent||0),
-          canceled: acc.canceled + (s.canceled||0),
-          error: acc.error + (s.error||0),
-          pix: acc.pix + (s.pix||0),
-          purchased: acc.purchased + (s.purchased||0),
-        }), {scheduled:0,sent:0,canceled:0,error:0,pix:0,purchased:0});
+        const stats = data.stats || {};
+        const aggregate = stats.__aggregate__ || null;
+        const baseTotals = Object.entries(stats)
+          .filter(([key]) => key !== '__aggregate__')
+          .map(([, value]) => value)
+          .reduce(
+            (acc, s) => ({
+              scheduled: acc.scheduled + (Number(s?.scheduled) || 0),
+              sent: acc.sent + (Number(s?.sent) || 0),
+              canceled: acc.canceled + (Number(s?.canceled) || 0),
+              error: acc.error + (Number(s?.error) || 0),
+              pix: acc.pix + (Number(s?.pix) || 0),
+              purchased: acc.purchased + (Number(s?.purchased) || 0),
+            }),
+            { scheduled: 0, sent: 0, canceled: 0, error: 0, pix: 0, purchased: 0 }
+          );
+        const agg = aggregate
+          ? {
+              scheduled: Number(aggregate.scheduled ?? 0),
+              sent: Number(aggregate.sent ?? 0),
+              canceled: Number(aggregate.canceled ?? 0),
+              error: Number(aggregate.error ?? 0),
+              pix: Number(aggregate.pix ?? 0),
+              purchased: Number(aggregate.purchased ?? 0),
+            }
+          : baseTotals;
 
         box.innerHTML = `
           <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:14px;">
