@@ -2587,7 +2587,18 @@
           const info = document.createElement('div');
           const price = document.createElement('div');
           price.className = 'downsells-item-price';
-          price.textContent = item?.price_brl ? `R$ ${item.price_brl}` : 'R$ --';
+          const hasPriceCents =
+            item?.price_cents !== undefined &&
+            item?.price_cents !== null &&
+            item.price_cents !== '';
+          const priceCents = hasPriceCents ? Number(item.price_cents) : Number.NaN;
+          if (Number.isFinite(priceCents)) {
+            price.textContent = centsToBRL(priceCents);
+          } else if (item?.price_brl) {
+            price.textContent = `R$ ${item.price_brl}`;
+          } else {
+            price.textContent = 'R$ --';
+          }
           const moment = document.createElement('div');
           moment.className = 'downsells-item-moment';
           moment.textContent = item?.moment === 'after_pix' ? 'Após gerar PIX' : 'Após /start';
@@ -2691,7 +2702,28 @@
           downsellsModalTitle.textContent = downsellsEditing ? 'Editar downsell' : 'Novo downsell';
         }
         if (dsPriceInput) {
-          dsPriceInput.value = downsellsEditing?.price_brl ?? '';
+          const editPrice = (() => {
+            if (!downsellsEditing) {
+              return '';
+            }
+            if (downsellsEditing?.price_brl) {
+              return String(downsellsEditing.price_brl);
+            }
+            const hasCents =
+              downsellsEditing?.price_cents !== undefined &&
+              downsellsEditing?.price_cents !== null &&
+              downsellsEditing?.price_cents !== '';
+            const cents = hasCents ? Number(downsellsEditing?.price_cents) : Number.NaN;
+            if (!Number.isFinite(cents)) {
+              return '';
+            }
+            const reais = cents / 100;
+            return reais.toLocaleString('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            });
+          })();
+          dsPriceInput.value = editPrice;
         }
         if (dsMomentSelect) {
           dsMomentSelect.value = downsellsEditing?.moment === 'after_pix' ? 'after_pix' : 'after_start';
@@ -2727,11 +2759,42 @@
           return;
         }
 
+        const priceCents = (() => {
+          const raw = String(dsPriceInput?.value ?? '').trim();
+          if (!raw) {
+            return Number.NaN;
+          }
+          const cleaned = raw.replace(/\s+/g, '').replace(/[^0-9,.-]/g, '');
+          if (!cleaned) {
+            return Number.NaN;
+          }
+          const hasComma = cleaned.includes(',');
+          let normalized = cleaned.replace(',', '.');
+          if (hasComma) {
+            normalized = normalized.replace(/\.(?=.*\.)/g, '');
+          } else {
+            const parts = normalized.split('.');
+            if (parts.length > 2) {
+              const decimals = parts.pop() ?? '';
+              normalized =
+                parts.join('') +
+                (decimals.length > 2 ? decimals : decimals ? `.${decimals}` : '');
+            }
+          }
+          const value = Number(normalized);
+          return Number.isFinite(value) ? Math.round(value * 100) : Number.NaN;
+        })();
+
+        if (!Number.isFinite(priceCents) || priceCents < 0) {
+          alert('Preço inválido. Use formato 19,90.');
+          return;
+        }
+
         const payload = {
           id: downsellsEditing?.id ?? undefined,
           bot_slug: slug,
           copy: (dsCopyTextarea?.value || '').trim(),
-          price_brl: (dsPriceInput?.value || '').trim(),
+          price_cents: priceCents,
           media_url: (dsMediaUrlInput?.value || '').trim() || null,
           moment: dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start',
           active: Boolean(dsActiveCheckbox?.checked),
