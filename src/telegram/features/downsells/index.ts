@@ -1,8 +1,28 @@
-import { Composer, InputFile } from 'grammy';
+import { Composer } from 'grammy';
 import type { MyContext } from '../../grammYContext.js';
-import { createPixForDownsell, centsToBRL } from '../../../services/bot/downsellsFlow.js';
+import { createPixForDownsell } from '../../../services/bot/downsellsFlow.js';
+import { getSettings } from '../../../db/botSettings.js';
 
 export const downsellsFeature = new Composer<MyContext>();
+
+function escapeHtml(input: string): string {
+  return input.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
+}
 
 // Callback: gerar PIX para downsell
 downsellsFeature.on('callback_query:data', async (ctx, next) => {
@@ -18,58 +38,61 @@ downsellsFeature.on('callback_query:data', async (ctx, next) => {
 
   try {
     await ctx.answerCallbackQuery({ text: 'Gerando PIX…' });
-    const { transaction, title } = await createPixForDownsell({
+    const { transaction } = await createPixForDownsell({
       bot_slug: ctx.bot_slug!,
       telegram_id: ctx.from!.id,
       downsell_id: downsellId,
     });
 
-    const brl = centsToBRL(transaction.value_cents);
-
-    const caption =
-      `✅ PIX criado para **${title}**\n` +
-      `Valor: *${brl}*\n\n` +
-      'Pague escaneando o QR code abaixo.';
-
-    const fallbackMessage =
-      `✅ PIX criado para **${title}**\n` +
-      `Valor: *${brl}*\n\n` +
-      'Copia e Cola:\n' +
-      `\`${transaction.qr_code ?? 'indisponível'}\``;
-
-    const sendPhotoFromBase64 = async (): Promise<boolean> => {
-      const raw = transaction.qr_code_base64;
-      if (!raw) return false;
-      const base64Content = raw.includes('base64,') ? raw.split('base64,')[1] ?? '' : raw;
-      if (!base64Content) return false;
-      const buf = Buffer.from(base64Content, 'base64');
-      await ctx.replyWithPhoto(new InputFile(buf, 'pix.png'), {
-        caption,
-        parse_mode: 'Markdown',
-      });
-      return true;
-    };
-
+    // 1) Imagem configurável do bot (mesmo do fluxo principal)
     try {
-      const sent = await sendPhotoFromBase64();
-      if (!sent) {
-        if (transaction.qr_code) {
-          await ctx.reply(fallbackMessage, { parse_mode: 'Markdown' });
-        } else {
-          await ctx.answerCallbackQuery({
-            text: 'QR indisponível no momento. Use o código Pix Copia e Cola.',
-            show_alert: true,
-          });
-        }
+      const settings = await getSettings(ctx.bot_slug!);
+      if (settings?.pix_image_url) {
+        await ctx.replyWithPhoto(settings.pix_image_url);
       }
-    } catch (err) {
-      ctx.logger.warn({ err, downsellId }, '[DOWNSELL][PIX] failed to send qr image');
-      if (transaction.qr_code) {
-        await ctx.reply(fallbackMessage, { parse_mode: 'Markdown' });
-      } else {
-        await ctx.answerCallbackQuery({ text: 'Erro ao gerar a imagem do QR.', show_alert: true });
-      }
+    } catch (settingsError) {
+      ctx.logger?.warn({ err: settingsError, bot_slug: ctx.bot_slug }, '[DOWNSELL][PIX] pix_image_url failed');
     }
+
+    // 2) Instruções + Pix Copia e Cola
+    const instructions = [
+      '✅ Como realizar o pagamento:',
+      '',
+      '1️⃣ Abra o aplicativo do seu banco.',
+      '',
+      '2️⃣ Selecione a opção “Pagar” ou “Pix”.',
+      '',
+      '3️⃣ Escolha “Pix Copia e Cola”.',
+      '',
+      '4️⃣ Cole o código abaixo e confirme o pagamento com segurança.',
+    ].join('\n');
+    await ctx.reply(instructions);
+    await ctx.reply('Copie o código abaixo:');
+    await ctx.reply(`<pre>${escapeHtml(transaction.qr_code ?? 'indisponível')}</pre>`, { parse_mode: 'HTML' });
+
+    // 3) Botões: EFETUEI O PAGAMENTO + Mini App do QR
+    await ctx.reply('Após efetuar o pagamento, clique no botão abaixo ⤵️', {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: 'EFETUEI O PAGAMENTO',
+              callback_data: `paid:${transaction.external_id}`,
+            },
+          ],
+          [
+            {
+              text: 'Qr code',
+              web_app: {
+                url: `${process.env.APP_BASE_URL}/miniapp/qr?tx=${encodeURIComponent(transaction.external_id)}`,
+              },
+            },
+          ],
+        ],
+      },
+    });
+
+    await ctx.answerCallbackQuery();
   } catch (err) {
     ctx.logger.error({ err, downsellId }, '[DOWNSELL][PIX] erro ao gerar');
     await ctx.answerCallbackQuery({ text: 'Não consegui criar o PIX agora. Tente mais tarde.', show_alert: true });
