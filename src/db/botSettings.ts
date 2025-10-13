@@ -9,7 +9,14 @@ export interface BotSettings {
 
 export async function getSettings(botSlug: string): Promise<BotSettings> {
   const result = await pool.query(
-    'select bot_slug, pix_image_url, offers_text, pix_downsell_text from bot_settings where bot_slug = $1 limit 1',
+    `select
+       bot_slug,
+       pix_image_url,
+       offers_text,
+       coalesce(pix_downsell_text, null) as pix_downsell_text
+     from bot_settings
+     where bot_slug = $1
+     limit 1`,
     [botSlug]
   );
 
