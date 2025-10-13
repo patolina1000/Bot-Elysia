@@ -293,6 +293,448 @@
       color: #6b7280;
     }
 
+    /* Downsells */
+    #downsells-card {
+      margin-top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    #downsells-card .downsells-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    #downsells-card .downsells-header h2 {
+      margin: 0;
+      font-size: 22px;
+      color: #111827;
+    }
+
+    #downsells-card .downsells-header p {
+      margin: 4px 0 0;
+      color: #6b7280;
+      font-size: 14px;
+      max-width: 520px;
+    }
+
+    .downsells-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-gradient {
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+      color: #ffffff;
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-weight: 600;
+      border: none;
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    }
+
+    .btn-gradient:hover {
+      filter: brightness(0.95);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(59, 130, 246, 0.42);
+    }
+
+    .btn-outline {
+      background: #f9fafb;
+      color: #1f2937;
+      border: 1px solid #d1d5db;
+      padding: 9px 14px;
+      border-radius: 12px;
+      font-weight: 600;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn-outline:hover {
+      background: #eef2ff;
+      border-color: #6366f1;
+      color: #111827;
+    }
+
+    #downsells-card .current-slug {
+      font-size: 13px;
+      color: #4b5563;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    #downsells-card .current-slug strong {
+      color: #111827;
+    }
+
+    #downsells-card #downsells-empty {
+      border: 1px dashed #cbd5f5;
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      background: #f8fafc;
+    }
+
+    #downsells-list {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .downsells-item {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .downsells-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+    }
+
+    .downsells-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .downsells-item-price {
+      font-weight: 600;
+      color: #0f172a;
+      font-size: 16px;
+    }
+
+    .downsells-item-moment {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .downsells-badge {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #1f2937;
+    }
+
+    .downsells-badge.active {
+      border-color: #86efac;
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .downsells-image {
+      width: 100%;
+      max-height: 180px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+    }
+
+    .downsells-item-copy {
+      font-size: 13px;
+      color: #374151;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .downsells-item-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: #ffffff;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: none;
+      font-weight: 600;
+      transition: background 0.15s ease;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn-soft {
+      background: #ffffff;
+      border: 1px solid #d1d5db;
+      color: #1f2937;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-weight: 600;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn-soft:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+
+    .downsells-modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 48px 16px;
+      z-index: 2000;
+    }
+
+    .downsells-modal .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+    }
+
+    .downsells-modal .modal-content {
+      position: relative;
+      width: min(720px, 100%);
+      background: #ffffff;
+      border-radius: 18px;
+      border: 1px solid #e5e7eb;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.25);
+      z-index: 1;
+    }
+
+    .downsells-modal .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .downsells-modal .modal-header h3 {
+      margin: 0;
+      font-size: 20px;
+      color: #111827;
+    }
+
+    .downsells-modal .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .downsells-modal .form-row {
+      display: grid;
+      gap: 12px;
+    }
+
+    .downsells-modal .form-row.double {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .downsells-modal label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    .downsells-modal textarea,
+    .downsells-modal select,
+    .downsells-modal input[type="text"] {
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #ffffff;
+      color: inherit;
+    }
+
+    .downsells-modal textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    .downsells-modal .file-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .downsells-modal .footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .downsells-modal .footer button {
+      min-width: 120px;
+    }
+
+    .downsells-modal .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    .downsells-modal .checkbox-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+
+    @media (max-width: 640px) {
+      #downsells-card {
+        padding: 18px;
+      }
+
+      .downsells-modal {
+        padding: 32px 12px;
+      }
+
+      .downsells-modal .modal-content {
+        padding: 20px;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #downsells-card {
+        background: #0f172a;
+        border-color: #1e293b;
+        box-shadow: 0 20px 45px rgba(2, 6, 23, 0.6);
+      }
+
+      #downsells-card .downsells-header h2 {
+        color: #f8fafc;
+      }
+
+      #downsells-card .downsells-header p,
+      #downsells-card .current-slug,
+      #downsells-card .current-slug strong {
+        color: #cbd5f5;
+      }
+
+      #downsells-card #downsells-empty {
+        background: rgba(30, 41, 59, 0.6);
+        border-color: rgba(99, 102, 241, 0.45);
+        color: #e2e8f0;
+      }
+
+      .btn-outline {
+        background: rgba(30, 41, 59, 0.6);
+        border-color: #334155;
+        color: #e2e8f0;
+      }
+
+      .btn-outline:hover {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: #6366f1;
+        color: #ffffff;
+      }
+
+      .downsells-item {
+        background: rgba(15, 23, 42, 0.75);
+        border-color: #1e293b;
+        box-shadow: 0 20px 35px rgba(2, 6, 23, 0.65);
+      }
+
+      .downsells-item-price {
+        color: #f8fafc;
+      }
+
+      .downsells-item-moment {
+        color: #94a3b8;
+      }
+
+      .downsells-badge {
+        background: rgba(15, 23, 42, 0.8);
+        border-color: #334155;
+        color: #e2e8f0;
+      }
+
+      .downsells-badge.active {
+        background: rgba(22, 101, 52, 0.25);
+        border-color: rgba(34, 197, 94, 0.65);
+        color: #bbf7d0;
+      }
+
+      .downsells-image {
+        border-color: #1e293b;
+        background: rgba(15, 23, 42, 0.6);
+      }
+
+      .downsells-item-copy {
+        color: #e2e8f0;
+      }
+
+      .btn-soft {
+        background: rgba(30, 41, 59, 0.65);
+        border-color: #334155;
+        color: #e2e8f0;
+      }
+
+      .btn-soft:hover {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: #475569;
+        color: #ffffff;
+      }
+
+      .btn-danger {
+        background: #ef4444;
+      }
+
+      .downsells-modal .modal-content {
+        background: #0b1220;
+        border-color: #1e293b;
+        box-shadow: 0 35px 60px rgba(2, 6, 23, 0.7);
+      }
+
+      .downsells-modal .modal-header h3,
+      .downsells-modal label,
+      .downsells-modal .checkbox-row {
+        color: #e2e8f0;
+      }
+
+      .downsells-modal textarea,
+      .downsells-modal select,
+      .downsells-modal input[type="text"] {
+        background: rgba(15, 23, 42, 0.7);
+        border-color: #334155;
+        color: #e2e8f0;
+      }
+
+      .downsells-modal textarea::placeholder,
+      .downsells-modal input::placeholder {
+        color: #94a3b8;
+      }
+    }
+
     #plans-card hr {
       border: none;
       border-top: 1px solid #e5e7eb;
@@ -1661,6 +2103,69 @@
       </div>
       <p class="plan-hint">* Valores são convertidos para centavos; mínimo R$ 0,50.</p>
     </section>
+
+    <section id="downsells-card">
+      <div class="downsells-header">
+        <div>
+          <h2>Downsells (beta)</h2>
+          <p>Crie ofertas de recuperação específicas por bot. Salvas diretamente no backend.</p>
+        </div>
+        <div class="downsells-actions">
+          <button type="button" id="btn-downsell-add" class="btn-gradient">+ Novo downsell</button>
+          <button type="button" id="btn-downsell-refresh" class="btn-outline">Recarregar</button>
+        </div>
+      </div>
+      <div class="current-slug">
+        Bot atual: <strong id="downsells-current-slug">—</strong>
+      </div>
+      <div id="downsells-empty" class="hidden">Nenhum downsell cadastrado para este bot.</div>
+      <div id="downsells-list"></div>
+    </section>
+  </div>
+
+  <div id="downsells-modal" class="downsells-modal hidden" role="dialog" aria-modal="true" aria-labelledby="downsells-modal-title">
+    <div class="modal-backdrop" data-dismiss="downsells-modal"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="downsells-modal-title">Novo downsell</h3>
+        <button type="button" id="downsells-modal-close" class="btn-outline">Fechar</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row double">
+          <label>Preço (R$)
+            <input id="ds-price" type="text" placeholder="ex.: 19,90" autocomplete="off">
+          </label>
+          <label>Momento
+            <select id="ds-moment">
+              <option value="after_start">Após /start</option>
+              <option value="after_pix">Após gerar PIX</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>Copy (mensagem)
+            <textarea id="ds-copy" placeholder="Escreva a mensagem do downsell..."></textarea>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>URL da mídia (foto/vídeo/áudio)
+            <input id="ds-media-url" type="text" placeholder="https://..." autocomplete="off">
+          </label>
+          <div class="file-actions">
+            <input type="file" id="ds-media-file" class="hidden" accept="image/*,video/*,audio/*">
+            <button type="button" id="ds-media-upload" class="btn-soft">Enviar arquivo…</button>
+            <button type="button" id="ds-media-preview" class="btn-soft">Pré-visualizar</button>
+          </div>
+        </div>
+        <label class="checkbox-row">
+          <input id="ds-active" type="checkbox">
+          <span>Ativo</span>
+        </label>
+      </div>
+      <div class="footer">
+        <button type="button" id="downsells-save" class="btn-gradient">Salvar</button>
+      </div>
+    </div>
   </div>
 
   <dialog id="pix-modal">
@@ -1934,6 +2439,28 @@
       const btnPixUpload = document.getElementById('btn-pix-upload');
       const offersText = document.getElementById('offers-text');
       const btnOffersSave = document.getElementById('btn-offers-save');
+      const downsellsCard = document.getElementById('downsells-card');
+      const downsellsList = document.getElementById('downsells-list');
+      const downsellsEmpty = document.getElementById('downsells-empty');
+      const downsellsSlugLabel = document.getElementById('downsells-current-slug');
+      const downsellsAddBtn = document.getElementById('btn-downsell-add');
+      const downsellsRefreshBtn = document.getElementById('btn-downsell-refresh');
+      const downsellsModal = document.getElementById('downsells-modal');
+      const downsellsModalTitle = document.getElementById('downsells-modal-title');
+      const downsellsModalClose = document.getElementById('downsells-modal-close');
+      const downsellsSaveBtn = document.getElementById('downsells-save');
+      const dsPriceInput = document.getElementById('ds-price');
+      const dsMomentSelect = document.getElementById('ds-moment');
+      const dsCopyTextarea = document.getElementById('ds-copy');
+      const dsMediaUrlInput = document.getElementById('ds-media-url');
+      const dsMediaFileInput = document.getElementById('ds-media-file');
+      const dsMediaUploadBtn = document.getElementById('ds-media-upload');
+      const dsMediaPreviewBtn = document.getElementById('ds-media-preview');
+      const dsActiveCheckbox = document.getElementById('ds-active');
+
+      let downsellsItems = [];
+      let downsellsEditing = null;
+      let downsellsLoading = false;
 
       if (plansBotSlugInput) {
         // lock manual slug: read-only + input prevention
@@ -2018,6 +2545,254 @@
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
+      }
+
+      function updateDownsellsSlugLabel(slug) {
+        if (downsellsSlugLabel) {
+          downsellsSlugLabel.textContent = slug ? slug : '—';
+        }
+      }
+
+      function renderDownsellPlaceholder(message) {
+        if (downsellsEmpty) {
+          downsellsEmpty.textContent = message;
+          downsellsEmpty.classList.remove('hidden');
+        }
+        if (downsellsList) {
+          downsellsList.innerHTML = '';
+        }
+      }
+
+      function renderDownsellItems(list) {
+        if (!downsellsList || !downsellsEmpty) {
+          return;
+        }
+
+        downsellsList.innerHTML = '';
+
+        if (!Array.isArray(list) || list.length === 0) {
+          renderDownsellPlaceholder('Nenhum downsell cadastrado para este bot.');
+          return;
+        }
+
+        downsellsEmpty.classList.add('hidden');
+
+        list.forEach((item) => {
+          const card = document.createElement('article');
+          card.className = 'downsells-item';
+
+          const header = document.createElement('div');
+          header.className = 'downsells-item-header';
+
+          const info = document.createElement('div');
+          const price = document.createElement('div');
+          price.className = 'downsells-item-price';
+          price.textContent = item?.price_brl ? `R$ ${item.price_brl}` : 'R$ --';
+          const moment = document.createElement('div');
+          moment.className = 'downsells-item-moment';
+          moment.textContent = item?.moment === 'after_pix' ? 'Após gerar PIX' : 'Após /start';
+          info.appendChild(price);
+          info.appendChild(moment);
+
+          const badge = document.createElement('span');
+          badge.className = 'downsells-badge' + (item?.active ? ' active' : '');
+          badge.textContent = item?.active ? 'Ativo' : 'Inativo';
+
+          header.appendChild(info);
+          header.appendChild(badge);
+          card.appendChild(header);
+
+          if (item?.media_url) {
+            const media = document.createElement('img');
+            media.className = 'downsells-image';
+            media.src = item.media_url;
+            media.alt = '';
+            media.loading = 'lazy';
+            card.appendChild(media);
+          }
+
+          if (item?.copy) {
+            const copy = document.createElement('p');
+            copy.className = 'downsells-item-copy';
+            copy.textContent = item.copy;
+            card.appendChild(copy);
+          }
+
+          const actions = document.createElement('div');
+          actions.className = 'downsells-item-actions';
+
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.className = 'btn-soft';
+          editBtn.textContent = 'Editar';
+          editBtn.dataset.action = 'edit';
+          if (item?.id !== undefined && item?.id !== null) {
+            editBtn.dataset.id = String(item.id);
+          } else {
+            editBtn.disabled = true;
+          }
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'btn-danger';
+          deleteBtn.textContent = 'Excluir';
+          deleteBtn.dataset.action = 'delete';
+          if (item?.id !== undefined && item?.id !== null) {
+            deleteBtn.dataset.id = String(item.id);
+          } else {
+            deleteBtn.disabled = true;
+          }
+
+          actions.appendChild(editBtn);
+          actions.appendChild(deleteBtn);
+          card.appendChild(actions);
+
+          downsellsList.appendChild(card);
+        });
+      }
+
+      async function loadDownsells(options = {}) {
+        if (!downsellsList || !downsellsEmpty) {
+          return;
+        }
+
+        const slug = (plansBotSlugInput?.value || '').trim();
+        updateDownsellsSlugLabel(slug);
+
+        if (!slug) {
+          downsellsItems = [];
+          renderDownsellPlaceholder('Informe o slug do bot para listar downsells.');
+          return;
+        }
+
+        renderDownsellPlaceholder('Carregando downsells...');
+
+        downsellsLoading = true;
+        try {
+          const response = await fetchJSON(`/admin/api/downsells?bot_slug=${encodeURIComponent(slug)}`);
+          downsellsItems = Array.isArray(response) ? response : [];
+          renderDownsellItems(downsellsItems);
+        } catch (error) {
+          console.error('[downsells] erro ao carregar', error);
+          downsellsItems = [];
+          const message = error instanceof Error ? error.message : 'Erro ao carregar downsells.';
+          renderDownsellPlaceholder(message);
+          if (!options?.silent) {
+            showToast(message);
+          }
+        } finally {
+          downsellsLoading = false;
+        }
+      }
+
+      function openDownsellModal(item = null) {
+        downsellsEditing = item && typeof item === 'object' ? { ...item } : null;
+        if (downsellsModalTitle) {
+          downsellsModalTitle.textContent = downsellsEditing ? 'Editar downsell' : 'Novo downsell';
+        }
+        if (dsPriceInput) {
+          dsPriceInput.value = downsellsEditing?.price_brl ?? '';
+        }
+        if (dsMomentSelect) {
+          dsMomentSelect.value = downsellsEditing?.moment === 'after_pix' ? 'after_pix' : 'after_start';
+        }
+        if (dsCopyTextarea) {
+          dsCopyTextarea.value = downsellsEditing?.copy ?? '';
+        }
+        if (dsMediaUrlInput) {
+          dsMediaUrlInput.value = downsellsEditing?.media_url ?? '';
+        }
+        if (dsActiveCheckbox) {
+          dsActiveCheckbox.checked = Boolean(downsellsEditing?.active);
+        }
+        if (dsMediaFileInput) {
+          dsMediaFileInput.value = '';
+        }
+
+        downsellsModal?.classList.remove('hidden');
+      }
+
+      function closeDownsellModal() {
+        downsellsModal?.classList.add('hidden');
+        if (dsMediaFileInput) {
+          dsMediaFileInput.value = '';
+        }
+        downsellsEditing = null;
+      }
+
+      async function saveDownsell() {
+        const slug = (plansBotSlugInput?.value || '').trim();
+        if (!slug) {
+          alert('Informe o slug do bot.');
+          return;
+        }
+
+        const payload = {
+          id: downsellsEditing?.id ?? undefined,
+          bot_slug: slug,
+          copy: (dsCopyTextarea?.value || '').trim(),
+          price_brl: (dsPriceInput?.value || '').trim(),
+          media_url: (dsMediaUrlInput?.value || '').trim() || null,
+          moment: dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start',
+          active: Boolean(dsActiveCheckbox?.checked),
+        };
+
+        try {
+          await fetchJSON('/admin/api/downsells', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          closeDownsellModal();
+          showToast('Downsell salvo!');
+          await loadDownsells({ silent: true });
+        } catch (error) {
+          console.error('[downsells] erro ao salvar', error);
+          alert(error instanceof Error ? error.message : 'Erro ao salvar downsell.');
+        }
+      }
+
+      async function removeDownsell(id) {
+        if (!id) {
+          return;
+        }
+        try {
+          await fetchJSON(`/admin/api/downsells/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          showToast('Downsell removido.');
+          await loadDownsells({ silent: true });
+        } catch (error) {
+          console.error('[downsells] erro ao excluir', error);
+          alert(error instanceof Error ? error.message : 'Erro ao excluir downsell.');
+        }
+      }
+
+      async function uploadDownsellMedia(file) {
+        const token = getAdminToken();
+        if (!token) {
+          throw new Error('Informe o token de admin para enviar arquivos.');
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/admin/api/uploads/downsells', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          const message = data?.error || 'Falha no upload da mídia.';
+          throw new Error(message);
+        }
+
+        if (!data?.url) {
+          throw new Error('Upload concluído, mas sem URL retornada.');
+        }
+
+        return data.url;
       }
 
       function priceToCents(value) {
@@ -2908,6 +3683,9 @@
           if (plansList) {
             setPlansPlaceholder('Informe o slug do bot e clique em "Carregar planos".');
           }
+          downsellsItems = [];
+          updateDownsellsSlugLabel('');
+          renderDownsellPlaceholder('Selecione um bot para visualizar os downsells.');
           destroyLatencyChart();
         }
       }
@@ -3018,6 +3796,7 @@
         if (plansBotSlugInput) {
           plansBotSlugInput.value = targetBot.slug || '';
         }
+        void loadDownsells({ silent: true });
         resetPlanForm();
         if (targetBot.slug) {
           void loadPlans({ autoload: true });
@@ -3632,6 +4411,87 @@
         }
       });
 
+      downsellsAddBtn?.addEventListener('click', () => {
+        openDownsellModal();
+      });
+
+      downsellsRefreshBtn?.addEventListener('click', () => {
+        void loadDownsells();
+      });
+
+      downsellsModalClose?.addEventListener('click', () => {
+        closeDownsellModal();
+      });
+
+      downsellsModal?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target === downsellsModal || (target instanceof HTMLElement && target.dataset.dismiss === 'downsells-modal')) {
+          closeDownsellModal();
+        }
+      });
+
+      downsellsSaveBtn?.addEventListener('click', () => {
+        void saveDownsell();
+      });
+
+      downsellsList?.addEventListener('click', (event) => {
+        const button = event.target instanceof HTMLElement ? event.target.closest('button') : null;
+        if (!button) {
+          return;
+        }
+        const action = button.dataset.action;
+        const id = button.dataset.id;
+        if (action === 'edit') {
+          if (!id) {
+            return;
+          }
+          const item = downsellsItems.find((entry) => String(entry?.id) === String(id));
+          if (item) {
+            openDownsellModal(item);
+          }
+        } else if (action === 'delete') {
+          if (!id) {
+            return;
+          }
+          if (confirm('Excluir este downsell?')) {
+            void removeDownsell(id);
+          }
+        }
+      });
+
+      dsMediaUploadBtn?.addEventListener('click', () => {
+        dsMediaFileInput?.click();
+      });
+
+      dsMediaFileInput?.addEventListener('change', async () => {
+        const file = dsMediaFileInput.files?.[0];
+        if (!file) {
+          return;
+        }
+        try {
+          const url = await uploadDownsellMedia(file);
+          if (dsMediaUrlInput) {
+            dsMediaUrlInput.value = url;
+          }
+          showToast('Upload concluído!');
+        } catch (error) {
+          console.error('[downsells] erro no upload', error);
+          alert(error instanceof Error ? error.message : 'Erro ao enviar arquivo.');
+        } finally {
+          dsMediaFileInput.value = '';
+        }
+      });
+
+      dsMediaPreviewBtn?.addEventListener('click', () => {
+        const url = (dsMediaUrlInput?.value || '').trim();
+        if (!url) {
+          return;
+        }
+        window.open(url, '_blank', 'noopener');
+      });
+
+      void loadDownsells({ silent: true });
+
       plansLoadBtn?.addEventListener('click', () => {
         void loadPlans();
       });
@@ -3645,6 +4505,11 @@
 
       plansBotSlugInput?.addEventListener('input', () => {
         resetPlanForm();
+        void loadDownsells({ silent: true });
+      });
+
+      plansBotSlugInput?.addEventListener('change', () => {
+        void loadDownsells({ silent: true });
       });
 
       planSaveBtn?.addEventListener('click', () => {
