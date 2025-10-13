@@ -1854,6 +1854,13 @@
         return (number / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
       }
 
+      function renderMediaCachePlaceholder(message) {
+        if (!mediaCacheTableContainer) return;
+        const msg = message || 'Selecione um bot para visualizar o cache.';
+        mediaCacheTableContainer.innerHTML =
+          `<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">${escapeHtml(msg)}</div>`;
+      }
+
 
       function setPlansPlaceholder(message) {
         if (!plansList) {
@@ -2228,12 +2235,12 @@
           return;
         }
         if (!slug) {
-          mediaCacheTableContainer.innerHTML = '<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">Selecione um bot para visualizar o cache.</div>';
+          renderMediaCachePlaceholder('Selecione um bot para visualizar o cache.');
           return;
         }
 
         const requestId = ++mediaCacheRequestId;
-        mediaCacheTableContainer.innerHTML = '<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">Carregando cache…</div>';
+        renderMediaCachePlaceholder('Carregando cache…');
 
         try {
           const data = await fetchJSON(`/admin/api/bots/${encodeURIComponent(slug)}/media-cache`);
@@ -2242,9 +2249,9 @@
           }
           const items = Array.isArray(data?.items) ? data.items : [];
           cachedCacheItems = items;
-          
+
           if (items.length === 0) {
-            mediaCacheTableContainer.innerHTML = '<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">Nenhum item no cache ainda.</div>';
+            renderMediaCachePlaceholder('Nenhum item no cache ainda.');
             return;
           }
 
@@ -2254,7 +2261,7 @@
             return;
           }
           const message = error instanceof Error ? error.message : 'Erro ao carregar cache.';
-          mediaCacheTableContainer.innerHTML = `<div class="placeholder" style="padding:24px; text-align:center; color:#9ca3af; font-style:italic;">${escapeHtml(message)}</div>`;
+          renderMediaCachePlaceholder(message);
         }
       }
 
