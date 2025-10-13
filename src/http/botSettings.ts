@@ -27,6 +27,14 @@ const saveSettingsSchema = z.object({
     .or(z.literal('').transform(() => undefined))
     .or(z.null())
     .optional(),
+  pix_downsell_text: z
+    .string()
+    .trim()
+    .max(1000, 'Texto muito longo')
+    .optional()
+    .or(z.literal('').transform(() => undefined))
+    .or(z.null())
+    .optional(),
 });
 
 botSettingsRouter.get(
@@ -70,6 +78,7 @@ botSettingsRouter.post(
       const saved = await saveSettings(parsedParams.data.slug, {
         pix_image_url: parsedBody.data.pix_image_url ?? null,
         offers_text: parsedBody.data.offers_text ?? null,
+        pix_downsell_text: parsedBody.data.pix_downsell_text ?? null,
       });
 
       res.json(saved);
