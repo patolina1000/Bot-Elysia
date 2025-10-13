@@ -25,11 +25,11 @@ downsellsFeature.on('callback_query:data', async (ctx, next) => {
       downsell_id: downsellId,
     });
 
-    await sendPixUi(ctx, {
+    const username = ctx.from?.first_name ?? ctx.from?.username ?? undefined;
+
+    await sendPixUi(ctx, transaction, {
       botSlug: ctx.bot_slug!,
-      transactionId: transaction.external_id,
-      valueCents: transaction.value_cents,
-      qrCode: transaction.qr_code,
+      username,
     });
   } catch (err) {
     ctx.logger.error({ err, downsellId }, '[DOWNSELL][PIX] erro ao gerar');

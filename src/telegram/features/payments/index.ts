@@ -130,11 +130,11 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         pix_trace_id: final_trace_id,
       }, '[PIX][CREATE] telegram pix generated');
 
-      await sendPixUi(ctx, {
+      const username = ctx.from?.first_name ?? ctx.from?.username ?? undefined;
+
+      await sendPixUi(ctx, transaction, {
         botSlug: ctx.bot_slug!,
-        transactionId: transaction.external_id,
-        valueCents: transaction.value_cents,
-        qrCode: transaction.qr_code,
+        username,
       });
 
       await ctx.answerCallbackQuery();
