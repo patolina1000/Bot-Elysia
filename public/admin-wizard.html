@@ -2775,7 +2775,8 @@
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('/admin/api/uploads/downsells', {
+        // usa a mesma rota de upload já utilizada por PIX e Mensagem Inicial
+        const response = await fetch('/api/admin/upload', {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
