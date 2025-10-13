@@ -115,5 +115,15 @@ export function mountAdminUpload(app: Express) {
     }
   };
 
-  app.post(['/api/admin/upload', '/admin/upload'], authAdminMiddleware, multerMiddleware, handler);
+  app.post(
+    [
+      '/api/admin/upload',
+      '/admin/upload',
+      // alias para compatibilidade com o admin-wizard de downsells
+      '/admin/api/uploads/downsells'
+    ],
+    authAdminMiddleware,
+    multerMiddleware,
+    handler
+  );
 }
