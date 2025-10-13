@@ -1843,6 +1843,13 @@
         const { autoload = false } = options;
         const slug = (plansBotSlugInput?.value || '').trim();
 
+        // Se o usuário digitou um slug e clicou em "Carregar", alinhar a seleção de bot (atualiza cabeçalho/metrics)
+        try {
+          if (slug) {
+            selectBotBySlug(slug);
+          }
+        } catch (_e) {}
+
         if (!slug) {
           if (!autoload) {
             alert('Informe o slug do bot.');
@@ -2309,6 +2316,20 @@
         return match ? match[1] : null;
       }
 
+      // Helper: selecionar bot a partir do slug digitado (sincroniza cabeçalho/métricas)
+      function selectBotBySlug(slug) {
+        try {
+          if (!slug) {
+            return;
+          }
+          const s = String(slug).trim();
+          const bot = (state?.bots || []).find((b) => (b.slug || '').trim() === s);
+          if (bot && typeof selectBot === 'function') {
+            void selectBot(bot.id);
+          }
+        } catch (_e) {}
+      }
+
       async function loadBots({ preserveSelection = true, selectBotId = null } = {}) {
         try {
           const bots = await fetchJSON('/admin/bots');
@@ -2406,6 +2427,15 @@
         renderTabs();
         updateNoBotsVisibility();
         await loadBotPane(botId);
+
+        // Disparar atualização de métricas com base no slug do bot selecionado (reuso do módulo encapsulado)
+        try {
+          const target = state.bots.find((b) => b.id === botId);
+          const slug = target?.slug || '';
+          if (slug && window.__elysiaLoadMetricsFor) {
+            window.__elysiaLoadMetricsFor(slug);
+          }
+        } catch (_e) {}
       }
 
       async function loadBotPane(botId) {
@@ -3322,6 +3352,9 @@
     const slug = (downsBotSlug.value||'').trim();
     if(!slug){ alert('Informe o bot slug'); return; }
 
+    // Alinhar cabeçalho/seleção quando o usuário usa o botão "Carregar downsells"
+    try { selectBotBySlug(slug); } catch (_e) {}
+
     const [listResp, statsResp] = await Promise.all([
       fetch(`/admin/api/downsells?bot_slug=${encodeURIComponent(slug)}`,{ headers: adminHeaders() }),
       fetch(`/admin/api/downsells/metrics?bot_slug=${encodeURIComponent(slug)}`,{ headers: adminHeaders() }),
@@ -3540,6 +3573,9 @@
         }).join('');
       }catch(e){ console.warn('loadMetricsForBot', e); }
     }
+
+    // Expor função de métricas para o escopo global, permitindo disparo ao trocar a aba inferior (#tabs-scroll)
+    window.__elysiaLoadMetricsFor = _loadMetricsForBot;
 
     function _drawLatency(rows){
       const ctx = _mCanvas.getContext('2d');
