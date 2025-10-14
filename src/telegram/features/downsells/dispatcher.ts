@@ -210,12 +210,12 @@ export function startDownsellWorker(_app?: unknown): void {
       while (true) {
         const picked = await pickDueJobs(MAX_JOBS_PER_TICK);
         if (!picked) {
-          console.info('[DOWNSELL][PICK]', { due_found: 0 });
+          console.info('[DOWNSELL][PICK]', { due_found: 0, status: 'scheduled' });
           break;
         }
 
         const { client, jobs } = picked;
-        console.info('[DOWNSELL][PICK]', { due_found: jobs.length });
+        console.info('[DOWNSELL][PICK]', { due_found: jobs.length, status: 'scheduled' });
         try {
           for (const job of jobs) {
             await handleJob(job, client);

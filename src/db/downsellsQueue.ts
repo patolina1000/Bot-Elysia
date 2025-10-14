@@ -1,7 +1,7 @@
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { pool } from './pool.js';
 
-export type DownsellQueueStatus = 'pending' | 'sent' | 'skipped' | 'error';
+export type DownsellQueueStatus = 'scheduled' | 'sent' | 'skipped' | 'error';
 
 export interface DownsellQueueJob {
   id: number;
@@ -77,10 +77,10 @@ export async function enqueueDownsell(
          bot_slug, downsell_id, telegram_id, deliver_at,
          status, attempt_count, last_error, scheduled_at
        )
-       VALUES ($1, $2, $3, $4, 'pending', 0, NULL, NOW())
+       VALUES ($1, $2, $3, $4, 'scheduled', 0, NULL, NOW())
      ON CONFLICT (bot_slug, downsell_id, telegram_id) DO UPDATE
        SET deliver_at = EXCLUDED.deliver_at,
-           status = 'pending',
+           status = 'scheduled',
            attempt_count = 0,
            last_error = NULL,
            transaction_id = NULL,
@@ -103,7 +103,7 @@ export async function pickDueJobs(limit: number): Promise<PickedJobs | null> {
     const { rows } = await client.query(
       `SELECT *
          FROM downsells_queue
-        WHERE status = 'pending'
+        WHERE status = 'scheduled'
           AND deliver_at <= now()
         ORDER BY deliver_at ASC, id ASC
         FOR UPDATE SKIP LOCKED
