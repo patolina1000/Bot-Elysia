@@ -162,6 +162,9 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     const hasPlanLabel = planLabel.length > 0;
     const hasPlan = Boolean(downsell?.plan_id);
     const hasValidPrice = priceCents !== null && priceCents > 0;
+    const defaultIntro = 'Clique abaixo para continuar:';
+    const introText =
+      (downsell?.button_intro_text && downsell.button_intro_text.trim()) || defaultIntro;
 
     if (!downsell || !downsell.active) {
       await markJobAsSkipped(job.id, 'downsell_inactive_or_invalid', client);
@@ -219,7 +222,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
         inline_keyboard: [[{ text: buttonText, callback_data: `downsell:${downsell.id}` }]],
       };
 
-      const sent = await bot.api.sendMessage(job.telegram_id, 'Clique abaixo para continuar:', {
+      const sent = await bot.api.sendMessage(job.telegram_id, introText, {
         reply_markup: keyboard,
       });
       const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;
@@ -267,7 +270,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
           inline_keyboard: [[{ text: buttonText, callback_data: `plan:${plan.id}` }]],
         };
 
-        const sent = await bot.api.sendMessage(job.telegram_id, 'Clique abaixo para continuar:', {
+        const sent = await bot.api.sendMessage(job.telegram_id, introText, {
           reply_markup: keyboard,
         });
         const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;

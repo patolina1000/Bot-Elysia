@@ -457,6 +457,17 @@
       color: #374151;
       line-height: 1.5;
       white-space: pre-wrap;
+      margin: 0;
+    }
+
+    .downsells-item-intro {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #4b5563;
+      background: #eef2ff;
+      border-radius: 999px;
+      padding: 4px 10px;
     }
 
     .downsells-item-actions {
@@ -2165,6 +2176,16 @@
           </label>
         </div>
         <div class="form-row">
+          <label for="downsell-button-intro">Texto acima do botão
+            <input id="downsell-button-intro"
+                   class="form-control"
+                   type="text"
+                   placeholder="Clique abaixo para continuar:"
+                   maxlength="200">
+            <small class="form-text">Opcional. Se vazio, usamos o padrão.</small>
+          </label>
+        </div>
+        <div class="form-row">
           <label>URL da mídia (foto/vídeo/áudio)
             <input id="ds-media-url" type="text" placeholder="https://..." autocomplete="off">
           </label>
@@ -2471,6 +2492,7 @@
       const dsMomentSelect = document.getElementById('ds-moment');
       const dsDelayInput = document.getElementById('ds-delay-min');
       const dsCopyTextarea = document.getElementById('ds-copy');
+      const dsButtonIntroInput = document.getElementById('downsell-button-intro');
       const dsMediaUrlInput = document.getElementById('ds-media-url');
       const dsMediaFileInput = document.getElementById('ds-media-file');
       const dsMediaUploadBtn = document.getElementById('ds-media-upload');
@@ -2645,6 +2667,14 @@
             (triggerValue === 'after_pix' ? 'Após gerar PIX' : 'Após /start') + delayText;
           info.appendChild(price);
           info.appendChild(moment);
+          const introText =
+            typeof item?.button_intro_text === 'string' ? item.button_intro_text.trim() : '';
+          if (introText) {
+            const introChip = document.createElement('span');
+            introChip.className = 'downsells-item-intro';
+            introChip.textContent = `Intro: ${introText}`;
+            info.appendChild(introChip);
+          }
 
           const badge = document.createElement('span');
           badge.className = 'downsells-badge' + (item?.active ? ' active' : '');
@@ -2811,6 +2841,13 @@
         if (dsCopyTextarea) {
           dsCopyTextarea.value = downsellsEditing?.copy ?? '';
         }
+        if (dsButtonIntroInput) {
+          const introValue =
+            typeof downsellsEditing?.button_intro_text === 'string'
+              ? downsellsEditing.button_intro_text.trim()
+              : '';
+          dsButtonIntroInput.value = introValue;
+        }
         if (dsMediaUrlInput) {
           dsMediaUrlInput.value = downsellsEditing?.media_url ?? '';
         }
@@ -2841,6 +2878,9 @@
         }
         if (dsDelayInput) {
           dsDelayInput.value = '';
+        }
+        if (dsButtonIntroInput) {
+          dsButtonIntroInput.value = '';
         }
         if (dsPlanLabelInput) {
           dsPlanLabelInput.value = '';
@@ -2916,10 +2956,12 @@
         delayMinutes = Math.round(delayMinutes);
 
         const trigger = dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start';
+        const buttonIntroValue = (dsButtonIntroInput?.value || '').trim();
 
         const payload = {
           bot_slug: slug,
           copy: (dsCopyTextarea?.value || '').trim(),
+          button_intro_text: buttonIntroValue,
           plan_label: planLabelValue,
           price_cents: priceCents,
           media_url: (dsMediaUrlInput?.value || '').trim() || null,

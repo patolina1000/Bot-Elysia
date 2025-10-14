@@ -7,6 +7,7 @@ export interface BotDownsell {
   bot_slug: string;
   price_cents: number | null;
   copy: string;
+  button_intro_text?: string | null;
   media_url: string | null;
   media_type: string | null;
   trigger: DownsellTrigger;
@@ -28,6 +29,7 @@ function mapRow(row: any): BotDownsell {
     price_cents:
       row.price_cents === null || row.price_cents === undefined ? null : Number(row.price_cents),
     copy: String(row.copy ?? ''),
+    button_intro_text: row.button_intro_text ? String(row.button_intro_text) : null,
     media_url: row.media_url ? String(row.media_url) : null,
     media_type: row.media_type ? String(row.media_type) : null,
     trigger: (row.trigger ?? 'after_start') as DownsellTrigger,
@@ -55,6 +57,7 @@ export async function listActiveDownsellsByMoment(
             d.bot_slug,
             d.price_cents,
             d.copy,
+            d.button_intro_text,
             d.media_url,
             d.media_type,
             d.trigger,
@@ -95,6 +98,7 @@ export async function getDownsellById(id: number): Promise<BotDownsell | null> {
             d.bot_slug,
             d.price_cents,
             d.copy,
+            d.button_intro_text,
             d.media_url,
             d.media_type,
             d.trigger,
