@@ -83,6 +83,8 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     const downsell = await getDownsellById(job.downsell_id);
     const priceCents = toCents(downsell?.price_cents);
     const planPriceCents = toCents(downsell?.plan_price_cents);
+    const planLabel = typeof downsell?.plan_label === 'string' ? downsell.plan_label.trim() : '';
+    const hasPlanLabel = planLabel.length > 0;
     const hasPlan = Boolean(downsell?.plan_id);
     const hasValidPrice = priceCents !== null && priceCents > 0;
 
@@ -114,6 +116,44 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       } catch (copyErr) {
         jobLogger.warn({ err: copyErr }, '[DOWNSELL][WORKER] failed to send downsell copy');
       }
+    }
+
+    if (hasPlanLabel) {
+      const buttonPriceCents = priceCents ?? planPriceCents;
+      const priceLabel =
+        buttonPriceCents !== null && buttonPriceCents > 0
+          ? ` — R$ ${(buttonPriceCents / 100).toFixed(2).replace('.', ',')}`
+          : '';
+      const buttonText = `${planLabel}${priceLabel}`;
+      const keyboard: InlineKeyboardMarkup = {
+        inline_keyboard: [[{ text: buttonText, callback_data: `downsell:${downsell.id}` }]],
+      };
+
+      const sent = await bot.api.sendMessage(job.telegram_id, 'Clique abaixo para continuar:', {
+        reply_markup: keyboard,
+      });
+      const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;
+
+      await recordSent(
+        {
+          bot_slug: job.bot_slug,
+          downsell_id: job.downsell_id,
+          telegram_id: job.telegram_id,
+          sent_message_id: sentMessageId,
+        },
+        client
+      );
+
+      await markJobAsSent(
+        job.id,
+        {
+          sent_message_id: sentMessageId,
+        },
+        client
+      );
+
+      jobLogger.info({ downsell_id: downsell.id }, '[DOWNSELL][WORKER] sent downsell CTA');
+      return;
     }
 
     if (hasPlan) {
