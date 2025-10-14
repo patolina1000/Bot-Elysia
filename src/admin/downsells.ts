@@ -79,10 +79,17 @@ async function ensureDownsellSchema(): Promise<void> {
       );
       DO $$
       BEGIN
-        IF NOT EXISTS (
+        -- remover índice único antigo, se existir
+        IF EXISTS (
           SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='ux_bot_downsells_bot_slug_sort'
         ) THEN
-          CREATE UNIQUE INDEX ux_bot_downsells_bot_slug_sort ON bot_downsells(bot_slug, sort_order);
+          EXECUTE 'DROP INDEX public.ux_bot_downsells_bot_slug_sort';
+        END IF;
+        -- criar índice normal (não-único) para acelerar ordenação/consulta
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='ix_bot_downsells_bot_slug_sort'
+        ) THEN
+          CREATE INDEX ix_bot_downsells_bot_slug_sort ON bot_downsells(bot_slug, sort_order);
         END IF;
         -- compat: cria a coluna se não existir
         IF NOT EXISTS (
@@ -146,7 +153,7 @@ export function registerAdminDownsellsRoutes(app: Express): void {
         }
         const sortOrder = Number.isFinite(payload?.sort_order as number)
           ? Number(payload!.sort_order)
-          : 0;
+          : null;
         let delayMinutes = Number.isFinite(payload?.delay_minutes as number)
           ? Number(payload!.delay_minutes)
           : 0;
@@ -183,6 +190,35 @@ export function registerAdminDownsellsRoutes(app: Express): void {
         return res.status(201).json({ ok: true, downsell: rows[0] });
       } catch (err) {
         logger.error({ err }, '[ADMIN][DOWNSELLS][POST] error');
+        return res.status(500).json({ ok: false, error: 'internal_error', details: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  app.get(
+    '/admin/api/downsells',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const rawBotSlug = req.query?.bot_slug as string | string[] | undefined;
+        const botSlug = sanitizeStr(Array.isArray(rawBotSlug) ? rawBotSlug[0] : rawBotSlug, 200).toLowerCase();
+        if (!botSlug) {
+          return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
+        }
+
+        const { rows } = await pool.query(
+          `
+            SELECT *
+            FROM bot_downsells
+            WHERE bot_slug = $1
+            ORDER BY delay_minutes ASC, created_at ASC;
+          `,
+          [botSlug]
+        );
+
+        return res.json(rows);
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELLS][GET] error');
         return res.status(500).json({ ok: false, error: 'internal_error', details: err instanceof Error ? err.message : String(err) });
       }
     }
