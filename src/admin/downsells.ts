@@ -252,16 +252,16 @@ export async function listDownsells(req: Request, res: Response): Promise<Respon
         SELECT
           id,
           bot_slug,
-          plan_id,
-          plan_label,
           copy,
           price_cents,
           media_url,
           media_type,
           trigger,
           delay_minutes,
-          sort_order,
           active,
+          sort_order,
+          plan_label,
+          plan_label AS plan_name,
           created_at,
           updated_at
         FROM public.bot_downsells
