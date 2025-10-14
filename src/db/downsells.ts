@@ -104,11 +104,8 @@ export async function getDownsellById(id: number): Promise<BotDownsell | null> {
             d.plan_label,
             d.plan_id,
             d.created_at,
-            d.updated_at,
-            p.price_cents AS plan_price_cents,
-            p.name AS plan_name
+            d.updated_at
        FROM bot_downsells d
-       LEFT JOIN bot_plans p ON p.id = d.plan_id
       WHERE d.id = $1
       LIMIT 1`,
     [id]
