@@ -12,6 +12,9 @@ export interface DownsellQueueJob {
   status: DownsellQueueStatus;
   attempt_count: number;
   last_error: string | null;
+  transaction_id: string | null;
+  external_id: string | null;
+  sent_message_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -50,6 +53,9 @@ function mapRow(row: any): DownsellQueueJob {
     status: String(row.status) as DownsellQueueStatus,
     attempt_count: Number(row.attempt_count ?? 0),
     last_error: row.last_error ?? null,
+    transaction_id: row.transaction_id ?? null,
+    external_id: row.external_id ?? null,
+    sent_message_id: row.sent_message_id ?? null,
     created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     updated_at: row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at),
   };
@@ -74,6 +80,9 @@ export async function enqueueDownsell(
            status = 'pending',
            attempt_count = 0,
            last_error = NULL,
+           transaction_id = NULL,
+           external_id = NULL,
+           sent_message_id = NULL,
            updated_at = now()
      RETURNING *`,
     [params.bot_slug, params.downsell_id, params.telegram_id, params.deliver_at]
@@ -116,19 +125,25 @@ export async function pickDueJobs(limit: number): Promise<PickedJobs | null> {
 
 export async function markJobAsSent(
   id: number,
-  _details: MarkJobAsSentParams = {},
+  details: MarkJobAsSentParams = {},
   client?: PoolClient
 ): Promise<DownsellQueueJob | null> {
   const queryable = getQueryable(client);
+  const transactionId = details.transaction_id ?? null;
+  const externalId = details.external_id ?? null;
+  const sentMessageId = details.sent_message_id ?? null;
 
   const result = await queryable.query(
     `UPDATE downsells_queue
         SET status = 'sent',
+            transaction_id = $2,
+            external_id = $3,
+            sent_message_id = $4,
             updated_at = now(),
             last_error = NULL
       WHERE id = $1
       RETURNING *`,
-    [id]
+    [id, transactionId, externalId, sentMessageId]
   );
 
   return normalizeUpsertResult(result);
