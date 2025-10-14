@@ -64,15 +64,12 @@ export async function listActiveDownsellsByMoment(
             d.plan_label,
             d.plan_id,
             d.created_at,
-            d.updated_at,
-            p.price_cents AS plan_price_cents,
-            p.name AS plan_name
+            d.updated_at
        FROM bot_downsells d
-       LEFT JOIN bot_plans p ON p.id = d.plan_id
       WHERE d.bot_slug = $1
         AND d.trigger = $2
         AND (d.active IS NULL OR d.active = true)
-      ORDER BY d.sort_order NULLS LAST, d.id ASC`,
+      ORDER BY d.sort_order NULLS LAST, d.id DESC`,
     [bot_slug, trigger]
   );
 
