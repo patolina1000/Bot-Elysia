@@ -21,6 +21,17 @@ import { funnelService } from '../../../services/FunnelService.js';
 import { getBotIdBySlug } from '../../../db/bots.js';
 import { getBotSettings } from '../../../db/botSettings.js';
 
+type InlineKeyboardMarkup = {
+  inline_keyboard: { text: string; callback_data: string }[][];
+};
+
+type PlanRow = {
+  id: number;
+  name: string | null;
+  price_cents: number | null;
+  is_active: boolean | null;
+};
+
 const LOCK_KEY = 4839201;
 const WORKER_INTERVAL_MS = 7000;
 const MAX_JOBS_PER_TICK = 50;
@@ -47,6 +58,14 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
   await incrementAttempt(job.id, client);
 
   try {
+    const toCents = (value: unknown): number | null => {
+      if (value === null || value === undefined) {
+        return null;
+      }
+      const numeric = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(numeric) ? numeric : null;
+    };
+
     const alreadyRecorded = await alreadySent(job.bot_slug, job.downsell_id, job.telegram_id, client);
     if (alreadyRecorded) {
       await markJobAsSkipped(job.id, 'already_sent', client);
@@ -62,9 +81,20 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     }
 
     const downsell = await getDownsellById(job.downsell_id);
-    if (!downsell || !downsell.active || !Number.isFinite(downsell.price_cents) || downsell.price_cents <= 0) {
+    const priceCents = toCents(downsell?.price_cents);
+    const planPriceCents = toCents(downsell?.plan_price_cents);
+    const hasPlan = Boolean(downsell?.plan_id);
+    const hasValidPrice = priceCents !== null && priceCents > 0;
+
+    if (!downsell || !downsell.active) {
       await markJobAsSkipped(job.id, 'downsell_inactive_or_invalid', client);
       jobLogger.info('[DOWNSELL][WORKER] skipped because downsell inactive or invalid');
+      return;
+    }
+
+    if (!hasPlan && !hasValidPrice) {
+      await markJobAsSkipped(job.id, 'downsell_price_missing', client);
+      jobLogger.info('[DOWNSELL][WORKER] skipped due to missing price and no plan');
       return;
     }
 
@@ -86,7 +116,74 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       }
     }
 
-    const { transaction } = await createPixForCustomPrice(job.bot_slug, job.telegram_id, downsell.price_cents, {
+    if (hasPlan) {
+      const { rows: planRows } = await pool.query<PlanRow>(
+        'SELECT id, name, price_cents, is_active FROM bot_plans WHERE id = $1 AND bot_slug = $2 LIMIT 1',
+        [downsell.plan_id, job.bot_slug]
+      );
+      const plan = planRows[0];
+      const planIsActive = plan && plan.is_active !== false;
+
+      if (plan && planIsActive) {
+        const planName = plan.name && plan.name.trim().length > 0 ? plan.name.trim() : `Plano #${plan.id}`;
+        const planPrice = toCents(plan.price_cents);
+        const buttonPriceCents = priceCents ?? planPrice ?? planPriceCents;
+        const priceLabel =
+          buttonPriceCents !== null && buttonPriceCents > 0
+            ? ` — R$ ${(buttonPriceCents / 100).toFixed(2).replace('.', ',')}`
+            : '';
+        const buttonText = `${planName}${priceLabel}`;
+        const keyboard: InlineKeyboardMarkup = {
+          inline_keyboard: [[{ text: buttonText, callback_data: `plan:${plan.id}` }]],
+        };
+
+        const sent = await bot.api.sendMessage(job.telegram_id, 'Clique abaixo para continuar:', {
+          reply_markup: keyboard,
+        });
+        const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;
+
+        await recordSent(
+          {
+            bot_slug: job.bot_slug,
+            downsell_id: job.downsell_id,
+            telegram_id: job.telegram_id,
+            sent_message_id: sentMessageId,
+          },
+          client
+        );
+
+        await markJobAsSent(
+          job.id,
+          {
+            sent_message_id: sentMessageId,
+          },
+          client
+        );
+
+        jobLogger.info({ plan_id: plan.id }, '[DOWNSELL][WORKER] sent plan CTA');
+        return;
+      }
+
+      jobLogger.warn(
+        { plan_id: downsell.plan_id, job_id: job.id },
+        '[DOWNSELL][WORKER] plan not found or inactive, falling back to PIX'
+      );
+
+      if (!hasValidPrice) {
+        await markJobAsSkipped(job.id, 'plan_invalid_and_no_price', client);
+        jobLogger.warn({ job_id: job.id }, '[DOWNSELL][WORKER] skipped: plan invalid and no price to generate PIX');
+        return;
+      }
+    }
+
+    const pixPriceCents = priceCents;
+    if (pixPriceCents === null || pixPriceCents <= 0) {
+      await markJobAsSkipped(job.id, 'downsell_price_missing', client);
+      jobLogger.info('[DOWNSELL][WORKER] skipped because price missing for PIX fallback');
+      return;
+    }
+
+    const { transaction } = await createPixForCustomPrice(job.bot_slug, job.telegram_id, pixPriceCents, {
       bot_id: botId,
       downsell_id: downsell.id,
       source: 'downsell_queue',
