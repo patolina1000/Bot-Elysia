@@ -15,6 +15,7 @@ type DownsellPayload = {
   price_brl?: string | number;
   price_reais?: string | number;
   copy: string;
+  button_intro_text?: string | null;
   media_url?: string | null;
   media_type?: DownsellMediaType | null;
   trigger: DownsellTrigger;
@@ -231,6 +232,13 @@ async function ensureDownsellSchema(): Promise<void> {
           EXECUTE 'ALTER TABLE bot_downsells
                    ADD COLUMN plan_label text NULL';
         END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='bot_downsells' AND column_name='button_intro_text'
+        ) THEN
+          EXECUTE 'ALTER TABLE bot_downsells
+                   ADD COLUMN button_intro_text text NULL';
+        END IF;
       END$$;
     `);
   } catch (err) {
@@ -253,6 +261,7 @@ export async function listDownsells(req: Request, res: Response): Promise<Respon
           id,
           bot_slug,
           copy,
+          button_intro_text,
           price_cents,
           media_url,
           media_type,
@@ -300,6 +309,10 @@ export function registerAdminDownsellsRoutes(app: Express): void {
         const planLabel = sanitizeStr(rawPlanLabel, 200);
         const finalPlanLabel = planLabel.length > 0 ? planLabel : null;
         const copy = sanitizeStr(payload.copy, 8000);
+        const rawButtonIntro =
+          payload.button_intro_text ?? (payload as { buttonIntroText?: unknown }).buttonIntroText;
+        const buttonIntro = sanitizeStr(rawButtonIntro, 200);
+        const finalButtonIntro = buttonIntro.length > 0 ? buttonIntro : null;
         const mediaUrl = payload.media_url ? sanitizeStr(payload.media_url, 2000) : null;
         const mediaType = normalizeMediaType(payload.media_type);
         const rawTrigger = payload.trigger ?? (payload as { moment?: unknown })?.moment;
@@ -353,15 +366,16 @@ export function registerAdminDownsellsRoutes(app: Express): void {
 
         const insertQuery = `
           INSERT INTO bot_downsells
-            (bot_slug, price_cents, copy, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, created_at, updated_at)
+            (bot_slug, price_cents, copy, button_intro_text, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, created_at, updated_at)
           VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), now())
           RETURNING *;
         `;
         const values = [
           botSlug,
           finalPriceCents,
           copy,
+          finalButtonIntro,
           mediaUrl,
           mediaType,
           trigger,
@@ -463,6 +477,13 @@ export function registerAdminDownsellsRoutes(app: Express): void {
             return res.status(400).json({ error: 'copy obrigatória' });
           }
           pushSet('copy', copy);
+        }
+
+        if ('button_intro_text' in payload || 'buttonIntroText' in payload) {
+          const rawButtonIntro =
+            payload.button_intro_text ?? (payload as { buttonIntroText?: unknown }).buttonIntroText;
+          const buttonIntro = sanitizeStr(rawButtonIntro, 200);
+          pushSet('button_intro_text', buttonIntro.length > 0 ? buttonIntro : null);
         }
 
         let planIdOverride: number | null | undefined;
@@ -580,7 +601,7 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           UPDATE bot_downsells
              SET ${sets.join(', ')}
            WHERE id = $${values.length}
-           RETURNING id, bot_slug, price_cents, copy, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, created_at, updated_at;
+           RETURNING id, bot_slug, price_cents, copy, button_intro_text, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, created_at, updated_at;
         `;
 
         const result = await pool.query(sql, values);
