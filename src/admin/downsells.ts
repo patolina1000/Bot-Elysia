@@ -18,6 +18,7 @@ type DownsellPayload = {
   trigger: DownsellTrigger;
   sort_order?: number | null;
   active?: boolean | null;
+  delay_minutes?: number | null;
 };
 
 function sanitizeStr(value: unknown, max = 5000): string {
@@ -70,6 +71,7 @@ async function ensureDownsellSchema(): Promise<void> {
         media_url    text,
         media_type   text,
         trigger      text NOT NULL CHECK (trigger IN ('after_start','after_pix')),
+        delay_minutes integer NOT NULL DEFAULT 0 CHECK (delay_minutes >= 0 AND delay_minutes <= 10080),
         sort_order   integer DEFAULT 0,
         active       boolean DEFAULT true,
         created_at   timestamptz NOT NULL DEFAULT now(),
@@ -81,6 +83,14 @@ async function ensureDownsellSchema(): Promise<void> {
           SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='ux_bot_downsells_bot_slug_sort'
         ) THEN
           CREATE UNIQUE INDEX ux_bot_downsells_bot_slug_sort ON bot_downsells(bot_slug, sort_order);
+        END IF;
+        -- compat: cria a coluna se não existir
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='bot_downsells' AND column_name='delay_minutes'
+        ) THEN
+          EXECUTE 'ALTER TABLE bot_downsells
+                   ADD COLUMN delay_minutes integer NOT NULL DEFAULT 0';
         END IF;
       END$$;
     `);
@@ -110,7 +120,8 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           ['photo', 'video', 'audio'].includes(rawMediaType)
             ? (rawMediaType as DownsellMediaType)
             : null;
-        const trigger: DownsellTrigger = payload.trigger === 'after_pix' ? 'after_pix' : 'after_start';
+        const rawTrigger = (payload.trigger ?? (payload as { moment?: unknown })?.moment) as string | undefined;
+        const trigger: DownsellTrigger = rawTrigger === 'after_pix' ? 'after_pix' : 'after_start';
         let priceCents = Number.isFinite(payload?.price_cents as number)
           ? Number(payload!.price_cents)
           : Number.NaN;
@@ -136,6 +147,15 @@ export function registerAdminDownsellsRoutes(app: Express): void {
         const sortOrder = Number.isFinite(payload?.sort_order as number)
           ? Number(payload!.sort_order)
           : 0;
+        let delayMinutes = Number.isFinite(payload?.delay_minutes as number)
+          ? Number(payload!.delay_minutes)
+          : 0;
+        if (!Number.isFinite(delayMinutes) || delayMinutes < 0) {
+          delayMinutes = 0;
+        }
+        if (delayMinutes > 10080) {
+          delayMinutes = 10080;
+        }
         const active = typeof payload?.active === 'boolean' ? payload!.active : true;
 
         if (!botSlug) {
@@ -153,12 +173,12 @@ export function registerAdminDownsellsRoutes(app: Express): void {
 
         const insertQuery = `
           INSERT INTO bot_downsells
-            (bot_slug, price_cents, copy, media_url, media_type, trigger, sort_order, active, created_at, updated_at)
+            (bot_slug, price_cents, copy, media_url, media_type, trigger, delay_minutes, sort_order, active, created_at, updated_at)
           VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
           RETURNING *;
         `;
-        const values = [botSlug, priceCents, copy, mediaUrl, mediaType, trigger, sortOrder, active];
+        const values = [botSlug, priceCents, copy, mediaUrl, mediaType, trigger, delayMinutes, sortOrder, active];
         const { rows } = await pool.query(insertQuery, values);
         return res.status(201).json({ ok: true, downsell: rows[0] });
       } catch (err) {
