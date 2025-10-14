@@ -50,30 +50,71 @@ async function releaseLock(): Promise<void> {
 async function sendDownsellMediaIfAny(
   bot: any,
   chatId: number,
-  mediaUrl: string | null,
-  mediaType: string | null,
+  mediaUrl: string | null | undefined,
+  mediaType: string | null | undefined,
   jobLogger: any
 ): Promise<number | null> {
   if (!mediaUrl) return null;
 
+  // 1) Normaliza e tenta inferir pelo mediaType e pela extensão do URL
+  const mt = (mediaType ?? '').toLowerCase().trim();
+
+  let ext = '';
+  try {
+    const u = new URL(mediaUrl);
+    const p = u.pathname.toLowerCase();
+    ext = p.includes('.') ? p.split('.').pop() || '' : '';
+  } catch {
+    // se for file_id do Telegram, URL() falha — tudo bem
+  }
+
+  // 2) Mapeia para 'video' | 'audio' | 'photo'
+  const isVideo =
+    mt.includes('video') || mt === 'mp4' || ext === 'mp4' || ext === 'mov' || ext === 'mkv' || ext === 'webm';
+  const isAudio =
+    mt.includes('audio') ||
+    mt === 'mp3' ||
+    mt === 'ogg' ||
+    mt === 'oga' ||
+    ext === 'mp3' ||
+    ext === 'ogg' ||
+    ext === 'oga' ||
+    ext === 'm4a' ||
+    ext === 'wav';
+  const isGif = ext === 'gif' || mt.includes('gif');
+
+  let kind: 'video' | 'audio' | 'photo' | 'animation' = 'photo';
+  if (isGif) kind = 'animation';
+  else if (isVideo) kind = 'video';
+  else if (isAudio) kind = 'audio';
+  // caso contrário, fica 'photo'
+
+  jobLogger.info({ mediaType: mt || null, ext: ext || null, detected: kind, mediaUrl }, '[DOWNSELL][WORKER] media detect');
+
   try {
     let msg: any;
-    const kind = (mediaType ?? 'photo').toLowerCase();
 
     if (kind === 'video') {
       msg = await bot.api.sendVideo(chatId, mediaUrl);
     } else if (kind === 'audio') {
-      // Preferimos sendAudio; se o arquivo for um "voice/ogg", Telegram ainda aceita, senão caímos no catch.
-      msg = await bot.api.sendAudio(chatId, mediaUrl);
+      // Se for OGG/Opus de "voice", o Telegram ainda aceita com sendAudio; se falhar, tentamos sendVoice.
+      try {
+        msg = await bot.api.sendAudio(chatId, mediaUrl);
+      } catch (e) {
+        jobLogger.warn({ e }, '[DOWNSELL][WORKER] sendAudio failed — trying sendVoice');
+        msg = await bot.api.sendVoice(chatId, mediaUrl);
+      }
+    } else if (kind === 'animation') {
+      // GIFs ficam melhor com sendAnimation
+      msg = await bot.api.sendAnimation(chatId, mediaUrl);
     } else {
-      // default: foto
       msg = await bot.api.sendPhoto(chatId, mediaUrl);
     }
 
     const id = typeof msg?.message_id === 'number' ? msg.message_id : null;
     return id;
   } catch (err) {
-    jobLogger.warn({ err, mediaUrl, mediaType }, '[DOWNSELL][WORKER] failed to send downsell media');
+    jobLogger.warn({ err, mediaUrl, mediaType: mt, ext, kind }, '[DOWNSELL][WORKER] failed to send downsell media');
     return null;
   }
 }
