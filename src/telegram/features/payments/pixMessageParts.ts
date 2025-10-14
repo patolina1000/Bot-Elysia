@@ -1,5 +1,5 @@
-import { Markup } from 'telegraf';
-import type * as TT from 'telegraf/typings/core/types/typegram';
+import { InlineKeyboard } from 'grammy';
+import type { InlineKeyboardMarkup } from '@grammyjs/types';
 import type { BotSettings } from '../../../db/botSettings.js';
 import type { PaymentTransaction } from '../../../db/payments.js';
 
@@ -54,7 +54,7 @@ export function buildPixEmvBlock(tx: PaymentTransaction): string {
   return `<pre>${escapeHtml(tx.qr_code)}</pre>`;
 }
 
-export function buildPixKeyboard(externalId: string, baseUrl: string): TT.InlineKeyboardMarkup {
+export function resolvePixMiniAppUrl(externalId: string, baseUrl: string): string {
   const fallbackBaseUrl = sanitizeBaseUrl(process.env.PUBLIC_BASE_URL ?? process.env.APP_BASE_URL ?? '');
   const providedBaseUrl = sanitizeBaseUrl(baseUrl);
   const resolvedBaseUrl = providedBaseUrl || fallbackBaseUrl;
@@ -63,10 +63,22 @@ export function buildPixKeyboard(externalId: string, baseUrl: string): TT.Inline
     ? `${resolvedBaseUrl}/miniapp/qr?tx=${encodedExternalId}`
     : `/miniapp/qr?tx=${encodedExternalId}`;
 
-  const inlineKeyboard = Markup.inlineKeyboard([
-    [Markup.button.callback('EFETUEI O PAGAMENTO', `paid:${externalId}`)],
-    [Markup.button.webApp('Qr code', qrUrl)],
-  ]);
+  return qrUrl;
+}
 
-  return inlineKeyboard.reply_markup as TT.InlineKeyboardMarkup;
+export function buildPixKeyboard(opts: {
+  miniAppUrl: string;
+  confirmCallbackData: string;
+  supportUrl?: string;
+}): InlineKeyboardMarkup {
+  const keyboard = new InlineKeyboard()
+    .text('EFETUEI O PAGAMENTO', opts.confirmCallbackData)
+    .row()
+    .webApp('Qr code', opts.miniAppUrl);
+
+  if (opts.supportUrl) {
+    keyboard.row().url('Suporte', opts.supportUrl);
+  }
+
+  return keyboard;
 }

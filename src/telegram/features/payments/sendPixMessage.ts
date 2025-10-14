@@ -8,11 +8,12 @@ import { logger } from '../../../logger.js';
 import type { Logger } from '../../../logger.js';
 import { pool } from '../../../db/pool.js';
 import { generatePixTraceId } from '../../../utils/pixLogging.js';
-import type { Message } from 'grammy/types';
+import type { Message } from '@grammyjs/types';
 import {
   buildPixEmvBlock,
   buildPixInstructionText,
   buildPixKeyboard,
+  resolvePixMiniAppUrl,
 } from './pixMessageParts.js';
 
 export interface PixMessageSender {
@@ -69,7 +70,11 @@ export async function sendPixMessage(
   });
 
   const baseUrl = settings.public_base_url ?? process.env.PUBLIC_BASE_URL ?? process.env.APP_BASE_URL ?? '';
-  const keyboard = buildPixKeyboard(transaction.external_id, baseUrl);
+  const miniAppUrl = resolvePixMiniAppUrl(transaction.external_id, baseUrl);
+  const keyboard = buildPixKeyboard({
+    miniAppUrl,
+    confirmCallbackData: `paid:${transaction.external_id}`,
+  });
   const message = await sender.reply('Após efetuar o pagamento, clique no botão abaixo ⤵️', {
     reply_markup: keyboard,
   });
