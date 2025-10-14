@@ -4,6 +4,7 @@ import { logger } from './logger.js';
 import { pool } from './db/pool.js';
 import { telegramMediaCache } from './services/TelegramMediaCache.js';
 import { getLastSentByBot, profileSend } from './services/TelegramSendProfiler.js';
+import { startWorker as startDownsellWorker } from './services/downsellsScheduler.js';
 
 const app = createApp();
 
@@ -71,6 +72,7 @@ function scheduleTelegramKeepAlive() {
 }
 
 scheduleTelegramKeepAlive();
+startDownsellWorker();
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'Server started');

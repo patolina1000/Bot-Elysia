@@ -17,6 +17,7 @@ import { insertOrUpdatePayment, setPaymentStatus } from '../../db/payments.js';
 import { pool } from '../../db/pool.js';
 import { getPlanById } from '../../db/plans.js';
 import { authAdminMiddleware } from '../middleware/authAdmin.js';
+import { scheduleDownsellsForTrigger } from '../../services/downsellsScheduler.js';
 
 const PUSHINPAY_NOTICE_HTML = `<div class="text-xs opacity-70 mt-3">\n  <strong>Aviso:</strong> A PUSHIN PAY atua exclusivamente como processadora de pagamentos e não possui qualquer responsabilidade pela entrega, suporte, conteúdo, qualidade ou cumprimento das obrigações relacionadas aos produtos ou serviços oferecidos pelo vendedor.\n</div>`;
 
@@ -256,6 +257,38 @@ pushinpayRouter.post(
         meta: { gateway: 'pushinpay' },
       });
 
+      const metaBotSlugRaw = (baseMeta as Record<string, unknown>)['bot_slug'] ??
+        (baseMeta as Record<string, unknown>)['botSlug'];
+      const metaBotSlug = typeof metaBotSlugRaw === 'string' ? metaBotSlugRaw.trim() : undefined;
+      const slugCandidate = botSlug ?? metaBotSlug;
+      const effectiveBotSlug = slugCandidate && typeof slugCandidate === 'string'
+        ? slugCandidate.trim()
+        : undefined;
+
+      if (
+        typeof body.telegram_id === 'number' &&
+        Number.isFinite(body.telegram_id) &&
+        effectiveBotSlug
+      ) {
+        try {
+          await scheduleDownsellsForTrigger({
+            bot_slug: effectiveBotSlug,
+            telegram_id: body.telegram_id,
+            trigger: 'after_pix',
+            triggerAt: saved.created_at ?? new Date(),
+          });
+        } catch (scheduleErr) {
+          reqLogger.warn(
+            {
+              err: scheduleErr,
+              bot_slug: effectiveBotSlug,
+              telegram_id: body.telegram_id,
+            },
+            '[DWN][enqueue] failed after_pix'
+          );
+        }
+      }
+
       // Log sucesso
       reqLogger.info({
         op: 'create',
@@ -406,6 +439,29 @@ pushinpayRouter.post(
         payloadId: parsedBody.data.payload_id ?? null,
         meta: { gateway: 'pushinpay', plan_id: plan.id },
       });
+
+      if (
+        typeof parsedBody.data.telegram_id === 'number' &&
+        Number.isFinite(parsedBody.data.telegram_id)
+      ) {
+        try {
+          await scheduleDownsellsForTrigger({
+            bot_slug: plan.bot_slug,
+            telegram_id: parsedBody.data.telegram_id,
+            trigger: 'after_pix',
+            triggerAt: saved.created_at ?? new Date(),
+          });
+        } catch (scheduleErr) {
+          reqLogger.warn(
+            {
+              err: scheduleErr,
+              bot_slug: plan.bot_slug,
+              telegram_id: parsedBody.data.telegram_id,
+            },
+            '[DWN][enqueue] failed after_pix'
+          );
+        }
+      }
 
       // Log sucesso
       reqLogger.info({

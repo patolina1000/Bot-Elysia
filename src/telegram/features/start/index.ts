@@ -7,6 +7,7 @@ import { groupMediaForSending, type MediaAsset } from '../../../utils/mediaGroup
 import { telegramMediaCache } from '../../../services/TelegramMediaCache.js';
 import { buildPlansKeyboard } from '../../../services/bot/plans.js';
 import { getSettings } from '../../../db/botSettings.js';
+import { scheduleDownsellsForTrigger } from '../../../services/downsellsScheduler.js';
 
 export const startFeature = new Composer<MyContext>();
 
@@ -32,6 +33,20 @@ startFeature.command('start', async (ctx) => {
       event: 'start',
       event_id: eventId,
     });
+
+    try {
+      await scheduleDownsellsForTrigger({
+        bot_slug: ctx.bot_slug,
+        telegram_id: tgUserId,
+        trigger: 'after_start',
+        triggerAt: new Date(),
+      });
+    } catch (scheduleErr) {
+      ctx.logger.warn(
+        { err: scheduleErr, tgUserId, botSlug: ctx.bot_slug },
+        '[DWN][enqueue] failed after_start'
+      );
+    }
 
     // Get start template
     const template = await startService.getStartTemplate(botId);

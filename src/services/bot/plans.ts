@@ -8,6 +8,7 @@ import { pool } from '../../db/pool.js';
 import { type PushinPayGateway } from '../payments/PushinPayGateway.js';
 import { logger } from '../../logger.js';
 import { generatePixTraceId } from '../../utils/pixLogging.js';
+import { scheduleDownsellsForTrigger } from '../downsellsScheduler.js';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -158,6 +159,22 @@ export async function createPixForPlan(
     }
   } catch (err) {
     logger.warn({ err, pix_trace_id }, '[plans][pix] Failed to record funnel event');
+  }
+
+  if (typeof params.telegramId === 'number' && Number.isFinite(params.telegramId)) {
+    try {
+      await scheduleDownsellsForTrigger({
+        bot_slug: plan.bot_slug,
+        telegram_id: params.telegramId,
+        trigger: 'after_pix',
+        triggerAt: transaction.created_at ?? new Date(),
+      });
+    } catch (scheduleErr) {
+      logger.warn(
+        { err: scheduleErr, bot_slug: plan.bot_slug, telegram_id: params.telegramId },
+        '[DWN][enqueue] failed after_pix'
+      );
+    }
   }
 
   return { plan, transaction };
