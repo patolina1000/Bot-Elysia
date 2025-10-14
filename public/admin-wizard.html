@@ -2723,8 +2723,20 @@
 
       function openDownsellModal(item = null) {
         downsellsEditing = item && typeof item === 'object' ? { ...item } : null;
+        if (downsellsModal) {
+          if (downsellsEditing?.id) {
+            downsellsModal.dataset.downsellId = String(downsellsEditing.id);
+            downsellsModal.dataset.mode = 'edit';
+          } else {
+            delete downsellsModal.dataset.downsellId;
+            downsellsModal.dataset.mode = 'create';
+          }
+        }
         if (downsellsModalTitle) {
           downsellsModalTitle.textContent = downsellsEditing ? 'Editar downsell' : 'Novo downsell';
+        }
+        if (downsellsSaveBtn) {
+          downsellsSaveBtn.textContent = downsellsEditing ? 'Salvar alterações' : 'Salvar';
         }
         if (dsPriceInput) {
           const editPrice = (() => {
@@ -2792,6 +2804,13 @@
           dsDelayInput.value = '';
         }
         downsellsEditing = null;
+        if (downsellsModal) {
+          delete downsellsModal.dataset.downsellId;
+          delete downsellsModal.dataset.mode;
+        }
+        if (downsellsSaveBtn) {
+          downsellsSaveBtn.textContent = 'Salvar';
+        }
       }
 
       async function saveDownsell() {
@@ -2844,7 +2863,6 @@
         const trigger = dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start';
 
         const payload = {
-          id: downsellsEditing?.id ?? undefined,
           bot_slug: slug,
           copy: (dsCopyTextarea?.value || '').trim(),
           price_cents: priceCents,
@@ -2856,17 +2874,24 @@
         };
 
         try {
-          await fetchJSON('/admin/api/downsells', {
-            method: 'POST',
+          const currentId = downsellsModal?.dataset.downsellId || (downsellsEditing?.id ? String(downsellsEditing.id) : '');
+          const isEdit = Boolean(currentId);
+          const url = isEdit
+            ? `/admin/api/downsells/${encodeURIComponent(currentId)}`
+            : '/admin/api/downsells';
+          await fetchJSON(url, {
+            method: isEdit ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
           closeDownsellModal();
-          showToast('Downsell salvo!');
+          showToast(isEdit ? 'Downsell atualizado!' : 'Downsell salvo!');
           await loadDownsells({ silent: true });
         } catch (error) {
           console.error('[downsells] erro ao salvar', error);
-          alert(error instanceof Error ? error.message : 'Erro ao salvar downsell.');
+          const isEdit = Boolean(downsellsModal?.dataset.downsellId || downsellsEditing?.id);
+          const actionLabel = isEdit ? 'atualizar' : 'salvar';
+          alert(error instanceof Error ? error.message : `Erro ao ${actionLabel} downsell.`);
         }
       }
 

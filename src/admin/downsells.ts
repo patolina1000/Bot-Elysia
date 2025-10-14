@@ -60,6 +60,71 @@ function parsePriceToCents(value: unknown): number {
   return Number.isFinite(number) ? Math.round(number * 100) : Number.NaN;
 }
 
+function normalizeMediaType(value: unknown): DownsellMediaType | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const str = sanitizeStr(value, 16);
+  return ['photo', 'video', 'audio'].includes(str)
+    ? (str as DownsellMediaType)
+    : null;
+}
+
+function normalizeTrigger(value: unknown): DownsellTrigger {
+  const str = sanitizeStr(value ?? '', 32);
+  return str === 'after_pix' ? 'after_pix' : 'after_start';
+}
+
+function clampDelayMinutes(value: unknown, fallback = 0): number {
+  let delay = typeof value === 'number' ? value : Number(value ?? fallback);
+  if (!Number.isFinite(delay) || delay < 0) {
+    delay = fallback;
+  }
+  if (delay > 10080) {
+    delay = 10080;
+  }
+  return Math.round(delay);
+}
+
+function normalizeSortOrder(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeActive(value: unknown, fallback = true): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function computePriceCents(payload: Partial<DownsellPayload>): number {
+  let priceCents = Number.isFinite(payload?.price_cents as number)
+    ? Number(payload!.price_cents)
+    : Number.NaN;
+
+  if (!Number.isFinite(priceCents)) {
+    const fallbackSource = payload as {
+      price?: unknown;
+      price_brl?: unknown;
+      price_reais?: unknown;
+    };
+    const rawReais =
+      fallbackSource?.price ??
+      fallbackSource?.price_brl ??
+      fallbackSource?.price_reais ??
+      null;
+    if (rawReais !== null && rawReais !== undefined) {
+      const parsed = parsePriceToCents(rawReais);
+      if (Number.isFinite(parsed)) {
+        priceCents = parsed;
+      }
+    }
+  }
+
+  return priceCents;
+}
+
 async function ensureDownsellSchema(): Promise<void> {
   try {
     await pool.query(`
@@ -117,53 +182,18 @@ export function registerAdminDownsellsRoutes(app: Express): void {
     authAdminMiddleware,
     async (req: Request, res: Response): Promise<Response> => {
       try {
-        const payload = req.body as Partial<DownsellPayload>;
+        const payload = req.body as Partial<DownsellPayload> & Record<string, unknown>;
 
         const botSlug = sanitizeStr(payload.bot_slug, 200).toLowerCase();
         const copy = sanitizeStr(payload.copy, 8000);
         const mediaUrl = payload.media_url ? sanitizeStr(payload.media_url, 2000) : null;
-        const rawMediaType = payload.media_type ? sanitizeStr(payload.media_type, 16) : null;
-        const mediaType: DownsellMediaType | null = rawMediaType &&
-          ['photo', 'video', 'audio'].includes(rawMediaType)
-            ? (rawMediaType as DownsellMediaType)
-            : null;
-        const rawTrigger = (payload.trigger ?? (payload as { moment?: unknown })?.moment) as string | undefined;
-        const trigger: DownsellTrigger = rawTrigger === 'after_pix' ? 'after_pix' : 'after_start';
-        let priceCents = Number.isFinite(payload?.price_cents as number)
-          ? Number(payload!.price_cents)
-          : Number.NaN;
-
-        if (!Number.isFinite(priceCents)) {
-          const fallbackSource = payload as {
-            price?: unknown;
-            price_brl?: unknown;
-            price_reais?: unknown;
-          };
-          const rawReais =
-            fallbackSource?.price ??
-            fallbackSource?.price_brl ??
-            fallbackSource?.price_reais ??
-            null;
-          if (rawReais !== null && rawReais !== undefined) {
-            const parsed = parsePriceToCents(rawReais);
-            if (Number.isFinite(parsed)) {
-              priceCents = parsed;
-            }
-          }
-        }
-        const sortOrder = Number.isFinite(payload?.sort_order as number)
-          ? Number(payload!.sort_order)
-          : null;
-        let delayMinutes = Number.isFinite(payload?.delay_minutes as number)
-          ? Number(payload!.delay_minutes)
-          : 0;
-        if (!Number.isFinite(delayMinutes) || delayMinutes < 0) {
-          delayMinutes = 0;
-        }
-        if (delayMinutes > 10080) {
-          delayMinutes = 10080;
-        }
-        const active = typeof payload?.active === 'boolean' ? payload!.active : true;
+        const mediaType = normalizeMediaType(payload.media_type);
+        const rawTrigger = payload.trigger ?? (payload as { moment?: unknown })?.moment;
+        const trigger = normalizeTrigger(rawTrigger);
+        const priceCents = computePriceCents(payload);
+        const sortOrder = normalizeSortOrder(payload.sort_order);
+        const delayMinutes = clampDelayMinutes(payload.delay_minutes);
+        const active = normalizeActive(payload.active);
 
         if (!botSlug) {
           return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
@@ -242,6 +272,119 @@ export function registerAdminDownsellsRoutes(app: Express): void {
         return res.status(200).json({ ok: true, deleted_id: idNum });
       } catch (err) {
         logger.error({ err }, '[ADMIN][DOWNSELLS][DELETE] error');
+        return res.status(500).json({
+          ok: false,
+          error: 'internal_error',
+          details: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  );
+
+  app.put(
+    '/admin/api/downsells/:id',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const downsellId = Number(req.params.id);
+        if (!Number.isInteger(downsellId) || downsellId <= 0) {
+          return res.status(400).json({ error: 'invalid_downsell_id' });
+        }
+
+        const existing = await pool.query(
+          'SELECT id, bot_slug FROM bot_downsells WHERE id = $1 LIMIT 1',
+          [downsellId]
+        );
+        if (existing.rowCount === 0) {
+          return res.status(404).json({ error: 'downsells_not_found' });
+        }
+
+        const payload = (req.body ?? {}) as Partial<DownsellPayload> & Record<string, unknown>;
+
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        const pushSet = (column: string, value: unknown) => {
+          values.push(value);
+          sets.push(`${column} = $${values.length}`);
+        };
+
+        if ('bot_slug' in payload) {
+          const botSlug = sanitizeStr(payload.bot_slug, 200).toLowerCase();
+          if (!botSlug) {
+            return res.status(400).json({ error: 'bot_slug obrigatório' });
+          }
+          pushSet('bot_slug', botSlug);
+        }
+
+        if ('copy' in payload) {
+          const copy = sanitizeStr(payload.copy, 8000);
+          if (!copy) {
+            return res.status(400).json({ error: 'copy obrigatória' });
+          }
+          pushSet('copy', copy);
+        }
+
+        if ('media_url' in payload) {
+          const mediaUrl = payload.media_url === null ? null : sanitizeStr(payload.media_url, 2000);
+          pushSet('media_url', mediaUrl);
+        }
+
+        if ('media_type' in payload) {
+          const mediaType = payload.media_type === null ? null : normalizeMediaType(payload.media_type);
+          pushSet('media_type', mediaType);
+        }
+
+        const hasTriggerUpdate = 'trigger' in payload || 'moment' in payload;
+        if (hasTriggerUpdate) {
+          const rawTrigger = payload.trigger ?? (payload as { moment?: unknown }).moment;
+          pushSet('trigger', normalizeTrigger(rawTrigger));
+        }
+
+        if ('delay_minutes' in payload) {
+          pushSet('delay_minutes', clampDelayMinutes(payload.delay_minutes));
+        }
+
+        if ('sort_order' in payload) {
+          const sortOrder = normalizeSortOrder(payload.sort_order);
+          pushSet('sort_order', sortOrder);
+        }
+
+        if ('active' in payload && typeof payload.active === 'boolean') {
+          pushSet('active', payload.active);
+        }
+
+        const hasPriceUpdate = ['price_cents', 'price', 'price_brl', 'price_reais'].some((key) => key in payload);
+        if (hasPriceUpdate) {
+          const priceCents = computePriceCents(payload);
+          if (!Number.isFinite(priceCents) || priceCents < 0) {
+            return res.status(400).json({
+              error: 'invalid_price',
+              message: "price inválido: envie price_cents (centavos) ou price (reais, ex: 19,90)",
+            });
+          }
+          pushSet('price_cents', priceCents);
+        }
+
+        if (sets.length === 0) {
+          return res.status(400).json({ error: 'no_fields_to_update' });
+        }
+
+        sets.push('updated_at = now()');
+
+        values.push(downsellId);
+        const sql = `
+          UPDATE bot_downsells
+             SET ${sets.join(', ')}
+           WHERE id = $${values.length}
+           RETURNING id, bot_slug, price_cents, copy, media_url, media_type, trigger, delay_minutes, sort_order, active, created_at, updated_at;
+        `;
+
+        const result = await pool.query(sql, values);
+        const updated = result.rows[0];
+        logger.info({ id: updated.id, bot_slug: updated.bot_slug }, '[ADMIN][DOWNSELLS][PUT] updated');
+        return res.status(200).json(updated);
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELLS][PUT] error');
         return res.status(500).json({
           ok: false,
           error: 'internal_error',
