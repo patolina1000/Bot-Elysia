@@ -2,18 +2,19 @@ import { pool } from '../db/pool.js';
 import { logger } from '../logger.js';
 
 export interface CreateEventParams {
-  bot_id: string;
+  bot_id: string | null;
   tg_user_id?: number;
   event: string;
   event_id: string;
   price_cents?: number;
   transaction_id?: string;
+  payload_id?: string | number | null;
   meta?: Record<string, any>;
 }
 
 export interface FunnelEvent {
   id: number;
-  bot_id: string;
+  bot_id: string | null;
   tg_user_id: number | null;
   event: string;
   event_id: string;
@@ -27,8 +28,8 @@ export class FunnelService {
   async createEvent(params: CreateEventParams): Promise<FunnelEvent | null> {
     try {
       const result = await pool.query(
-        `INSERT INTO funnel_events (bot_id, tg_user_id, event, event_id, price_cents, transaction_id, meta)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO funnel_events (bot_id, tg_user_id, event, event_id, price_cents, transaction_id, payload_id, meta)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (event_id) DO NOTHING
          RETURNING *`,
         [
@@ -38,6 +39,7 @@ export class FunnelService {
           params.event_id,
           params.price_cents || null,
           params.transaction_id || null,
+          params.payload_id ?? null,
           params.meta ? JSON.stringify(params.meta) : null,
         ]
       );
@@ -48,7 +50,7 @@ export class FunnelService {
         return null;
       }
 
-      logger.info({ event: params.event, event_id: params.event_id }, 'Funnel event created');
+      logger.info({ event: params.event, event_id: params.event_id, payload_id: params.payload_id ?? null }, 'Funnel event created');
 
       return result.rows[0];
     } catch (err) {
