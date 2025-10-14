@@ -564,7 +564,8 @@
 
     .downsells-modal textarea,
     .downsells-modal select,
-    .downsells-modal input[type="text"] {
+    .downsells-modal input[type="text"],
+    .downsells-modal input[type="number"] {
       border-radius: 10px;
       border: 1px solid #d1d5db;
       padding: 10px 12px;
@@ -2141,6 +2142,9 @@
               <option value="after_pix">Após gerar PIX</option>
             </select>
           </label>
+          <label>Atraso (min)
+            <input id="ds-delay-min" type="number" inputmode="numeric" min="0" max="10080" step="1" placeholder="ex.: 20">
+          </label>
         </div>
         <div class="form-row">
           <label>Copy (mensagem)
@@ -2451,6 +2455,7 @@
       const downsellsSaveBtn = document.getElementById('downsells-save');
       const dsPriceInput = document.getElementById('ds-price');
       const dsMomentSelect = document.getElementById('ds-moment');
+      const dsDelayInput = document.getElementById('ds-delay-min');
       const dsCopyTextarea = document.getElementById('ds-copy');
       const dsMediaUrlInput = document.getElementById('ds-media-url');
       const dsMediaFileInput = document.getElementById('ds-media-file');
@@ -2601,7 +2606,19 @@
           }
           const moment = document.createElement('div');
           moment.className = 'downsells-item-moment';
-          moment.textContent = item?.moment === 'after_pix' ? 'Após gerar PIX' : 'Após /start';
+          const triggerValue =
+            item?.trigger === 'after_pix' || item?.moment === 'after_pix' ? 'after_pix' : 'after_start';
+          const delayValue = (() => {
+            const rawDelay = item?.delay_minutes;
+            const numericDelay = typeof rawDelay === 'number' ? rawDelay : Number(rawDelay ?? 0);
+            if (!Number.isFinite(numericDelay) || numericDelay <= 0) {
+              return 0;
+            }
+            return Math.min(Math.max(Math.round(numericDelay), 0), 10080);
+          })();
+          const delayText = delayValue > 0 ? ` (após ${delayValue} min)` : '';
+          moment.textContent =
+            (triggerValue === 'after_pix' ? 'Após gerar PIX' : 'Após /start') + delayText;
           info.appendChild(price);
           info.appendChild(moment);
 
@@ -2726,7 +2743,21 @@
           dsPriceInput.value = editPrice;
         }
         if (dsMomentSelect) {
-          dsMomentSelect.value = downsellsEditing?.moment === 'after_pix' ? 'after_pix' : 'after_start';
+          const triggerValue =
+            downsellsEditing?.trigger === 'after_pix' || downsellsEditing?.moment === 'after_pix'
+              ? 'after_pix'
+              : 'after_start';
+          dsMomentSelect.value = triggerValue;
+        }
+        if (dsDelayInput) {
+          const rawDelay = downsellsEditing?.delay_minutes;
+          const numericDelay = typeof rawDelay === 'number' ? rawDelay : Number(rawDelay ?? 0);
+          if (Number.isFinite(numericDelay) && numericDelay > 0) {
+            const clamped = Math.min(Math.max(numericDelay, 0), 10080);
+            dsDelayInput.value = String(Math.round(clamped));
+          } else {
+            dsDelayInput.value = '';
+          }
         }
         if (dsCopyTextarea) {
           dsCopyTextarea.value = downsellsEditing?.copy ?? '';
@@ -2748,6 +2779,9 @@
         downsellsModal?.classList.add('hidden');
         if (dsMediaFileInput) {
           dsMediaFileInput.value = '';
+        }
+        if (dsDelayInput) {
+          dsDelayInput.value = '';
         }
         downsellsEditing = null;
       }
@@ -2790,13 +2824,26 @@
           return;
         }
 
+        let delayMinutes = Number(dsDelayInput?.value ?? 0);
+        if (!Number.isFinite(delayMinutes) || delayMinutes < 0) {
+          delayMinutes = 0;
+        }
+        if (delayMinutes > 10080) {
+          delayMinutes = 10080;
+        }
+        delayMinutes = Math.round(delayMinutes);
+
+        const trigger = dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start';
+
         const payload = {
           id: downsellsEditing?.id ?? undefined,
           bot_slug: slug,
           copy: (dsCopyTextarea?.value || '').trim(),
           price_cents: priceCents,
           media_url: (dsMediaUrlInput?.value || '').trim() || null,
-          moment: dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start',
+          moment: trigger,
+          trigger,
+          delay_minutes: delayMinutes,
           active: Boolean(dsActiveCheckbox?.checked),
         };
 
