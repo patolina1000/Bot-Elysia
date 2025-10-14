@@ -1,6 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { Message } from 'grammy/types';
-import type { MyContext } from '../../grammYContext.js';
+import type { Telegraf } from 'telegraf';
 import { logger } from '../../../logger.js';
 import { pool } from '../../../db/pool.js';
 import {
@@ -15,11 +14,13 @@ import {
 import { recordSent } from '../../../db/downsellsSent.js';
 import { getDownsellById } from '../../../db/downsells.js';
 import { hasPaidTransactionForUser } from '../../../db/payments.js';
-import { createPixForCustomPrice, sendPixMessage } from '../payments/sendPixMessage.js';
+import { createPixForCustomPrice } from '../payments/sendPixMessage.js';
+import { sendPixByChatId } from '../payments/sendPixByChatId.js';
 import { generatePixTraceId } from '../../../utils/pixLogging.js';
 import { getOrCreateBotBySlug } from '../../botFactory.js';
 import { funnelService } from '../../../services/FunnelService.js';
 import { getBotIdBySlug } from '../../../db/bots.js';
+import { getBotSettings } from '../../../db/botSettings.js';
 
 const LOCK_KEY = 4839201;
 const WORKER_INTERVAL_MS = 7000;
@@ -36,19 +37,6 @@ async function releaseLock(): Promise<void> {
   });
 }
 
-function buildSender(botSlug: string, telegramId: number, jobLogger: typeof logger, bot: Awaited<ReturnType<typeof getOrCreateBotBySlug>>) {
-  return {
-    bot_slug: botSlug,
-    logger: jobLogger,
-    reply: (text: string, extra?: Parameters<MyContext['reply']>[1]) =>
-      bot.api.sendMessage(telegramId, text, extra as any) as Promise<Message>,
-    replyWithPhoto: (
-      photo: Parameters<MyContext['replyWithPhoto']>[0],
-      extra?: Parameters<MyContext['replyWithPhoto']>[1]
-    ) => bot.api.sendPhoto(telegramId, photo as any, extra as any) as Promise<Message>,
-  };
-}
-
 async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<void> {
   const jobLogger = logger.child({
     bot_slug: job.bot_slug,
@@ -57,9 +45,9 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     job_id: job.id,
   });
 
-  try {
-    await incrementAttempt(job.id, client);
+  await incrementAttempt(job.id, client);
 
+  try {
     const alreadyRecorded = await alreadySent(job.bot_slug, job.downsell_id, job.telegram_id, client);
     if (alreadyRecorded) {
       await markJobAsSkipped(job.id, 'already_sent', client);
@@ -89,6 +77,16 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     }
 
     const bot = await getOrCreateBotBySlug(job.bot_slug);
+    const tg = bot.api as unknown as Telegraf['telegram'];
+    const settings = await getBotSettings(job.bot_slug);
+
+    if (downsell.copy && downsell.copy.trim().length > 0) {
+      try {
+        await bot.api.sendMessage(job.telegram_id, downsell.copy, { parse_mode: 'HTML' });
+      } catch (copyErr) {
+        jobLogger.warn({ err: copyErr }, '[DOWNSELL][WORKER] failed to send downsell copy');
+      }
+    }
 
     const { transaction } = await createPixForCustomPrice(job.bot_slug, job.telegram_id, downsell.price_cents, {
       bot_id: botId,
@@ -108,16 +106,10 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       '[DOWNSELL][WORKER] pix generated'
     );
 
-    if (downsell.copy && downsell.copy.trim().length > 0) {
-      try {
-        await bot.api.sendMessage(job.telegram_id, downsell.copy, { parse_mode: 'HTML' });
-      } catch (copyErr) {
-        jobLogger.warn({ err: copyErr }, '[DOWNSELL][WORKER] failed to send downsell copy');
-      }
-    }
-
-    const sender = buildSender(job.bot_slug, job.telegram_id, jobLogger, bot);
-    const sentMessage = await sendPixMessage(sender, transaction, { source: 'downsell' });
+    const baseUrlEnv = (process.env.PUBLIC_BASE_URL ?? '').trim();
+    const baseUrl = baseUrlEnv || settings.public_base_url || process.env.APP_BASE_URL || '';
+    const { message_ids } = await sendPixByChatId(job.telegram_id, transaction, settings, tg, baseUrl);
+    const lastMessageId = message_ids.length > 0 ? message_ids[message_ids.length - 1] ?? null : null;
 
     await recordSent(
       {
@@ -126,7 +118,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
         telegram_id: job.telegram_id,
         transaction_id: String(transaction.id),
         external_id: transaction.external_id,
-        sent_message_id: sentMessage?.message_id ? String(sentMessage.message_id) : null,
+        sent_message_id: lastMessageId ? String(lastMessageId) : null,
       },
       client
     );
@@ -134,37 +126,75 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     await markJobAsSent(
       job.id,
       {
-        transaction_id: transaction.external_id,
+        transaction_id: String(transaction.id),
         external_id: transaction.external_id,
-        sent_message_id: sentMessage?.message_id ? String(sentMessage.message_id) : null,
+        sent_message_id: lastMessageId ? String(lastMessageId) : null,
       },
       client
     );
 
-    const eventId = `ds:${job.downsell_id}:${job.telegram_id}`;
-    await funnelService
-      .createEvent({
-        bot_id: botId,
-        tg_user_id: job.telegram_id,
-        event: 'downsell_sent',
-        event_id: eventId,
-        price_cents: transaction.value_cents,
-        transaction_id: transaction.external_id,
-        payload_id: String(job.downsell_id),
-        meta: {
-          downsell_id: job.downsell_id,
-          job_id: job.id,
-          pix_trace_id: pixTraceId,
-        },
-      })
-      .catch((eventErr) => {
-        jobLogger.warn({ err: eventErr }, '[DOWNSELL][WORKER] failed to record funnel event');
-      });
+    await insertFunnelEvent({
+      bot_id: botId,
+      telegram_id: job.telegram_id,
+      downsell_id: job.downsell_id,
+      price_cents: transaction.value_cents,
+      transaction_external_id: transaction.external_id,
+      pix_trace_id: pixTraceId,
+      job_id: job.id,
+    });
 
+    console.info('[DOWNSELL][SEND][OK]', {
+      job_id: job.id,
+      external_id: transaction.external_id,
+      last_message_id: lastMessageId ?? null,
+    });
     jobLogger.info('[DOWNSELL][WORKER] job processed successfully');
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
+    await markJobAsError(job.id, message, client);
+    console.error('[DOWNSELL][SEND][ERROR]', { job_id: job.id, err });
     jobLogger.error({ err }, '[DOWNSELL][WORKER] job failed');
-    await markJobAsError(job.id, err, client);
+  }
+}
+
+interface InsertFunnelEventParams {
+  bot_id: string;
+  telegram_id: number;
+  downsell_id: number;
+  price_cents: number;
+  transaction_external_id: string;
+  pix_trace_id: string;
+  job_id: number;
+}
+
+async function insertFunnelEvent(params: InsertFunnelEventParams): Promise<void> {
+  const eventId = `ds:${params.downsell_id}:${params.telegram_id}`;
+
+  try {
+    await funnelService.createEvent({
+      bot_id: params.bot_id,
+      tg_user_id: params.telegram_id,
+      event: 'downsell_sent',
+      event_id: eventId,
+      price_cents: params.price_cents,
+      transaction_id: params.transaction_external_id,
+      payload_id: String(params.downsell_id),
+      meta: {
+        downsell_id: params.downsell_id,
+        job_id: params.job_id,
+        pix_trace_id: params.pix_trace_id,
+      },
+    });
+  } catch (eventErr) {
+    logger.warn(
+      {
+        err: eventErr,
+        bot_id: params.bot_id,
+        downsell_id: params.downsell_id,
+        job_id: params.job_id,
+      },
+      '[DOWNSELL][WORKER] failed to record funnel event'
+    );
   }
 }
 
@@ -172,6 +202,7 @@ export function startDownsellWorker(_app?: unknown): void {
   const workerLogger = logger.child({ worker: 'downsells' });
 
   const tick = async () => {
+    console.info('[DOWNSELL][WORKER][TICK]');
     const locked = await acquireLock();
     if (!locked) {
       return;
@@ -181,10 +212,12 @@ export function startDownsellWorker(_app?: unknown): void {
       while (true) {
         const picked = await pickDueJobs(MAX_JOBS_PER_TICK);
         if (!picked) {
+          console.info('[DOWNSELL][PICK]', { due_found: 0 });
           break;
         }
 
         const { client, jobs } = picked;
+        console.info('[DOWNSELL][PICK]', { due_found: jobs.length });
         try {
           for (const job of jobs) {
             await handleJob(job, client);

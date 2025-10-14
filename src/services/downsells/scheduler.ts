@@ -66,6 +66,12 @@ export async function scheduleDownsellsForMoment(params: ScheduleDownsellParams)
   }
 
   const downsells = await dependencies.listActiveDownsellsByMoment(params.botSlug, params.moment);
+  const triggerLabel = params.moment === 'after_pix' ? '[DOWNSELL][TRIGGER][AFTER_PIX]' : '[DOWNSELL][TRIGGER][AFTER_START]';
+  console.info(triggerLabel, {
+    bot_slug: params.botSlug,
+    telegram_id: params.telegramId,
+    found: downsells.length,
+  });
   if (downsells.length === 0) {
     log.debug('[DOWNSELL][SCHEDULE] no active downsells for moment');
     return;

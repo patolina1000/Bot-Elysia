@@ -2,43 +2,18 @@ import type { MyContext } from '../../grammYContext.js';
 import type { PaymentTransaction } from '../../../db/payments.js';
 import { insertOrUpdatePayment } from '../../../db/payments.js';
 import { getSettings } from '../../../db/botSettings.js';
+import type { BotSettings } from '../../../db/botSettings.js';
 import { resolvePixGateway } from '../../../services/payments/pixGatewayResolver.js';
 import { logger } from '../../../logger.js';
 import type { Logger } from '../../../logger.js';
 import { pool } from '../../../db/pool.js';
 import { generatePixTraceId } from '../../../utils/pixLogging.js';
 import type { Message } from 'grammy/types';
-
-const DEFAULT_PIX_INSTRUCTIONS = [
-  '✅ Como realizar o pagamento:',
-  '',
-  '1️⃣ Abra o aplicativo do seu banco.',
-  '',
-  '2️⃣ Selecione a opção “Pagar” ou “Pix”.',
-  '',
-  '3️⃣ Escolha “Pix Copia e Cola”.',
-  '',
-  '4️⃣ Cole o código abaixo e confirme o pagamento com segurança.',
-].join('\n');
-
-function escapeHtml(input: string): string {
-  return input.replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      case "'":
-        return '&#39;';
-      default:
-        return char;
-    }
-  });
-}
+import {
+  buildPixEmvBlock,
+  buildPixInstructionText,
+  buildPixKeyboard,
+} from './pixMessageParts.js';
 
 export interface PixMessageSender {
   bot_slug: string;
@@ -63,10 +38,16 @@ export async function sendPixMessage(
   _options: SendPixMessageOptions = {}
 ): Promise<Message> {
   const botSlug = sender.bot_slug;
+  let settings: BotSettings = {
+    bot_slug: botSlug,
+    pix_image_url: null,
+    offers_text: null,
+    public_base_url: null,
+  };
 
   if (botSlug) {
     try {
-      const settings = await getSettings(botSlug);
+      settings = await getSettings(botSlug);
       if (settings?.pix_image_url) {
         await sender.replyWithPhoto(settings.pix_image_url);
       }
@@ -78,38 +59,19 @@ export async function sendPixMessage(
     }
   }
 
-  await sender.reply(DEFAULT_PIX_INSTRUCTIONS);
+  const instructionText = buildPixInstructionText(settings, transaction);
+  await sender.reply(instructionText);
   await sender.reply('Copie o código abaixo:');
 
-  if (!transaction.qr_code) {
-    throw new Error('Código PIX indisponível.');
-  }
-
-  const escaped = escapeHtml(transaction.qr_code);
-
-  await sender.reply(`<pre>${escaped}</pre>`, {
+  const emvBlock = buildPixEmvBlock(transaction);
+  await sender.reply(emvBlock, {
     parse_mode: 'HTML',
   });
 
+  const baseUrl = settings.public_base_url ?? process.env.PUBLIC_BASE_URL ?? process.env.APP_BASE_URL ?? '';
+  const keyboard = buildPixKeyboard(transaction.external_id, baseUrl);
   const message = await sender.reply('Após efetuar o pagamento, clique no botão abaixo ⤵️', {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: 'EFETUEI O PAGAMENTO',
-            callback_data: `paid:${transaction.external_id}`,
-          },
-        ],
-        [
-          {
-            text: 'Qr code',
-            web_app: {
-              url: `${process.env.APP_BASE_URL}/miniapp/qr?tx=${encodeURIComponent(transaction.external_id)}`,
-            },
-          },
-        ],
-      ],
-    },
+    reply_markup: keyboard,
   });
 
   return message;
