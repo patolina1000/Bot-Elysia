@@ -7,6 +7,7 @@ import { groupMediaForSending, type MediaAsset } from '../../../utils/mediaGroup
 import { telegramMediaCache } from '../../../services/TelegramMediaCache.js';
 import { buildPlansKeyboard } from '../../../services/bot/plans.js';
 import { getSettings } from '../../../db/botSettings.js';
+import { scheduleDownsellsForMoment } from '../../../services/downsells/scheduler.js';
 
 export const startFeature = new Composer<MyContext>();
 
@@ -78,6 +79,18 @@ startFeature.command('start', async (ctx) => {
       }
     } catch (plansError) {
       ctx.logger.warn({ err: plansError }, '[START] failed to load plans');
+    }
+
+    try {
+      await scheduleDownsellsForMoment({
+        botId: botId ?? null,
+        botSlug: ctx.bot_slug,
+        telegramId: tgUserId,
+        moment: 'after_start',
+        logger: ctx.logger,
+      });
+    } catch (downsellScheduleError) {
+      ctx.logger.warn({ err: downsellScheduleError }, '[DOWNSELL][SCHEDULE] failed after /start');
     }
 
     ctx.logger.info({ tgUserId, eventId }, 'Start command completed');

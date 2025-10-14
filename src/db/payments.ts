@@ -210,3 +210,27 @@ export async function getPaymentByExternalId(
   const row = result.rows[0];
   return row ? mapRow(row) : null;
 }
+
+const PAID_STATUSES = ['paid', 'approved', 'completed', 'confirmed'];
+
+export async function hasPaidTransactionForUser(
+  botSlug: string,
+  telegramId: number
+): Promise<boolean> {
+  if (!Number.isFinite(telegramId)) {
+    return false;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT 1
+       FROM payment_transactions
+      WHERE telegram_id = $1
+        AND (meta ->> 'bot_slug') = $2
+        AND LOWER(status) = ANY($3::text[])
+      ORDER BY updated_at DESC
+      LIMIT 1`,
+    [telegramId, botSlug, PAID_STATUSES]
+  );
+
+  return rows.length > 0;
+}

@@ -7,29 +7,11 @@ import {
 import { getPaymentByExternalId } from '../../../db/payments.js';
 import { getPlanById } from '../../../db/plans.js';
 import { resolvePixGateway } from '../../../services/payments/pixGatewayResolver.js';
-import { getSettings } from '../../../db/botSettings.js';
 import { generatePixTraceId } from '../../../utils/pixLogging.js';
+import { sendPixMessage } from './sendPixMessage.js';
+import { scheduleDownsellsForMoment } from '../../../services/downsells/scheduler.js';
 
 export const paymentsFeature = new Composer<MyContext>();
-
-function escapeHtml(input: string): string {
-  return input.replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      case "'":
-        return '&#39;';
-      default:
-        return char;
-    }
-  });
-}
 
 paymentsFeature.on('callback_query:data', async (ctx, next) => {
   const data = ctx.callbackQuery?.data ?? '';
@@ -151,57 +133,21 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         pix_trace_id: final_trace_id,
       }, '[PIX][CREATE] telegram pix generated');
 
-      const botSlug = ctx.bot_slug;
-      if (botSlug) {
+      await sendPixMessage(ctx, transaction, { source: 'plan' });
+
+      if (typeof telegramId === 'number' && !Number.isNaN(telegramId)) {
         try {
-          const settings = await getSettings(botSlug);
-          if (settings?.pix_image_url) {
-            await ctx.replyWithPhoto(settings.pix_image_url);
-          }
-        } catch (settingsError) {
-          ctx.logger.warn({ err: settingsError, botSlug }, '[PAYMENTS] Falha ao enviar imagem do PIX');
+          await scheduleDownsellsForMoment({
+            botId: ctx.bot_id ?? null,
+            botSlug: ctx.bot_slug,
+            telegramId,
+            moment: 'after_pix',
+            logger: ctx.logger,
+          });
+        } catch (scheduleErr) {
+          ctx.logger.warn({ err: scheduleErr }, '[DOWNSELL][SCHEDULE] failed after pix creation');
         }
       }
-
-      const instructions = [
-        '✅ Como realizar o pagamento:',
-        '',
-        '1️⃣ Abra o aplicativo do seu banco.',
-        '',
-        '2️⃣ Selecione a opção “Pagar” ou “Pix”.',
-        '',
-        '3️⃣ Escolha “Pix Copia e Cola”.',
-        '',
-        '4️⃣ Cole o código abaixo e confirme o pagamento com segurança.',
-      ].join('\n');
-      await ctx.reply(instructions);
-
-      await ctx.reply('Copie o código abaixo:');
-
-      await ctx.reply(`<pre>${escapeHtml(transaction.qr_code)}</pre>`, {
-        parse_mode: 'HTML',
-      });
-
-      await ctx.reply('Após efetuar o pagamento, clique no botão abaixo ⤵️', {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: 'EFETUEI O PAGAMENTO',
-                callback_data: `paid:${transaction.external_id}`,
-              },
-            ],
-            [
-              {
-                text: 'Qr code',
-                web_app: {
-                  url: `${process.env.APP_BASE_URL}/miniapp/qr?tx=${encodeURIComponent(transaction.external_id)}`,
-                },
-              },
-            ],
-          ],
-        },
-      });
 
       await ctx.answerCallbackQuery();
     } catch (err) {
