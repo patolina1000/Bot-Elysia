@@ -239,6 +239,49 @@ async function ensureDownsellSchema(): Promise<void> {
   }
 }
 
+export async function listDownsells(req: Request, res: Response): Promise<Response> {
+  try {
+    const rawBotSlug = req.query?.bot_slug as string | string[] | undefined;
+    const botSlug = sanitizeStr(Array.isArray(rawBotSlug) ? rawBotSlug[0] : rawBotSlug, 200).toLowerCase();
+    if (!botSlug) {
+      return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id,
+          bot_slug,
+          plan_id,
+          plan_label,
+          copy,
+          price_cents,
+          media_url,
+          media_type,
+          trigger,
+          delay_minutes,
+          sort_order,
+          active,
+          created_at,
+          updated_at
+        FROM public.bot_downsells
+        WHERE bot_slug = $1
+        ORDER BY sort_order NULLS LAST, id DESC
+      `,
+      [botSlug]
+    );
+
+    return res.status(200).json({ items: rows });
+  } catch (err) {
+    logger.error({ err }, '[ADMIN][DOWNSELLS][GET] error');
+    return res.status(500).json({
+      ok: false,
+      error: 'internal_error',
+      details: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export function registerAdminDownsellsRoutes(app: Express): void {
   void ensureDownsellSchema().catch((err) => {
     logger.error({ err }, '[ADMIN][DOWNSELLS] Schema initialization error');
@@ -340,31 +383,7 @@ export function registerAdminDownsellsRoutes(app: Express): void {
   app.get(
     '/admin/api/downsells',
     authAdminMiddleware,
-    async (req: Request, res: Response): Promise<Response> => {
-      try {
-        const rawBotSlug = req.query?.bot_slug as string | string[] | undefined;
-        const botSlug = sanitizeStr(Array.isArray(rawBotSlug) ? rawBotSlug[0] : rawBotSlug, 200).toLowerCase();
-        if (!botSlug) {
-          return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
-        }
-
-        const { rows } = await pool.query(
-          `
-            SELECT d.*, p.name AS plan_name, p.price_cents AS plan_price_cents
-              FROM bot_downsells d
-              LEFT JOIN bot_plans p ON p.id = d.plan_id
-             WHERE d.bot_slug = $1
-             ORDER BY d.delay_minutes ASC, d.created_at ASC;
-          `,
-          [botSlug]
-        );
-
-        return res.json(rows);
-      } catch (err) {
-        logger.error({ err }, '[ADMIN][DOWNSELLS][GET] error');
-        return res.status(500).json({ ok: false, error: 'internal_error', details: err instanceof Error ? err.message : String(err) });
-      }
-    }
+    async (req: Request, res: Response): Promise<Response> => listDownsells(req, res)
   );
 
   app.delete(
