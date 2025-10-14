@@ -1,5 +1,4 @@
 import type { PoolClient } from 'pg';
-import type { Telegraf } from 'telegraf';
 import { logger } from '../../../logger.js';
 import { pool } from '../../../db/pool.js';
 import {
@@ -77,7 +76,6 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     }
 
     const bot = await getOrCreateBotBySlug(job.bot_slug);
-    const tg = bot.api as unknown as Telegraf['telegram'];
     const settings = await getBotSettings(job.bot_slug);
 
     if (downsell.copy && downsell.copy.trim().length > 0) {
@@ -108,7 +106,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
 
     const baseUrlEnv = (process.env.PUBLIC_BASE_URL ?? '').trim();
     const baseUrl = baseUrlEnv || settings.public_base_url || process.env.APP_BASE_URL || '';
-    const { message_ids } = await sendPixByChatId(job.telegram_id, transaction, settings, tg, baseUrl);
+    const { message_ids } = await sendPixByChatId(job.telegram_id, transaction, settings, bot.api, baseUrl);
     const lastMessageId = message_ids.length > 0 ? message_ids[message_ids.length - 1] ?? null : null;
 
     await recordSent(
