@@ -87,7 +87,7 @@ test('scheduleDownsellsForMoment enqueues active downsells', async () => {
     downsell_id: params.downsell_id,
     telegram_id: params.telegram_id,
     deliver_at: params.deliver_at,
-    status: 'pending' as const,
+    status: 'scheduled' as const,
     attempt_count: 0,
     last_error: null,
     created_at: new Date(),
