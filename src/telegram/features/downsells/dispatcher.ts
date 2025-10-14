@@ -20,6 +20,8 @@ import { getOrCreateBotBySlug } from '../../botFactory.js';
 import { funnelService } from '../../../services/FunnelService.js';
 import { getBotIdBySlug } from '../../../db/bots.js';
 import { getBotSettings, type BotSettings } from '../../../db/botSettings.js';
+import { listOptions as listDownsellOptions } from '../../../db/downsellOptions.js';
+import { chunkArray } from '../../../utils/arrays.js';
 
 type InlineKeyboardMarkup = {
   inline_keyboard: { text: string; callback_data: string }[][];
@@ -47,12 +49,12 @@ async function releaseLock(): Promise<void> {
   });
 }
 
-async function sendDownsellMediaIfAny(
+export async function sendDownsellMediaIfAny(
   bot: any,
   chatId: number,
   mediaUrl: string | null | undefined,
   mediaType: string | null | undefined,
-  jobLogger: any
+  log?: any
 ): Promise<number | null> {
   if (!mediaUrl) return null;
 
@@ -89,7 +91,8 @@ async function sendDownsellMediaIfAny(
   else if (isAudio) kind = 'audio';
   // caso contrário, fica 'photo'
 
-  jobLogger.info({ mediaType: mt || null, ext: ext || null, detected: kind, mediaUrl }, '[DOWNSELL][WORKER] media detect');
+  const logRef = log ?? logger;
+  logRef.info({ mediaType: mt || null, ext: ext || null, detected: kind, mediaUrl }, '[DOWNSELL][WORKER] media detect');
 
   try {
     let msg: any;
@@ -101,7 +104,7 @@ async function sendDownsellMediaIfAny(
       try {
         msg = await bot.api.sendAudio(chatId, mediaUrl);
       } catch (e) {
-        jobLogger.warn({ e }, '[DOWNSELL][WORKER] sendAudio failed — trying sendVoice');
+        logRef.warn({ e }, '[DOWNSELL][WORKER] sendAudio failed — trying sendVoice');
         msg = await bot.api.sendVoice(chatId, mediaUrl);
       }
     } else if (kind === 'animation') {
@@ -114,9 +117,21 @@ async function sendDownsellMediaIfAny(
     const id = typeof msg?.message_id === 'number' ? msg.message_id : null;
     return id;
   } catch (err) {
-    jobLogger.warn({ err, mediaUrl, mediaType: mt, ext, kind }, '[DOWNSELL][WORKER] failed to send downsell media');
+    logRef.warn({ err, mediaUrl, mediaType: mt, ext, kind }, '[DOWNSELL][WORKER] failed to send downsell media');
     return null;
   }
+}
+
+function buildDownsellKeyboard(
+  downsellId: number,
+  opts: Array<{ id: number; label: string }>
+): InlineKeyboardMarkup {
+  const buttons = opts.map((opt) => ({
+    text: opt.label,
+    callback_data: `DSL:${downsellId}:${opt.id}`,
+  }));
+  const rows = chunkArray(buttons, 2);
+  return { inline_keyboard: rows };
 }
 
 async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<void> {
@@ -157,7 +172,6 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     const planPriceCents = toCents(downsell?.plan_price_cents);
     const resolveLabel = (value: string | null | undefined): string =>
       typeof value === 'string' ? value.trim() : '';
-    // Prefer the custom label typed in the admin, but fall back to legacy plan_name values.
     const planLabel = resolveLabel(downsell?.plan_label) || resolveLabel(downsell?.plan_name);
     const hasPlanLabel = planLabel.length > 0;
     const hasPlan = Boolean(downsell?.plan_id);
@@ -169,12 +183,6 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     if (!downsell || !downsell.active) {
       await markJobAsSkipped(job.id, 'downsell_inactive_or_invalid', client);
       jobLogger.info('[DOWNSELL][WORKER] skipped because downsell inactive or invalid');
-      return;
-    }
-
-    if (!hasPlan && !hasValidPrice) {
-      await markJobAsSkipped(job.id, 'downsell_price_missing', client);
-      jobLogger.info('[DOWNSELL][WORKER] skipped due to missing price and no plan');
       return;
     }
 
@@ -211,6 +219,54 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       }
     }
 
+    const options = await listDownsellOptions(downsell.id, true);
+    jobLogger.info({ downsell_id: downsell.id, options: options.length }, '[DOWNSELL][KEYBOARD] options resolved');
+
+    if (!hasPlan && !hasValidPrice && options.length === 0) {
+      await markJobAsSkipped(job.id, 'downsell_price_missing', client);
+      jobLogger.info('[DOWNSELL][WORKER] skipped due to missing price and no plan');
+      return;
+    }
+
+    const sendIntroAndKeyboard = async (keyboard: InlineKeyboardMarkup): Promise<string | null> => {
+      try {
+        await bot.api.sendMessage(job.telegram_id, introText);
+      } catch (introErr) {
+        jobLogger.warn({ err: introErr }, '[DOWNSELL][WORKER] failed to send downsell intro');
+      }
+      const keyboardMessage = await bot.api.sendMessage(job.telegram_id, ' ', { reply_markup: keyboard });
+      return keyboardMessage?.message_id !== undefined ? String(keyboardMessage.message_id) : null;
+    };
+
+    if (options.length > 0) {
+      const keyboard = buildDownsellKeyboard(
+        downsell.id,
+        options.map((opt) => ({ id: opt.id, label: opt.label }))
+      );
+      const sentMessageId = await sendIntroAndKeyboard(keyboard);
+
+      await recordSent(
+        {
+          bot_slug: job.bot_slug,
+          downsell_id: job.downsell_id,
+          telegram_id: job.telegram_id,
+          sent_message_id: sentMessageId,
+        },
+        client
+      );
+
+      await markJobAsSent(
+        job.id,
+        {
+          sent_message_id: sentMessageId,
+        },
+        client
+      );
+
+      jobLogger.info({ downsell_id: downsell.id, options: options.length }, '[DOWNSELL][WORKER] sent downsell keyboard');
+      return;
+    }
+
     if (hasPlanLabel) {
       const buttonPriceCents = priceCents ?? planPriceCents;
       const priceLabel =
@@ -219,13 +275,10 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
           : '';
       const buttonText = `${planLabel}${priceLabel}`;
       const keyboard: InlineKeyboardMarkup = {
-        inline_keyboard: [[{ text: buttonText, callback_data: `downsell:${downsell.id}` }]],
+        inline_keyboard: [[{ text: buttonText, callback_data: `DSL1:${downsell.id}` }]],
       };
 
-      const sent = await bot.api.sendMessage(job.telegram_id, introText, {
-        reply_markup: keyboard,
-      });
-      const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;
+      const sentMessageId = await sendIntroAndKeyboard(keyboard);
 
       await recordSent(
         {
@@ -270,10 +323,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
           inline_keyboard: [[{ text: buttonText, callback_data: `plan:${plan.id}` }]],
         };
 
-        const sent = await bot.api.sendMessage(job.telegram_id, introText, {
-          reply_markup: keyboard,
-        });
-        const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;
+        const sentMessageId = await sendIntroAndKeyboard(keyboard);
 
         await recordSent(
           {

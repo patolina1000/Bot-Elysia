@@ -2,6 +2,15 @@ import type { Express, Request, Response } from 'express';
 import { authAdminMiddleware } from '../http/middleware/authAdmin.js';
 import { pool } from '../db/pool.js';
 import { logger } from '../logger.js';
+import type { DownsellOption } from '../db/types.js';
+import {
+  listOptions as listDownsellOptions,
+  createOption as createDownsellOption,
+  updateOption as updateDownsellOption,
+  deleteOption as deleteDownsellOption,
+  getOption as getDownsellOption,
+  mapDownsellOption,
+} from '../db/downsellOptions.js';
 
 type DownsellTrigger = 'after_start' | 'after_pix';
 type DownsellMediaType = 'photo' | 'video' | 'audio';
@@ -179,6 +188,260 @@ function computePriceCents(payload: Partial<DownsellPayload>): number {
   return priceCents;
 }
 
+const OPTION_LABEL_MAX = 60;
+const OPTION_MEDIA_URL_MAX = 2000;
+const OPTION_MEDIA_TYPE_MAX = 64;
+
+function parseDownsellId(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+function parseOptionLabel(value: unknown): string | null {
+  const label = sanitizeStr(value, OPTION_LABEL_MAX);
+  return label.length > 0 ? label : null;
+}
+
+function parseOptionPrice(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(numeric)) {
+    return null;
+  }
+  return numeric > 0 ? numeric : null;
+}
+
+function parseOptionActive(value: unknown, fallback = true): boolean | null {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) {
+      return false;
+    }
+  }
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  return null;
+}
+
+function parseOptionSortOrder(value: unknown, fallback = 0): number | null {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  const rounded = Math.round(numeric);
+  if (rounded < 0 || rounded > 9999) {
+    return null;
+  }
+  return rounded;
+}
+
+function parseOptionMediaUrl(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const url = sanitizeStr(value, OPTION_MEDIA_URL_MAX);
+  return url.length > 0 ? url : null;
+}
+
+function parseOptionMediaType(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const mediaType = sanitizeStr(value, OPTION_MEDIA_TYPE_MAX);
+  return mediaType.length > 0 ? mediaType : null;
+}
+
+async function fetchOptionsForDownsellIds(ids: number[]): Promise<Map<number, DownsellOption[]>> {
+  const map = new Map<number, DownsellOption[]>();
+  if (ids.length === 0) {
+    return map;
+  }
+
+  const uniqueIds = Array.from(new Set(ids.filter((value) => Number.isInteger(value) && value > 0)));
+  if (uniqueIds.length === 0) {
+    return map;
+  }
+
+  const { rows } = await pool.query(
+    `
+      SELECT id, downsell_id, label, price_cents, active, sort_order, media_url, media_type, created_at, updated_at
+        FROM downsell_options
+       WHERE downsell_id = ANY($1::bigint[])
+       ORDER BY sort_order ASC, id ASC
+    `,
+    [uniqueIds]
+  );
+
+  for (const row of rows) {
+    const option = mapDownsellOption(row);
+    const existing = map.get(option.downsell_id) ?? [];
+    existing.push(option);
+    map.set(option.downsell_id, existing);
+  }
+
+  for (const id of uniqueIds) {
+    if (!map.has(id)) {
+      map.set(id, []);
+    }
+  }
+
+  return map;
+}
+
+class DownsellOptionSyncError extends Error {
+  code: string;
+  status: number;
+
+  constructor(message: string, code = 'invalid_option', status = 400) {
+    super(message);
+    this.name = 'DownsellOptionSyncError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+type NormalizedOptionInput = {
+  id: number | null;
+  label: string;
+  price_cents: number;
+  active: boolean;
+  sort_order: number;
+  media_url: string | null;
+  media_type: string | null;
+};
+
+function normalizeOptionForUpsert(raw: unknown, index: number): NormalizedOptionInput {
+  if (!raw || typeof raw !== 'object') {
+    throw new DownsellOptionSyncError(`Opção #${index + 1} inválida.`, 'invalid_option_payload');
+  }
+
+  const input = raw as Record<string, unknown>;
+  const id = parseDownsellId(input.id);
+  const label = parseOptionLabel(input.label);
+  if (!label) {
+    throw new DownsellOptionSyncError(`Informe o texto do botão na opção #${index + 1}.`, 'invalid_option_label');
+  }
+
+  const priceCandidate = input.price_cents ?? (input as { priceCents?: unknown }).priceCents;
+  const price_cents = parseOptionPrice(priceCandidate);
+  if (!price_cents) {
+    throw new DownsellOptionSyncError(`Preço inválido na opção #${index + 1}.`, 'invalid_option_price');
+  }
+
+  const activeRaw = Object.prototype.hasOwnProperty.call(input, 'active')
+    ? input.active
+    : (input as { isActive?: unknown }).isActive;
+  const activeParsed = parseOptionActive(activeRaw, true);
+  if (activeParsed === null) {
+    throw new DownsellOptionSyncError(`Campo "active" inválido na opção #${index + 1}.`, 'invalid_option_active');
+  }
+
+  const sortCandidate = input.sort_order ?? (input as { sortOrder?: unknown }).sortOrder;
+  const sort_order = parseOptionSortOrder(sortCandidate, index);
+  if (sort_order === null) {
+    throw new DownsellOptionSyncError(`Ordenação inválida na opção #${index + 1}.`, 'invalid_option_sort');
+  }
+
+  const media_url = parseOptionMediaUrl(input.media_url ?? (input as { mediaUrl?: unknown }).mediaUrl);
+  const media_type = parseOptionMediaType(input.media_type ?? (input as { mediaType?: unknown }).mediaType);
+
+  return {
+    id,
+    label,
+    price_cents,
+    active: Boolean(activeParsed),
+    sort_order,
+    media_url,
+    media_type,
+  };
+}
+
+async function syncDownsellOptionsFromPayload(
+  downsellId: number,
+  payload: unknown
+): Promise<DownsellOption[]> {
+  if (!Array.isArray(payload)) {
+    return listDownsellOptions(downsellId);
+  }
+
+  const normalized = payload.map((entry, index) => normalizeOptionForUpsert(entry, index));
+
+  const existing = await listDownsellOptions(downsellId);
+  const existingMap = new Map<number, DownsellOption>();
+  for (const opt of existing) {
+    existingMap.set(opt.id, opt);
+  }
+
+  const seenIds = new Set<number>();
+
+  for (const option of normalized) {
+    if (option.id && !existingMap.has(option.id)) {
+      throw new DownsellOptionSyncError(
+        `Opção ${option.id} não pertence a este downsell.`,
+        'option_not_found'
+      );
+    }
+
+    if (option.id) {
+      seenIds.add(option.id);
+      const current = existingMap.get(option.id);
+      if (!current) {
+        continue;
+      }
+
+      const changed =
+        current.label !== option.label ||
+        current.price_cents !== option.price_cents ||
+        Boolean(current.active) !== Boolean(option.active) ||
+        Number(current.sort_order ?? 0) !== Number(option.sort_order ?? 0) ||
+        (current.media_url ?? null) !== option.media_url ||
+        (current.media_type ?? null) !== option.media_type;
+
+      if (changed) {
+        await updateDownsellOption(option.id, {
+          label: option.label,
+          price_cents: option.price_cents,
+          active: option.active,
+          sort_order: option.sort_order,
+          media_url: option.media_url,
+          media_type: option.media_type,
+        });
+      }
+    } else {
+      await createDownsellOption({
+        downsell_id: downsellId,
+        label: option.label,
+        price_cents: option.price_cents,
+        active: option.active,
+        sort_order: option.sort_order,
+        media_url: option.media_url,
+        media_type: option.media_type,
+      });
+    }
+  }
+
+  for (const current of existing) {
+    if (current.id && !seenIds.has(current.id)) {
+      await deleteDownsellOption(current.id);
+    }
+  }
+
+  return listDownsellOptions(downsellId);
+}
+
 async function ensureDownsellSchema(): Promise<void> {
   try {
     await pool.query(`
@@ -280,7 +543,17 @@ export async function listDownsells(req: Request, res: Response): Promise<Respon
       [botSlug]
     );
 
-    return res.status(200).json({ items: rows });
+    const ids = rows
+      .map((row) => Number(row.id))
+      .filter((value) => Number.isInteger(value) && value > 0);
+    const optionsMap = await fetchOptionsForDownsellIds(ids);
+
+    const items = rows.map((row) => ({
+      ...row,
+      options: optionsMap.get(Number(row.id)) ?? [],
+    }));
+
+    return res.status(200).json({ items });
   } catch (err) {
     logger.error({ err }, '[ADMIN][DOWNSELLS][GET] error');
     return res.status(500).json({
@@ -386,10 +659,65 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           planId,
         ];
         const { rows } = await pool.query(insertQuery, values);
-        return res.status(201).json({ ok: true, downsell: rows[0] });
+        const inserted = rows[0];
+        const insertedId = Number(inserted?.id ?? 0);
+        const hasValidId = Number.isInteger(insertedId) && insertedId > 0;
+
+        const optionsField = (payload as { options?: unknown }).options;
+        let options: DownsellOption[] = [];
+
+        if (optionsField !== undefined && hasValidId) {
+          try {
+            options = await syncDownsellOptionsFromPayload(insertedId, optionsField);
+          } catch (err) {
+            if (err instanceof DownsellOptionSyncError) {
+              return res.status(err.status).json({ error: err.code, message: err.message });
+            }
+            throw err;
+          }
+        } else if (hasValidId) {
+          options = await listDownsellOptions(insertedId);
+        }
+
+        return res.status(201).json({ ok: true, downsell: { ...inserted, options } });
       } catch (err) {
         logger.error({ err }, '[ADMIN][DOWNSELLS][POST] error');
         return res.status(500).json({ ok: false, error: 'internal_error', details: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
+
+  app.get(
+    '/admin/api/downsells/:id',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const downsellId = parseDownsellId(req.params.id);
+        if (!downsellId) {
+          return res.status(400).json({ error: 'invalid_downsell_id' });
+        }
+
+        const { rows } = await pool.query(
+          `
+            SELECT id, bot_slug, copy, button_intro_text, price_cents, media_url, media_type, trigger, delay_minutes, active,
+                   sort_order, plan_label, plan_label AS plan_name, created_at, updated_at
+              FROM public.bot_downsells
+             WHERE id = $1
+             LIMIT 1
+          `,
+          [downsellId]
+        );
+
+        const row = rows[0];
+        if (!row) {
+          return res.status(404).json({ error: 'downsells_not_found' });
+        }
+
+        const options = await listDownsellOptions(downsellId);
+        return res.status(200).json({ ...row, options });
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELLS][GET_ONE] error');
+        return res.status(500).json({ error: 'internal_error' });
       }
     }
   );
@@ -606,8 +934,24 @@ export function registerAdminDownsellsRoutes(app: Express): void {
 
         const result = await pool.query(sql, values);
         const updated = result.rows[0];
+
+        const optionsField = (payload as { options?: unknown }).options;
+        let options: DownsellOption[] = [];
+        if (optionsField !== undefined) {
+          try {
+            options = await syncDownsellOptionsFromPayload(downsellId, optionsField);
+          } catch (err) {
+            if (err instanceof DownsellOptionSyncError) {
+              return res.status(err.status).json({ error: err.code, message: err.message });
+            }
+            throw err;
+          }
+        } else {
+          options = await listDownsellOptions(downsellId);
+        }
+
         logger.info({ id: updated.id, bot_slug: updated.bot_slug }, '[ADMIN][DOWNSELLS][PUT] updated');
-        return res.status(200).json(updated);
+        return res.status(200).json({ ...updated, options });
       } catch (err) {
         logger.error({ err }, '[ADMIN][DOWNSELLS][PUT] error');
         return res.status(500).json({
@@ -615,6 +959,199 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           error: 'internal_error',
           details: err instanceof Error ? err.message : String(err),
         });
+      }
+    }
+  );
+
+  app.get(
+    '/admin/api/downsells/:downsell_id/options',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const downsellId = parseDownsellId(req.params.downsell_id);
+        if (!downsellId) {
+          return res.status(400).json({ error: 'invalid_downsell_id' });
+        }
+
+        const exists = await pool.query('SELECT 1 FROM bot_downsells WHERE id = $1 LIMIT 1', [downsellId]);
+        if (exists.rowCount === 0) {
+          return res.status(404).json({ error: 'downsells_not_found' });
+        }
+
+        const options = await listDownsellOptions(downsellId);
+        return res.status(200).json({ options });
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELL_OPTIONS][LIST] error');
+        return res.status(500).json({ error: 'internal_error' });
+      }
+    }
+  );
+
+  app.post(
+    '/admin/api/downsells/:downsell_id/options',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const downsellId = parseDownsellId(req.params.downsell_id);
+        if (!downsellId) {
+          return res.status(400).json({ error: 'invalid_downsell_id' });
+        }
+
+        const exists = await pool.query('SELECT 1 FROM bot_downsells WHERE id = $1 LIMIT 1', [downsellId]);
+        if (exists.rowCount === 0) {
+          return res.status(404).json({ error: 'downsells_not_found' });
+        }
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const label = parseOptionLabel(body.label ?? (body as { label?: unknown }).label);
+        if (!label) {
+          return res.status(400).json({ error: 'invalid_option_label', message: 'Informe o texto do botão (1-60 caracteres).' });
+        }
+
+        const rawPrice = body.price_cents ?? (body as { priceCents?: unknown }).priceCents;
+        const priceCents = parseOptionPrice(rawPrice);
+        if (!priceCents) {
+          return res.status(400).json({ error: 'invalid_option_price', message: 'Preço inválido.' });
+        }
+
+        const rawActive = Object.prototype.hasOwnProperty.call(body, 'active')
+          ? body.active
+          : (body as { isActive?: unknown }).isActive;
+        const active = parseOptionActive(rawActive, true);
+        if (active === null) {
+          return res.status(400).json({ error: 'invalid_option_active', message: 'Campo "active" inválido.' });
+        }
+
+        const rawSort = body.sort_order ?? (body as { sortOrder?: unknown }).sortOrder;
+        const sortOrder = parseOptionSortOrder(rawSort, 0);
+        if (sortOrder === null) {
+          return res
+            .status(400)
+            .json({ error: 'invalid_option_sort', message: 'Ordenação deve ser um número entre 0 e 9999.' });
+        }
+
+        const mediaUrl = parseOptionMediaUrl(body.media_url ?? (body as { mediaUrl?: unknown }).mediaUrl);
+        const mediaType = parseOptionMediaType(body.media_type ?? (body as { mediaType?: unknown }).mediaType);
+
+        const created = await createDownsellOption({
+          downsell_id: downsellId,
+          label,
+          price_cents: priceCents,
+          active,
+          sort_order: sortOrder,
+          media_url: mediaUrl,
+          media_type: mediaType,
+        });
+
+        return res.status(201).json(created);
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELL_OPTIONS][CREATE] error');
+        return res.status(500).json({ error: 'internal_error' });
+      }
+    }
+  );
+
+  app.put(
+    '/admin/api/downsells/:downsell_id/options/:option_id',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const downsellId = parseDownsellId(req.params.downsell_id);
+        const optionId = parseDownsellId(req.params.option_id);
+        if (!downsellId || !optionId) {
+          return res.status(400).json({ error: 'invalid_id' });
+        }
+
+        const option = await getDownsellOption(optionId);
+        if (!option || option.downsell_id !== downsellId) {
+          return res.status(404).json({ error: 'option_not_found' });
+        }
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const patch: Partial<DownsellOption> = {};
+
+        if (Object.prototype.hasOwnProperty.call(body, 'label')) {
+          const label = parseOptionLabel(body.label);
+          if (!label) {
+            return res
+              .status(400)
+              .json({ error: 'invalid_option_label', message: 'Informe o texto do botão (1-60 caracteres).' });
+          }
+          patch.label = label;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'price_cents') || Object.prototype.hasOwnProperty.call(body, 'priceCents')) {
+          const rawPrice = body.price_cents ?? (body as { priceCents?: unknown }).priceCents;
+          const priceCents = parseOptionPrice(rawPrice);
+          if (!priceCents) {
+            return res.status(400).json({ error: 'invalid_option_price', message: 'Preço inválido.' });
+          }
+          patch.price_cents = priceCents;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'active') || Object.prototype.hasOwnProperty.call(body, 'isActive')) {
+          const rawActive = body.active ?? (body as { isActive?: unknown }).isActive;
+          const active = parseOptionActive(rawActive, true);
+          if (active === null) {
+            return res.status(400).json({ error: 'invalid_option_active', message: 'Campo "active" inválido.' });
+          }
+          patch.active = active;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'sort_order') || Object.prototype.hasOwnProperty.call(body, 'sortOrder')) {
+          const rawSort = body.sort_order ?? (body as { sortOrder?: unknown }).sortOrder;
+          const sortOrder = parseOptionSortOrder(rawSort, option.sort_order ?? 0);
+          if (sortOrder === null) {
+            return res
+              .status(400)
+              .json({ error: 'invalid_option_sort', message: 'Ordenação deve ser um número entre 0 e 9999.' });
+          }
+          patch.sort_order = sortOrder;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'media_url') || Object.prototype.hasOwnProperty.call(body, 'mediaUrl')) {
+          patch.media_url = parseOptionMediaUrl(body.media_url ?? (body as { mediaUrl?: unknown }).mediaUrl);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'media_type') || Object.prototype.hasOwnProperty.call(body, 'mediaType')) {
+          patch.media_type = parseOptionMediaType(body.media_type ?? (body as { mediaType?: unknown }).mediaType);
+        }
+
+        const keys = Object.keys(patch);
+        if (keys.length === 0) {
+          return res.status(400).json({ error: 'no_fields_to_update' });
+        }
+
+        const updated = await updateDownsellOption(optionId, patch);
+        return res.status(200).json(updated);
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELL_OPTIONS][UPDATE] error');
+        return res.status(500).json({ error: 'internal_error' });
+      }
+    }
+  );
+
+  app.delete(
+    '/admin/api/downsells/:downsell_id/options/:option_id',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const downsellId = parseDownsellId(req.params.downsell_id);
+        const optionId = parseDownsellId(req.params.option_id);
+        if (!downsellId || !optionId) {
+          return res.status(400).json({ error: 'invalid_id' });
+        }
+
+        const option = await getDownsellOption(optionId);
+        if (!option || option.downsell_id !== downsellId) {
+          return res.status(404).json({ error: 'option_not_found' });
+        }
+
+        await deleteDownsellOption(optionId);
+        return res.status(200).json({ ok: true, deleted_id: optionId });
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELL_OPTIONS][DELETE] error');
+        return res.status(500).json({ error: 'internal_error' });
       }
     }
   );

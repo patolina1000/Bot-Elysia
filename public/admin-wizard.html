@@ -621,6 +621,160 @@
       height: 18px;
     }
 
+    .downsell-options-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+      background: #f9fafb;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .downsell-options-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .downsell-options-header h4 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    .downsell-options-header p {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .downsell-options-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .downsell-options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .downsell-option-row {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) 150px 100px 120px;
+      gap: 8px;
+      align-items: center;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px 12px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+
+    .downsell-option-row input[type="text"],
+    .downsell-option-row input[type="number"] {
+      font-size: 14px;
+      padding: 6px 10px;
+    }
+
+    .downsell-option-active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .downsell-option-active input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+
+    .downsell-option-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .downsell-option-actions button {
+      min-width: 34px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      background: #f8fafc;
+      color: #334155;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .downsell-option-actions button:hover {
+      background: #eef2ff;
+      border-color: #6366f1;
+    }
+
+    .downsell-option-actions button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .downsell-options-empty {
+      font-size: 13px;
+      color: #6b7280;
+      font-style: italic;
+      text-align: center;
+      padding: 12px;
+      border: 1px dashed #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .downsell-options-preview {
+      border-top: 1px solid #e5e7eb;
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .downsell-options-preview-title {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 0;
+    }
+
+    .downsell-options-preview-row {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .downsell-options-preview-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 120px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 1px 2px rgba(99, 102, 241, 0.3);
+    }
+
+    .downsell-options-preview-empty {
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+    }
+
     @media (max-width: 640px) {
       #downsells-card {
         padding: 18px;
@@ -719,6 +873,43 @@
 
       .btn-danger {
         background: #ef4444;
+      }
+
+      .downsell-options-section {
+        background: rgba(15, 23, 42, 0.65);
+        border-color: #1f2937;
+      }
+
+      .downsell-option-row {
+        background: rgba(15, 23, 42, 0.75);
+        border-color: #1f2937;
+      }
+
+      .downsell-option-actions button {
+        background: rgba(30, 41, 59, 0.65);
+        border-color: #334155;
+        color: #e2e8f0;
+      }
+
+      .downsell-option-actions button:hover {
+        background: rgba(99, 102, 241, 0.2);
+        border-color: #6366f1;
+        color: #ffffff;
+      }
+
+      .downsell-options-empty {
+        background: rgba(15, 23, 42, 0.6);
+        border-color: #1e293b;
+        color: #cbd5f5;
+      }
+
+      .downsell-options-preview {
+        border-top-color: #1e293b;
+      }
+
+      .downsell-options-preview-btn {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.8), rgba(79, 70, 229, 0.85));
+        box-shadow: 0 6px 16px rgba(79, 70, 229, 0.45);
       }
 
       .downsells-modal .modal-content {
@@ -2186,6 +2377,23 @@
           </label>
         </div>
         <div class="form-row">
+          <div class="downsell-options-section">
+            <div class="downsell-options-header">
+              <div>
+                <h4>Planos deste downsell</h4>
+                <p>Máx. recomendado: 6 botões.</p>
+              </div>
+              <div class="downsell-options-actions">
+                <button type="button" id="ds-options-add" class="btn-soft">+ Adicionar plano</button>
+                <button type="button" id="ds-options-preview" class="btn-soft">Pré-visualizar teclado</button>
+              </div>
+            </div>
+            <div id="ds-options-list" class="downsell-options-list" role="list"></div>
+            <div id="ds-options-empty" class="downsell-options-empty hidden">Nenhum plano adicionado.</div>
+            <div id="ds-options-preview-area" class="downsell-options-preview hidden" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="form-row">
           <label>URL da mídia (foto/vídeo/áudio)
             <input id="ds-media-url" type="text" placeholder="https://..." autocomplete="off">
           </label>
@@ -2498,10 +2706,18 @@
       const dsMediaUploadBtn = document.getElementById('ds-media-upload');
       const dsMediaPreviewBtn = document.getElementById('ds-media-preview');
       const dsActiveCheckbox = document.getElementById('ds-active');
+      const dsOptionsList = document.getElementById('ds-options-list');
+      const dsOptionsEmpty = document.getElementById('ds-options-empty');
+      const dsOptionsAddBtn = document.getElementById('ds-options-add');
+      const dsOptionsPreviewBtn = document.getElementById('ds-options-preview');
+      const dsOptionsPreviewArea = document.getElementById('ds-options-preview-area');
 
       let downsellsItems = [];
       let downsellsEditing = null;
       let downsellsLoading = false;
+      let downsellOptionItems = [];
+      let downsellOptionsOriginal = [];
+      const defaultDownsellOptionsPlaceholder = 'Nenhum plano adicionado.';
 
       if (plansBotSlugInput) {
         // lock manual slug: read-only + input prevention
@@ -2733,6 +2949,350 @@
         });
       }
 
+      function setDownsellOptionsPlaceholder(message) {
+        if (dsOptionsEmpty) {
+          dsOptionsEmpty.textContent = message;
+          dsOptionsEmpty.classList.remove('hidden');
+        }
+        if (dsOptionsList) {
+          dsOptionsList.innerHTML = '';
+        }
+        if (dsOptionsPreviewArea) {
+          dsOptionsPreviewArea.classList.add('hidden');
+          dsOptionsPreviewArea.innerHTML = '';
+        }
+      }
+
+      function computeNextOptionSortOrder() {
+        if (!Array.isArray(downsellOptionItems) || downsellOptionItems.length === 0) {
+          return 0;
+        }
+        return (
+          downsellOptionItems.reduce((max, item) => {
+            const value = Number(item?.sort_order);
+            return Number.isFinite(value) ? Math.max(max, value) : max;
+          }, -1) + 1
+        );
+      }
+
+      function mapServerOptionToForm(option, index = 0) {
+        const numericId = Number(option?.id);
+        const priceCents = Number(option?.price_cents);
+        const sortOrder = Number(option?.sort_order);
+        return {
+          id: Number.isInteger(numericId) && numericId > 0 ? numericId : null,
+          label: typeof option?.label === 'string' ? option.label : '',
+          price: centsToInputValue(priceCents),
+          active: option?.active !== false,
+          sort_order: Number.isFinite(sortOrder) ? sortOrder : index,
+          media_url: typeof option?.media_url === 'string' ? option.media_url : null,
+          media_type: typeof option?.media_type === 'string' ? option.media_type : null,
+        };
+      }
+
+      function renderDownsellOptions() {
+        if (!dsOptionsList || !dsOptionsEmpty) {
+          return;
+        }
+
+        dsOptionsList.innerHTML = '';
+
+        if (!Array.isArray(downsellOptionItems) || downsellOptionItems.length === 0) {
+          setDownsellOptionsPlaceholder(defaultDownsellOptionsPlaceholder);
+          return;
+        }
+
+        dsOptionsEmpty.classList.add('hidden');
+        dsOptionsEmpty.textContent = defaultDownsellOptionsPlaceholder;
+
+        downsellOptionItems.forEach((opt, index) => {
+          const row = document.createElement('div');
+          row.className = 'downsell-option-row';
+          row.dataset.index = String(index);
+          if (opt?.id) {
+            row.dataset.optionId = String(opt.id);
+          }
+
+          const activeCell = document.createElement('label');
+          activeCell.className = 'downsell-option-active';
+          const activeInput = document.createElement('input');
+          activeInput.type = 'checkbox';
+          activeInput.checked = opt?.active !== false;
+          activeInput.addEventListener('change', () => {
+            downsellOptionItems[index].active = Boolean(activeInput.checked);
+            if (dsOptionsPreviewArea && !dsOptionsPreviewArea.classList.contains('hidden')) {
+              renderDownsellOptionsPreview(true);
+            }
+          });
+          activeCell.appendChild(activeInput);
+          row.appendChild(activeCell);
+
+          const labelInput = document.createElement('input');
+          labelInput.type = 'text';
+          labelInput.maxLength = 60;
+          labelInput.placeholder = 'Texto do botão';
+          labelInput.value = opt?.label ?? '';
+          labelInput.addEventListener('input', (event) => {
+            downsellOptionItems[index].label = String(event.target?.value ?? '');
+            if (dsOptionsPreviewArea && !dsOptionsPreviewArea.classList.contains('hidden')) {
+              renderDownsellOptionsPreview(true);
+            }
+          });
+          row.appendChild(labelInput);
+
+          const priceWrapper = document.createElement('div');
+          priceWrapper.className = 'downsell-option-price';
+          const priceSymbol = document.createElement('span');
+          priceSymbol.textContent = 'R$';
+          const priceInput = document.createElement('input');
+          priceInput.type = 'text';
+          priceInput.inputMode = 'decimal';
+          priceInput.placeholder = 'ex.: 19,90';
+          priceInput.value = opt?.price ?? '';
+          priceInput.addEventListener('input', () => {
+            downsellOptionItems[index].price = priceInput.value;
+          });
+          priceInput.addEventListener('blur', () => {
+            const cents = priceToCents(priceInput.value);
+            if (Number.isFinite(cents) && Number(cents) > 0) {
+              const formatted = centsToInputValue(cents);
+              downsellOptionItems[index].price = formatted;
+              priceInput.value = formatted;
+            }
+          });
+          priceWrapper.appendChild(priceSymbol);
+          priceWrapper.appendChild(priceInput);
+          row.appendChild(priceWrapper);
+
+          const sortInput = document.createElement('input');
+          sortInput.type = 'number';
+          sortInput.min = '0';
+          sortInput.max = '9999';
+          sortInput.step = '1';
+          sortInput.placeholder = 'Ordenação';
+          const numericSort = Number(opt?.sort_order);
+          sortInput.value = Number.isFinite(numericSort) ? String(numericSort) : String(index);
+          sortInput.addEventListener('input', () => {
+            const numeric = Number(sortInput.value);
+            if (Number.isFinite(numeric)) {
+              const clamped = Math.max(0, Math.min(9999, Math.round(numeric)));
+              downsellOptionItems[index].sort_order = clamped;
+            } else if (sortInput.value === '') {
+              downsellOptionItems[index].sort_order = null;
+            }
+          });
+          sortInput.addEventListener('blur', () => {
+            const numeric = Number(sortInput.value);
+            const fallback = Math.max(0, Math.min(9999, Math.round(Number.isFinite(numeric) ? numeric : index)));
+            downsellOptionItems[index].sort_order = fallback;
+            sortInput.value = String(fallback);
+          });
+          row.appendChild(sortInput);
+
+          const actions = document.createElement('div');
+          actions.className = 'downsell-option-actions';
+          const upBtn = document.createElement('button');
+          upBtn.type = 'button';
+          upBtn.textContent = '↑';
+          upBtn.disabled = index === 0;
+          upBtn.addEventListener('click', () => moveDownsellOption(index, -1));
+          actions.appendChild(upBtn);
+
+          const downBtn = document.createElement('button');
+          downBtn.type = 'button';
+          downBtn.textContent = '↓';
+          downBtn.disabled = index === downsellOptionItems.length - 1;
+          downBtn.addEventListener('click', () => moveDownsellOption(index, 1));
+          actions.appendChild(downBtn);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.textContent = '✕';
+          deleteBtn.addEventListener('click', () => removeDownsellOption(index));
+          actions.appendChild(deleteBtn);
+
+          row.appendChild(actions);
+
+          dsOptionsList.appendChild(row);
+        });
+
+        if (dsOptionsPreviewArea && !dsOptionsPreviewArea.classList.contains('hidden')) {
+          renderDownsellOptionsPreview(true);
+        }
+      }
+
+      function moveDownsellOption(index, delta) {
+        const target = index + delta;
+        if (!Array.isArray(downsellOptionItems) || target < 0 || target >= downsellOptionItems.length) {
+          return;
+        }
+        const [item] = downsellOptionItems.splice(index, 1);
+        downsellOptionItems.splice(target, 0, item);
+        renderDownsellOptions();
+      }
+
+      function removeDownsellOption(index) {
+        if (!Array.isArray(downsellOptionItems)) {
+          return;
+        }
+        downsellOptionItems.splice(index, 1);
+        renderDownsellOptions();
+      }
+
+      async function loadDownsellOptionsForModal(downsellId) {
+        if (!downsellId) {
+          downsellOptionItems = [];
+          downsellOptionsOriginal = [];
+          renderDownsellOptions();
+          return;
+        }
+
+        setDownsellOptionsPlaceholder('Carregando planos...');
+
+        try {
+          const response = await fetchJSON(
+            `/admin/api/downsells/${encodeURIComponent(downsellId)}/options?ts=${Date.now()}`,
+            { cache: 'no-store' }
+          );
+          const items = Array.isArray(response?.options) ? response.options : [];
+          downsellOptionItems = items.map((option, idx) => mapServerOptionToForm(option, idx));
+          downsellOptionsOriginal = deepClone(items);
+          if (downsellsEditing) {
+            downsellsEditing.options = deepClone(items);
+          }
+          renderDownsellOptions();
+        } catch (error) {
+          console.error('[downsells] erro ao carregar opções', error);
+          setDownsellOptionsPlaceholder('Erro ao carregar planos.');
+          showToast(error instanceof Error ? error.message : 'Erro ao carregar planos.');
+        }
+      }
+
+      function renderDownsellOptionsPreview(force = false) {
+        if (!dsOptionsPreviewArea) {
+          return;
+        }
+
+        const shouldRender = force || !dsOptionsPreviewArea.classList.contains('hidden');
+        if (!shouldRender) {
+          return;
+        }
+
+        dsOptionsPreviewArea.innerHTML = '';
+
+        const activeOptions = (downsellOptionItems || []).filter(
+          (opt) => opt?.active !== false && typeof opt?.label === 'string' && opt.label.trim().length > 0
+        );
+
+        if (activeOptions.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'downsell-options-preview-empty';
+          empty.textContent = 'Nenhum botão ativo para pré-visualizar.';
+          dsOptionsPreviewArea.appendChild(empty);
+          return;
+        }
+
+        const title = document.createElement('p');
+        title.className = 'downsell-options-preview-title';
+        title.textContent = 'Pré-visualização do teclado';
+        dsOptionsPreviewArea.appendChild(title);
+
+        for (let i = 0; i < activeOptions.length; i += 2) {
+          const row = document.createElement('div');
+          row.className = 'downsell-options-preview-row';
+          activeOptions.slice(i, i + 2).forEach((opt) => {
+            const btn = document.createElement('span');
+            btn.className = 'downsell-options-preview-btn';
+            btn.textContent = opt.label.trim();
+            row.appendChild(btn);
+          });
+          dsOptionsPreviewArea.appendChild(row);
+        }
+      }
+
+      function buildDownsellOptionsPayload() {
+        if (!Array.isArray(downsellOptionItems) || downsellOptionItems.length === 0) {
+          return [];
+        }
+
+        return downsellOptionItems.map((opt, index) => {
+          const current = opt ?? {};
+          const label = typeof current.label === 'string' ? current.label.trim() : '';
+          if (!label) {
+            throw new Error(`Informe o texto do botão no plano #${index + 1}.`);
+          }
+
+          const priceValue = current.price ?? '';
+          const priceCents = priceToCents(priceValue);
+          if (!Number.isFinite(priceCents) || Number(priceCents) <= 0) {
+            throw new Error(`Preço inválido no plano #${index + 1}. Use formato 19,90.`);
+          }
+
+          let sortOrder = Number(current.sort_order);
+          if (!Number.isFinite(sortOrder)) {
+            sortOrder = index;
+          }
+          sortOrder = Math.max(0, Math.min(9999, Math.round(sortOrder)));
+
+          const payload = {
+            label,
+            price_cents: Number(priceCents),
+            active: current.active !== false,
+            sort_order: sortOrder,
+          } as { id?: number; label: string; price_cents: number; active: boolean; sort_order: number };
+
+          const numericId = Number(current.id);
+          if (Number.isInteger(numericId) && numericId > 0) {
+            payload.id = numericId;
+          }
+
+          return payload;
+        });
+      }
+
+      function resetDownsellOptionsState() {
+        downsellOptionItems = [];
+        downsellOptionsOriginal = [];
+        setDownsellOptionsPlaceholder(defaultDownsellOptionsPlaceholder);
+      }
+
+      if (dsOptionsAddBtn) {
+        dsOptionsAddBtn.addEventListener('click', () => {
+          const nextSort = computeNextOptionSortOrder();
+          downsellOptionItems.push({
+            id: null,
+            label: '',
+            price: '',
+            active: true,
+            sort_order: nextSort,
+            media_url: null,
+            media_type: null,
+          });
+          renderDownsellOptions();
+          const rows = dsOptionsList?.querySelectorAll('.downsell-option-row input[type="text"]');
+          const lastLabel = rows && rows.length > 0 ? rows[rows.length - 1] : null;
+          if (lastLabel instanceof HTMLInputElement) {
+            lastLabel.focus();
+          }
+        });
+      }
+
+      if (dsOptionsPreviewBtn) {
+        dsOptionsPreviewBtn.addEventListener('click', () => {
+          if (!dsOptionsPreviewArea) {
+            return;
+          }
+          const isHidden = dsOptionsPreviewArea.classList.contains('hidden');
+          if (isHidden) {
+            dsOptionsPreviewArea.classList.remove('hidden');
+            renderDownsellOptionsPreview(true);
+          } else {
+            dsOptionsPreviewArea.classList.add('hidden');
+            dsOptionsPreviewArea.innerHTML = '';
+          }
+        });
+      }
+
       async function fetchDownsells(botSlug) {
         const url = `/admin/api/downsells?bot_slug=${encodeURIComponent(botSlug)}&ts=${Date.now()}`;
         return fetchJSON(url, { cache: 'no-store' });
@@ -2788,6 +3348,7 @@
             downsellsModal.dataset.mode = 'create';
           }
         }
+        resetDownsellOptionsState();
         if (downsellsModalTitle) {
           downsellsModalTitle.textContent = downsellsEditing ? 'Editar downsell' : 'Novo downsell';
         }
@@ -2868,6 +3429,11 @@
           dsPlanLabelInput.value = existingLabel;
         }
 
+        if (downsellsEditing?.id) {
+          setDownsellOptionsPlaceholder('Carregando planos...');
+          void loadDownsellOptionsForModal(downsellsEditing.id);
+        }
+
         downsellsModal?.classList.remove('hidden');
       }
 
@@ -2886,6 +3452,7 @@
           dsPlanLabelInput.value = '';
         }
         downsellsEditing = null;
+        resetDownsellOptionsState();
         if (downsellsModal) {
           delete downsellsModal.dataset.downsellId;
           delete downsellsModal.dataset.mode;
@@ -2971,6 +3538,15 @@
           active: Boolean(dsActiveCheckbox?.checked),
         };
 
+        let optionsPayload = [];
+        try {
+          optionsPayload = buildDownsellOptionsPayload();
+        } catch (err) {
+          alert(err instanceof Error ? err.message : 'Erro nos planos deste downsell.');
+          return;
+        }
+        payload.options = optionsPayload;
+
         try {
           const currentId = downsellsModal?.dataset.downsellId || (downsellsEditing?.id ? String(downsellsEditing.id) : '');
           const isEdit = Boolean(currentId);
@@ -3035,6 +3611,17 @@
         }
 
         return data.url;
+      }
+
+      function centsToInputValue(cents) {
+        const numeric = Number(cents);
+        if (!Number.isFinite(numeric) || numeric <= 0) {
+          return '';
+        }
+        return (numeric / 100).toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
       }
 
       function priceToCents(value) {
