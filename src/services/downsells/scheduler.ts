@@ -78,8 +78,20 @@ export async function scheduleDownsellsForMoment(params: ScheduleDownsellParams)
   }
 
   for (const downsell of downsells) {
-    if (!Number.isFinite(downsell.price_cents) || downsell.price_cents <= 0) {
-      log.warn({ downsell_id: downsell.id }, '[DOWNSELL][SCHEDULE] invalid price');
+    const priceCents =
+      typeof downsell.price_cents === 'number' && Number.isFinite(downsell.price_cents)
+        ? downsell.price_cents
+        : null;
+    const planPriceCents =
+      typeof downsell.plan_price_cents === 'number' && Number.isFinite(downsell.plan_price_cents)
+        ? downsell.plan_price_cents
+        : null;
+    const hasPlan = downsell.plan_id !== null;
+    const hasValidPrice = priceCents !== null && priceCents > 0;
+    const hasValidPlanPrice = planPriceCents !== null && planPriceCents > 0;
+
+    if (!hasPlan && !hasValidPrice) {
+      log.warn({ downsell_id: downsell.id }, '[DOWNSELL][SCHEDULE] invalid price and no plan');
       continue;
     }
 
@@ -106,17 +118,19 @@ export async function scheduleDownsellsForMoment(params: ScheduleDownsellParams)
     }
 
     const eventId = `dsched:${downsell.id}:${params.telegramId}`;
+    const eventPrice = hasValidPrice ? priceCents : hasValidPlanPrice ? planPriceCents : undefined;
     await dependencies
       .createFunnelEvent({
         bot_id: params.botId ?? null,
         tg_user_id: params.telegramId,
         event: 'downsell_scheduled',
         event_id: eventId,
-        price_cents: downsell.price_cents,
+        price_cents: eventPrice,
         payload_id: String(downsell.id),
         meta: {
           downsell_id: downsell.id,
           moment: params.moment,
+          ...(downsell.plan_id ? { plan_id: downsell.plan_id } : {}),
         },
       })
       .catch((err) => {
