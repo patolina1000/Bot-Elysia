@@ -2606,45 +2606,27 @@
           const info = document.createElement('div');
           const price = document.createElement('div');
           price.className = 'downsells-item-price';
+          const label =
+            (typeof item?.plan_label === 'string' && item.plan_label.trim()) ||
+            (typeof item?.plan_name === 'string' && item.plan_name.trim()) ||
+            'Plano';
           const hasPriceCents =
             item?.price_cents !== undefined &&
             item?.price_cents !== null &&
             item.price_cents !== '';
-          const priceCents = hasPriceCents ? Number(item.price_cents) : Number.NaN;
-          const planPriceCents = (() => {
-            if (item?.plan_price_cents === undefined || item?.plan_price_cents === null) {
-              return Number.NaN;
-            }
-            const numeric = Number(item.plan_price_cents);
-            return Number.isFinite(numeric) ? numeric : Number.NaN;
-          })();
-          const planLabelText =
-            typeof item?.plan_label === 'string' && item.plan_label.trim()
-              ? item.plan_label.trim()
-              : '';
-          if (planLabelText && Number.isFinite(priceCents)) {
-            price.textContent = `${planLabelText} — ${centsToBRL(priceCents)}`;
-          } else if (planLabelText && Number.isFinite(planPriceCents)) {
-            price.textContent = `${planLabelText} — ${centsToBRL(planPriceCents)}`;
-          } else if (planLabelText) {
-            price.textContent = planLabelText;
-          } else if (Number.isFinite(priceCents)) {
-            price.textContent = centsToBRL(priceCents);
-          } else if (Number.isFinite(planPriceCents)) {
-            const planLabel = typeof item?.plan_name === 'string' && item.plan_name.trim()
-              ? item.plan_name.trim()
-              : item?.plan_id
-              ? `Plano #${item.plan_id}`
-              : 'Plano vinculado';
-            price.textContent = `${planLabel} — ${centsToBRL(planPriceCents)}`;
-          } else if (item?.plan_name) {
-            price.textContent = item.plan_name;
-          } else if (item?.plan_id) {
-            price.textContent = `Plano #${item.plan_id}`;
+          const numericPriceCents = hasPriceCents ? Number(item.price_cents) : Number.NaN;
+          const formattedPrice = Number.isFinite(numericPriceCents)
+            ? (numericPriceCents / 100).toLocaleString('pt-BR', {
+                style: 'currency',
+                currency: 'BRL',
+              })
+            : null;
+          if (formattedPrice) {
+            price.textContent = `${label} — ${formattedPrice}`;
           } else if (item?.price_brl) {
-            price.textContent = `R$ ${item.price_brl}`;
+            price.textContent = `${label} — R$ ${item.price_brl}`;
           } else {
-            price.textContent = 'R$ --';
+            price.textContent = label;
           }
           const moment = document.createElement('div');
           moment.className = 'downsells-item-moment';
@@ -2721,6 +2703,11 @@
         });
       }
 
+      async function fetchDownsells(botSlug) {
+        const url = `/admin/api/downsells?bot_slug=${encodeURIComponent(botSlug)}&ts=${Date.now()}`;
+        return fetchJSON(url, { cache: 'no-store' });
+      }
+
       async function loadDownsells(options = {}) {
         if (!downsellsList || !downsellsEmpty) {
           return;
@@ -2739,8 +2726,13 @@
 
         downsellsLoading = true;
         try {
-          const response = await fetchJSON(`/admin/api/downsells?bot_slug=${encodeURIComponent(slug)}`);
-          downsellsItems = Array.isArray(response) ? response : [];
+          const response = await fetchDownsells(slug);
+          const items = Array.isArray(response)
+            ? response
+            : Array.isArray(response?.items)
+            ? response.items
+            : [];
+          downsellsItems = items;
           renderDownsellItems(downsellsItems);
         } catch (error) {
           console.error('[downsells] erro ao carregar', error);
@@ -2830,7 +2822,13 @@
         }
 
         if (dsPlanLabelInput) {
-          dsPlanLabelInput.value = downsellsEditing?.plan_label ?? '';
+          const existingLabel =
+            typeof downsellsEditing?.plan_label === 'string' && downsellsEditing.plan_label.trim()
+              ? downsellsEditing.plan_label
+              : typeof downsellsEditing?.plan_name === 'string' && downsellsEditing.plan_name.trim()
+              ? downsellsEditing.plan_name
+              : '';
+          dsPlanLabelInput.value = existingLabel;
         }
 
         downsellsModal?.classList.remove('hidden');
@@ -2894,7 +2892,13 @@
 
         const planLabelRaw = (dsPlanLabelInput?.value || '').trim();
         const planLabelValue = planLabelRaw.length > 0 ? planLabelRaw : null;
-        const hasExistingPlan = Boolean(downsellsEditing?.plan_id);
+        const existingPlanLabel =
+          typeof downsellsEditing?.plan_label === 'string' && downsellsEditing.plan_label.trim()
+            ? downsellsEditing.plan_label.trim()
+            : typeof downsellsEditing?.plan_name === 'string' && downsellsEditing.plan_name.trim()
+            ? downsellsEditing.plan_name.trim()
+            : '';
+        const hasExistingPlan = downsellsEditing?.plan_id ? true : existingPlanLabel.length > 0;
         const needsPrice = planLabelValue !== null || !hasExistingPlan;
 
         if ((priceProvided || needsPrice) && (priceCents === null || priceCents < 0)) {
