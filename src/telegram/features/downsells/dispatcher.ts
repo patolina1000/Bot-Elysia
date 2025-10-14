@@ -19,7 +19,7 @@ import { generatePixTraceId } from '../../../utils/pixLogging.js';
 import { getOrCreateBotBySlug } from '../../botFactory.js';
 import { funnelService } from '../../../services/FunnelService.js';
 import { getBotIdBySlug } from '../../../db/bots.js';
-import { getBotSettings } from '../../../db/botSettings.js';
+import { getBotSettings, type BotSettings } from '../../../db/botSettings.js';
 
 type InlineKeyboardMarkup = {
   inline_keyboard: { text: string; callback_data: string }[][];
@@ -45,6 +45,37 @@ async function releaseLock(): Promise<void> {
   await pool.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]).catch((err) => {
     logger.warn({ err }, '[DOWNSELL][WORKER] failed to release advisory lock');
   });
+}
+
+async function sendDownsellMediaIfAny(
+  bot: any,
+  chatId: number,
+  mediaUrl: string | null,
+  mediaType: string | null,
+  jobLogger: any
+): Promise<number | null> {
+  if (!mediaUrl) return null;
+
+  try {
+    let msg: any;
+    const kind = (mediaType ?? 'photo').toLowerCase();
+
+    if (kind === 'video') {
+      msg = await bot.api.sendVideo(chatId, mediaUrl);
+    } else if (kind === 'audio') {
+      // Preferimos sendAudio; se o arquivo for um "voice/ogg", Telegram ainda aceita, senão caímos no catch.
+      msg = await bot.api.sendAudio(chatId, mediaUrl);
+    } else {
+      // default: foto
+      msg = await bot.api.sendPhoto(chatId, mediaUrl);
+    }
+
+    const id = typeof msg?.message_id === 'number' ? msg.message_id : null;
+    return id;
+  } catch (err) {
+    jobLogger.warn({ err, mediaUrl, mediaType }, '[DOWNSELL][WORKER] failed to send downsell media');
+    return null;
+  }
 }
 
 async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<void> {
@@ -112,6 +143,21 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
 
     const bot = await getOrCreateBotBySlug(job.bot_slug);
     const settings = await getBotSettings(job.bot_slug);
+
+    // 3.1 Envia a mídia do downsell, se existir (antes de qualquer instrução ou botão)
+    const mediaMsgId = await sendDownsellMediaIfAny(
+      bot,
+      job.telegram_id,
+      downsell.media_url,
+      downsell.media_type,
+      jobLogger
+    );
+
+    // 3.2 Se mandamos a mídia do downsell, evitamos duplicar a foto do PIX depois.
+    //     Criamos uma cópia dos settings com pix_image_url = null para este fluxo.
+    const settingsForThisFlow: BotSettings = mediaMsgId
+      ? { ...settings, pix_image_url: null }
+      : settings;
 
     if (downsell.copy && downsell.copy.trim().length > 0) {
       try {
@@ -246,7 +292,13 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
 
     const baseUrlEnv = (process.env.PUBLIC_BASE_URL ?? '').trim();
     const baseUrl = baseUrlEnv || settings.public_base_url || process.env.APP_BASE_URL || '';
-    const { message_ids } = await sendPixByChatId(job.telegram_id, transaction, settings, bot.api, baseUrl);
+    const { message_ids } = await sendPixByChatId(
+      job.telegram_id,
+      transaction,
+      settingsForThisFlow,
+      bot.api,
+      baseUrl
+    );
     const lastMessageId = message_ids.length > 0 ? message_ids[message_ids.length - 1] ?? null : null;
 
     await recordSent(
