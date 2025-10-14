@@ -2141,10 +2141,8 @@
       </div>
       <div class="modal-body">
         <div class="form-row double">
-          <label>Plano
-            <select id="ds-plan">
-              <option value="">— selecione —</option>
-            </select>
+          <label>Plano (texto no botão)
+            <input id="ds-plan-label" type="text" placeholder="ex.: Acesso VIP 1 semana" autocomplete="off">
           </label>
           <label>Preço (R$)
             <input id="ds-price" type="text" placeholder="ex.: 19,90" autocomplete="off">
@@ -2468,7 +2466,7 @@
       const downsellsModalTitle = document.getElementById('downsells-modal-title');
       const downsellsModalClose = document.getElementById('downsells-modal-close');
       const downsellsSaveBtn = document.getElementById('downsells-save');
-      const dsPlanSelect = document.getElementById('ds-plan');
+      const dsPlanLabelInput = document.getElementById('ds-plan-label');
       const dsPriceInput = document.getElementById('ds-price');
       const dsMomentSelect = document.getElementById('ds-moment');
       const dsDelayInput = document.getElementById('ds-delay-min');
@@ -2584,51 +2582,6 @@
         }
       }
 
-      async function populateDownsellPlans(botSlug, selectedId = null) {
-        if (!dsPlanSelect) {
-          return;
-        }
-
-        dsPlanSelect.innerHTML = '<option value="">— selecione —</option>';
-        dsPlanSelect.disabled = !botSlug;
-
-        if (!botSlug) {
-          return;
-        }
-
-        try {
-          const response = await fetchJSON(`/admin/api/plans?bot_slug=${encodeURIComponent(botSlug)}`);
-          const items = Array.isArray(response?.items) ? response.items : [];
-          items.forEach((plan) => {
-            if (!plan || typeof plan !== 'object') {
-              return;
-            }
-            const option = document.createElement('option');
-            option.value = String(plan.id);
-            let label = typeof plan.name === 'string' && plan.name.trim() ? plan.name.trim() : `Plano #${plan.id}`;
-            const cents = Number(plan.price_cents ?? Number.NaN);
-            if (Number.isFinite(cents)) {
-              label += ` — R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
-            }
-            if (plan.is_active === false) {
-              label += ' (inativo)';
-            }
-            option.textContent = label;
-            dsPlanSelect.appendChild(option);
-          });
-
-          if (selectedId !== null && selectedId !== undefined) {
-            const selectedValue = String(selectedId);
-            const hasOption = Array.from(dsPlanSelect.options).some((opt) => opt.value === selectedValue);
-            if (hasOption) {
-              dsPlanSelect.value = selectedValue;
-            }
-          }
-        } catch (error) {
-          console.error('[downsells] erro ao carregar planos', error);
-        }
-      }
-
       function renderDownsellItems(list) {
         if (!downsellsList || !downsellsEmpty) {
           return;
@@ -2665,7 +2618,17 @@
             const numeric = Number(item.plan_price_cents);
             return Number.isFinite(numeric) ? numeric : Number.NaN;
           })();
-          if (Number.isFinite(priceCents)) {
+          const planLabelText =
+            typeof item?.plan_label === 'string' && item.plan_label.trim()
+              ? item.plan_label.trim()
+              : '';
+          if (planLabelText && Number.isFinite(priceCents)) {
+            price.textContent = `${planLabelText} — ${centsToBRL(priceCents)}`;
+          } else if (planLabelText && Number.isFinite(planPriceCents)) {
+            price.textContent = `${planLabelText} — ${centsToBRL(planPriceCents)}`;
+          } else if (planLabelText) {
+            price.textContent = planLabelText;
+          } else if (Number.isFinite(priceCents)) {
             price.textContent = centsToBRL(priceCents);
           } else if (Number.isFinite(planPriceCents)) {
             const planLabel = typeof item?.plan_name === 'string' && item.plan_name.trim()
@@ -2809,9 +2772,8 @@
         if (downsellsSaveBtn) {
           downsellsSaveBtn.textContent = downsellsEditing ? 'Salvar alterações' : 'Salvar';
         }
-        if (dsPlanSelect) {
-          dsPlanSelect.disabled = true;
-          dsPlanSelect.innerHTML = '<option value="">— selecione —</option>';
+        if (dsPlanLabelInput && !downsellsEditing) {
+          dsPlanLabelInput.value = '';
         }
         if (dsPriceInput) {
           const editPrice = (() => {
@@ -2867,9 +2829,9 @@
           dsMediaFileInput.value = '';
         }
 
-        const slug = (plansBotSlugInput?.value || '').trim();
-        const selectedPlanId = downsellsEditing?.plan_id ?? null;
-        void populateDownsellPlans(slug, selectedPlanId);
+        if (dsPlanLabelInput) {
+          dsPlanLabelInput.value = downsellsEditing?.plan_label ?? '';
+        }
 
         downsellsModal?.classList.remove('hidden');
       }
@@ -2882,9 +2844,8 @@
         if (dsDelayInput) {
           dsDelayInput.value = '';
         }
-        if (dsPlanSelect) {
-          dsPlanSelect.innerHTML = '<option value="">— selecione —</option>';
-          dsPlanSelect.disabled = false;
+        if (dsPlanLabelInput) {
+          dsPlanLabelInput.value = '';
         }
         downsellsEditing = null;
         if (downsellsModal) {
@@ -2931,25 +2892,14 @@
         const priceProvided = rawPrice.length > 0;
         const priceCents = Number.isFinite(parsedPriceCents) ? parsedPriceCents : null;
 
-        const selectedPlanId = (() => {
-          const rawValue = dsPlanSelect?.value ?? '';
-          if (!rawValue) {
-            return null;
-          }
-          const numeric = Number(rawValue);
-          return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
-        })();
+        const planLabelRaw = (dsPlanLabelInput?.value || '').trim();
+        const planLabelValue = planLabelRaw.length > 0 ? planLabelRaw : null;
+        const hasExistingPlan = Boolean(downsellsEditing?.plan_id);
+        const needsPrice = planLabelValue !== null || !hasExistingPlan;
 
-        if (selectedPlanId === null) {
-          if (priceCents === null || priceCents < 0) {
-            alert('Preço inválido. Use formato 19,90.');
-            return;
-          }
-        } else if (priceProvided) {
-          if (priceCents === null || priceCents < 0) {
-            alert('Preço inválido. Use formato 19,90.');
-            return;
-          }
+        if ((priceProvided || needsPrice) && (priceCents === null || priceCents < 0)) {
+          alert('Preço inválido. Use formato 19,90.');
+          return;
         }
 
         let delayMinutes = Number(dsDelayInput?.value ?? 0);
@@ -2966,7 +2916,7 @@
         const payload = {
           bot_slug: slug,
           copy: (dsCopyTextarea?.value || '').trim(),
-          plan_id: selectedPlanId,
+          plan_label: planLabelValue,
           price_cents: priceCents,
           media_url: (dsMediaUrlInput?.value || '').trim() || null,
           moment: trigger,

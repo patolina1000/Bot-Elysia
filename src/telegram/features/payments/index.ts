@@ -6,9 +6,10 @@ import {
 } from '../../../services/bot/plans.js';
 import { getPaymentByExternalId } from '../../../db/payments.js';
 import { getPlanById } from '../../../db/plans.js';
+import { getDownsellById } from '../../../db/downsells.js';
 import { resolvePixGateway } from '../../../services/payments/pixGatewayResolver.js';
 import { generatePixTraceId } from '../../../utils/pixLogging.js';
-import { sendPixMessage } from './sendPixMessage.js';
+import { sendPixMessage, createPixForCustomPrice } from './sendPixMessage.js';
 import { scheduleDownsellsForMoment } from '../../../services/downsells/scheduler.js';
 
 export const paymentsFeature = new Composer<MyContext>();
@@ -171,7 +172,140 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     return;
   }
 
+  const isDownsellAction = data.startsWith('downsell:');
+  ctx.logger.info(
+    { bot_slug: ctx.bot_slug, pattern: 'downsell:', matched: isDownsellAction },
+    '[DISPATCH] checking'
+  );
+  if (isDownsellAction) {
+    const rawId = data.slice('downsell:'.length);
+    const downsellId = Number.parseInt(rawId, 10);
+
+    if (!Number.isFinite(downsellId)) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data },
+        '[PIX][GUARD] unknown_downsell_action'
+      );
+      await ctx.answerCallbackQuery({ text: 'Oferta inválida.', show_alert: true });
+      return;
+    }
+
+    const paymentsEnabled = ctx.bot_features?.['payments'] !== false;
+    if (!paymentsEnabled) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data, downsell_id: downsellId },
+        '[PIX][GUARD] payments_disabled'
+      );
+      await ctx.answerCallbackQuery({ text: 'Pagamentos indisponíveis no momento.', show_alert: true });
+      return;
+    }
+
+    const downsell = await getDownsellById(downsellId);
+    if (!downsell || !downsell.active || downsell.bot_slug !== ctx.bot_slug) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data, downsell_id: downsellId },
+        '[PIX][GUARD] downsell_not_found_or_inactive'
+      );
+      await ctx.answerCallbackQuery({ text: 'Oferta indisponível.', show_alert: true });
+      return;
+    }
+
+    const priceCents =
+      typeof downsell.price_cents === 'number' && Number.isFinite(downsell.price_cents) && downsell.price_cents > 0
+        ? downsell.price_cents
+        : typeof downsell.plan_price_cents === 'number' &&
+            Number.isFinite(downsell.plan_price_cents) &&
+            downsell.plan_price_cents > 0
+        ? downsell.plan_price_cents
+        : null;
+
+    if (!priceCents) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data, downsell_id: downsellId },
+        '[PIX][GUARD] downsell_price_missing'
+      );
+      await ctx.answerCallbackQuery({ text: 'Preço indisponível no momento.', show_alert: true });
+      return;
+    }
+
+    const telegramId = ctx.from?.id ?? ctx.chat?.id ?? null;
+    let pix_trace_id = 'tx:unknown';
+
+    try {
+      ctx.logger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        bot_slug: ctx.bot_slug,
+        telegram_id: telegramId,
+        downsell_id: downsell.id,
+        price_cents: priceCents,
+        pix_trace_id,
+      }, '[PIX][CREATE] downsell callback');
+
+      const { transaction } = await createPixForCustomPrice(ctx.bot_slug, telegramId ?? null, priceCents, {
+        bot_id: ctx.bot_id ?? null,
+        downsell_id: downsell.id,
+        source: 'downsells_callback',
+      });
+
+      if (!transaction.qr_code) {
+        throw new Error('Código PIX indisponível.');
+      }
+
+      const finalTraceId = generatePixTraceId(transaction.external_id, transaction.id);
+      pix_trace_id = finalTraceId;
+      ctx.logger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        provider_id: transaction.external_id,
+        transaction_id: transaction.id,
+        bot_slug: ctx.bot_slug,
+        telegram_id: telegramId,
+        price_cents: transaction.value_cents,
+        pix_trace_id,
+        downsell_id: downsell.id,
+      }, '[PIX][CREATE] downsell pix generated');
+
+      await sendPixMessage(ctx, transaction, { source: 'downsell' });
+
+      if (typeof telegramId === 'number' && !Number.isNaN(telegramId)) {
+        try {
+          await scheduleDownsellsForMoment({
+            botId: ctx.bot_id ?? null,
+            botSlug: ctx.bot_slug,
+            telegramId,
+            moment: 'after_pix',
+            logger: ctx.logger,
+          });
+        } catch (scheduleErr) {
+          ctx.logger.warn({ err: scheduleErr }, '[DOWNSELL][SCHEDULE] failed after downsell pix');
+        }
+      }
+
+      await ctx.answerCallbackQuery();
+    } catch (err) {
+      ctx.logger.error(
+        {
+          err,
+          op: 'create',
+          provider: 'PushinPay',
+          data,
+          downsell_id: downsellId,
+          pix_trace_id: pix_trace_id,
+        },
+        '[PIX][ERROR] downsell create failed'
+      );
+      await ctx.answerCallbackQuery({
+        text: 'Erro ao gerar PIX. Tente novamente em instantes.',
+        show_alert: true,
+      });
+    }
+
+    return;
+  }
+
   const isQrAction = data.startsWith('qr:');
+
   ctx.logger.info(
     { bot_slug: ctx.bot_slug, pattern: 'qr:', matched: isQrAction },
     '[DISPATCH] checking'

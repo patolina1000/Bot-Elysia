@@ -14,6 +14,7 @@ export interface BotDownsell {
   sort_order: number | null;
   active: boolean;
   plan_id: number | null;
+  plan_label: string | null;
   plan_price_cents?: number | null;
   plan_name?: string | null;
   created_at: Date;
@@ -34,6 +35,7 @@ function mapRow(row: any): BotDownsell {
     sort_order: row.sort_order !== null && row.sort_order !== undefined ? Number(row.sort_order) : null,
     active: Boolean(row.active ?? true),
     plan_id: row.plan_id === null || row.plan_id === undefined ? null : Number(row.plan_id),
+    plan_label: row.plan_label ? String(row.plan_label) : null,
     plan_price_cents:
       row.plan_price_cents === null || row.plan_price_cents === undefined
         ? null
@@ -59,6 +61,7 @@ export async function listActiveDownsellsByMoment(
             d.delay_minutes,
             d.sort_order,
             d.active,
+            d.plan_label,
             d.plan_id,
             d.created_at,
             d.updated_at,
@@ -101,6 +104,7 @@ export async function getDownsellById(id: number): Promise<BotDownsell | null> {
             d.delay_minutes,
             d.sort_order,
             d.active,
+            d.plan_label,
             d.plan_id,
             d.created_at,
             d.updated_at,
