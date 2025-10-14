@@ -73,8 +73,11 @@ export async function enqueueDownsell(
   const queryable = getQueryable(client);
 
   const result = await queryable.query(
-    `INSERT INTO downsells_queue (bot_slug, downsell_id, telegram_id, deliver_at, status, attempt_count, last_error)
-       VALUES ($1, $2, $3, $4, 'pending', 0, NULL)
+    `INSERT INTO downsells_queue (
+         bot_slug, downsell_id, telegram_id, deliver_at,
+         status, attempt_count, last_error, scheduled_at
+       )
+       VALUES ($1, $2, $3, $4, 'pending', 0, NULL, NOW())
      ON CONFLICT (bot_slug, downsell_id, telegram_id) DO UPDATE
        SET deliver_at = EXCLUDED.deliver_at,
            status = 'pending',
