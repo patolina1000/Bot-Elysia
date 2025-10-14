@@ -223,4 +223,31 @@ export function registerAdminDownsellsRoutes(app: Express): void {
       }
     }
   );
+
+  app.delete(
+    '/admin/api/downsells/:id',
+    authAdminMiddleware,
+    async (req: Request, res: Response): Promise<Response> => {
+      try {
+        const idNum = Number(req.params.id);
+        if (!Number.isInteger(idNum) || idNum <= 0) {
+          return res.status(400).json({ ok: false, error: 'invalid_id' });
+        }
+
+        const { rowCount } = await pool.query('DELETE FROM bot_downsells WHERE id = $1', [idNum]);
+        if (rowCount === 0) {
+          return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+
+        return res.status(200).json({ ok: true, deleted_id: idNum });
+      } catch (err) {
+        logger.error({ err }, '[ADMIN][DOWNSELLS][DELETE] error');
+        return res.status(500).json({
+          ok: false,
+          error: 'internal_error',
+          details: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  );
 }
