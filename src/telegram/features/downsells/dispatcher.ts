@@ -83,7 +83,10 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     const downsell = await getDownsellById(job.downsell_id);
     const priceCents = toCents(downsell?.price_cents);
     const planPriceCents = toCents(downsell?.plan_price_cents);
-    const planLabel = typeof downsell?.plan_label === 'string' ? downsell.plan_label.trim() : '';
+    const resolveLabel = (value: string | null | undefined): string =>
+      typeof value === 'string' ? value.trim() : '';
+    // Prefer the custom label typed in the admin, but fall back to legacy plan_name values.
+    const planLabel = resolveLabel(downsell?.plan_label) || resolveLabel(downsell?.plan_name);
     const hasPlanLabel = planLabel.length > 0;
     const hasPlan = Boolean(downsell?.plan_id);
     const hasValidPrice = priceCents !== null && priceCents > 0;
