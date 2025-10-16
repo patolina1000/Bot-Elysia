@@ -293,6 +293,10 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     });
 
     if (keyboard) {
+      const totalButtons =
+        (typeof primaryPriceCents === 'number' && primaryPriceCents > 0 ? 1 : 0) +
+        (Array.isArray(extraPlans) ? extraPlans.length : 0);
+      jobLogger.info({ downsell_id: downsell.id, totalButtons }, '[DOWNSELL][UI] sending CTA');
       const sent = await bot.api.sendMessage(job.telegram_id, introText, {
         reply_markup: keyboard,
       });
@@ -341,6 +345,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
           inline_keyboard: [[{ text: buttonText, callback_data: `plan:${plan.id}` }]],
         };
 
+        jobLogger.info({ downsell_id: downsell.id, totalButtons: 1 }, '[DOWNSELL][UI] sending CTA');
         const sent = await bot.api.sendMessage(job.telegram_id, introText, {
           reply_markup: keyboard,
         });
@@ -390,9 +395,21 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     const { transaction } = await createPixForCustomPrice(job.bot_slug, job.telegram_id, pixPriceCents, {
       bot_id: botId,
       downsell_id: downsell.id,
+      origin: 'downsells',
       source: 'downsell_queue',
       plan_label: fallbackPlanLabel,
+      price_cents: pixPriceCents,
     });
+
+    jobLogger.info(
+      {
+        downsell_id: downsell.id,
+        plan_label: fallbackPlanLabel,
+        price_cents: pixPriceCents,
+        tx_id: transaction?.id ?? null,
+      },
+      '[DOWNSELL][PIX] created'
+    );
 
     const pixTraceId = generatePixTraceId(transaction.external_id, transaction.id);
     jobLogger.info(
@@ -425,6 +442,10 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
         transaction_id: String(transaction.id),
         external_id: transaction.external_id,
         sent_message_id: lastMessageId ? String(lastMessageId) : null,
+        plan_label: fallbackPlanLabel,
+        price_cents: pixPriceCents,
+        status: 'sent',
+        sent_at: new Date(),
       },
       client
     );

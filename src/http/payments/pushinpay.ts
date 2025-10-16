@@ -17,6 +17,7 @@ import { insertOrUpdatePayment, setPaymentStatus } from '../../db/payments.js';
 import { pool } from '../../db/pool.js';
 import { getPlanById } from '../../db/plans.js';
 import { authAdminMiddleware } from '../middleware/authAdmin.js';
+import { setAsPaid as setDownsellAsPaid } from '../../db/downsellsSent.js';
 
 const PUSHINPAY_NOTICE_HTML = `<div class="text-xs opacity-70 mt-3">\n  <strong>Aviso:</strong> A PUSHIN PAY atua exclusivamente como processadora de pagamentos e não possui qualquer responsabilidade pela entrega, suporte, conteúdo, qualidade ou cumprimento das obrigações relacionadas aos produtos ou serviços oferecidos pelo vendedor.\n</div>`;
 
@@ -614,6 +615,17 @@ pushinpayWebhookRouter.post(
           ...(payload.end_to_end_id ? { end_to_end_id: payload.end_to_end_id } : {}),
         };
 
+        reqLogger.info(
+          {
+            tx_id: updated.id,
+            origin: (mergedMeta as Record<string, unknown>)?.origin ?? null,
+            downsell_id: (mergedMeta as Record<string, unknown>)?.downsell_id ?? null,
+            plan_label: (mergedMeta as Record<string, unknown>)?.plan_label ?? null,
+            price_cents: (mergedMeta as Record<string, unknown>)?.price_cents ?? null,
+          },
+          '[WEBHOOK][PAID] transaction confirmed'
+        );
+
         // Log pagamento confirmado
         reqLogger.info({
           op: 'webhook',
@@ -639,6 +651,50 @@ pushinpayWebhookRouter.post(
           payloadId: updated.payload_id ?? null,
           meta: mergedMeta,
         });
+
+        const meta = (typeof updated.meta === 'object' && updated.meta ? updated.meta : {}) as Record<string, unknown>;
+        if (
+          meta?.origin === 'downsells' &&
+          meta?.downsell_id !== undefined &&
+          updated.telegram_id !== null &&
+          updated.telegram_id !== undefined
+        ) {
+          const downsellIdNumber = Number(meta.downsell_id);
+          const telegramIdNumber = Number(updated.telegram_id);
+          if (!Number.isFinite(downsellIdNumber) || !Number.isFinite(telegramIdNumber)) {
+            reqLogger.warn(
+              {
+                downsell_id: meta.downsell_id,
+                telegram_id: updated.telegram_id,
+              },
+              '[DOWNSELL][METRICS] invalid identifiers for paid mark'
+            );
+          } else {
+            try {
+              await setDownsellAsPaid({
+                downsell_id: downsellIdNumber,
+                telegram_id: telegramIdNumber,
+                paid_at: new Date(),
+                bot_slug:
+                  typeof meta.bot_slug === 'string'
+                    ? meta.bot_slug
+                    : typeof botSlug === 'string'
+                    ? botSlug
+                    : null,
+              });
+              reqLogger.info(
+                {
+                  downsell_id: meta.downsell_id,
+                  plan_label: meta.plan_label ?? null,
+                  price_cents: meta.price_cents ?? null,
+                },
+                '[DOWNSELL][METRICS] marked as paid'
+              );
+            } catch (markErr) {
+              reqLogger.warn({ err: markErr }, '[DOWNSELL][METRICS] failed to mark downsell as paid');
+            }
+          }
+        }
 
         if (process.env.UTMIFY_API_TOKEN) {
           try {
@@ -779,6 +835,17 @@ pushinpayWebhookRouter.post(
           ...(payload.end_to_end_id ? { end_to_end_id: payload.end_to_end_id } : {}),
         };
 
+        reqLogger.info(
+          {
+            tx_id: updated.id,
+            origin: (mergedMeta as Record<string, unknown>)?.origin ?? null,
+            downsell_id: (mergedMeta as Record<string, unknown>)?.downsell_id ?? null,
+            plan_label: (mergedMeta as Record<string, unknown>)?.plan_label ?? null,
+            price_cents: (mergedMeta as Record<string, unknown>)?.price_cents ?? null,
+          },
+          '[WEBHOOK][PAID] transaction confirmed'
+        );
+
         // Log pagamento confirmado
         const botSlug = typeof updated.meta === 'object' && updated.meta && 'bot_slug' in updated.meta
           ? String(updated.meta.bot_slug)
@@ -808,6 +875,45 @@ pushinpayWebhookRouter.post(
           payloadId: updated.payload_id ?? null,
           meta: mergedMeta,
         });
+
+        const meta = (typeof updated.meta === 'object' && updated.meta ? updated.meta : {}) as Record<string, unknown>;
+        if (
+          meta?.origin === 'downsells' &&
+          meta?.downsell_id !== undefined &&
+          updated.telegram_id !== null &&
+          updated.telegram_id !== undefined
+        ) {
+          const downsellIdNumber = Number(meta.downsell_id);
+          const telegramIdNumber = Number(updated.telegram_id);
+          if (!Number.isFinite(downsellIdNumber) || !Number.isFinite(telegramIdNumber)) {
+            reqLogger.warn(
+              {
+                downsell_id: meta.downsell_id,
+                telegram_id: updated.telegram_id,
+              },
+              '[DOWNSELL][METRICS] invalid identifiers for paid mark'
+            );
+          } else {
+            try {
+              await setDownsellAsPaid({
+                downsell_id: downsellIdNumber,
+                telegram_id: telegramIdNumber,
+                paid_at: new Date(),
+                bot_slug: typeof meta.bot_slug === 'string' ? meta.bot_slug : null,
+              });
+              reqLogger.info(
+                {
+                  downsell_id: meta.downsell_id,
+                  plan_label: meta.plan_label ?? null,
+                  price_cents: meta.price_cents ?? null,
+                },
+                '[DOWNSELL][METRICS] marked as paid'
+              );
+            } catch (markErr) {
+              reqLogger.warn({ err: markErr }, '[DOWNSELL][METRICS] failed to mark downsell as paid');
+            }
+          }
+        }
 
         if (process.env.UTMIFY_API_TOKEN) {
           try {
