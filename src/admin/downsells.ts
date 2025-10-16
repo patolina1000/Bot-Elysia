@@ -74,10 +74,10 @@ function parsePriceToCents(value: unknown): number {
 
 function toCentsBRL(input: unknown): number | null {
   if (typeof input !== 'string' && typeof input !== 'number') return null;
-  const str = String(input).trim().replace(/\s+/g, '');
-
+  const str = String(input).trim();
   if (!str) return null;
-  const normalized = str.replace('.', '').replace(',', '.');
+  // aceita "19,90", "19.90" e "19"
+  const normalized = str.replace(/\./g, '').replace(',', '.');
   const value = Number(normalized);
   if (Number.isNaN(value) || value < 0) return null;
   return Math.round(value * 100);
@@ -85,21 +85,33 @@ function toCentsBRL(input: unknown): number | null {
 
 type SanitizedExtraPlan = { label: string; price_cents: number };
 
-function sanitizeExtraPlans(raw: any): { ok: boolean; value: SanitizedExtraPlan[]; error?: string } {
-  if (!raw) return { ok: true, value: [] };
-  if (!Array.isArray(raw)) return { ok: false, value: [], error: 'extra_plans must be an array' };
+function sanitizeExtraPlans(
+  raw: any,
+  fallbackLabel?: string
+): { ok: boolean; value: SanitizedExtraPlan[]; error?: string } {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out: Array<{ label: string; price_cents: number }> = [];
+  let seq = 1;
 
-  const MAX = 8;
-  if (raw.length > MAX) return { ok: false, value: [], error: `max ${MAX} extra plans` };
+  for (const it of arr) {
+    const cents = toCentsBRL(it?.price ?? it?.price_cents);
+    // se não tem preço válido, ignora a linha
+    if (cents == null) continue;
 
-  const out: SanitizedExtraPlan[] = [];
-  for (const item of raw) {
-    const label = (item?.label ?? '').toString().trim();
-    const cents = toCentsBRL(item?.price ?? item?.price_cents);
-    if (!label) return { ok: false, value: [], error: 'extra_plans[].label is required' };
-    if (cents == null || cents <= 0) return { ok: false, value: [], error: 'extra_plans[].price is invalid' };
+    let label = (it?.label ?? '').toString().trim();
+    if (!label) {
+      // gera um label padrão se não veio
+      if (fallbackLabel) {
+        label = seq === 1 ? `${fallbackLabel}` : `${fallbackLabel} (${seq})`;
+      } else {
+        label = seq === 1 ? 'Plano extra' : `Plano extra (${seq})`;
+      }
+    }
+
     out.push({ label, price_cents: cents });
+    seq++;
   }
+
   return { ok: true, value: out };
 }
 
@@ -409,12 +421,18 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           });
         }
 
-        const rawExtraPlans = payload.extra_plans ?? (payload as { extraPlans?: unknown }).extraPlans;
-        const extraPlansParsed = sanitizeExtraPlans(rawExtraPlans);
-        if (!extraPlansParsed.ok) {
-          return res.status(400).json({ ok: false, error: extraPlansParsed.error });
-        }
-        const extraPlans = extraPlansParsed.value;
+        const bodyWithAliases = req.body as {
+          extra_plans?: unknown;
+          extraPlans?: unknown;
+          plan_label?: unknown;
+          planLabel?: unknown;
+        };
+        const rawExtra = bodyWithAliases.extra_plans ?? bodyWithAliases.extraPlans ?? [];
+        const fallbackLabelRaw = bodyWithAliases.plan_label ?? bodyWithAliases.planLabel ?? '';
+        const fallbackLabel = String(fallbackLabelRaw ?? '').trim() || undefined;
+        const parsedExtraPlans = sanitizeExtraPlans(rawExtra, fallbackLabel);
+        const extraPlans = parsedExtraPlans.value;
+        logger.info({ extra_plans_len: extraPlans.length }, '[ADMIN][DS] saving extra_plans');
 
         const insertQuery = `
           INSERT INTO bot_downsells
@@ -496,7 +514,7 @@ export function registerAdminDownsellsRoutes(app: Express): void {
         }
 
         const existing = await pool.query(
-          'SELECT id, bot_slug, plan_id, price_cents FROM bot_downsells WHERE id = $1 LIMIT 1',
+          'SELECT id, bot_slug, plan_id, plan_label, price_cents FROM bot_downsells WHERE id = $1 LIMIT 1',
           [downsellId]
         );
         if (existing.rowCount === 0) {
@@ -507,9 +525,10 @@ export function registerAdminDownsellsRoutes(app: Express): void {
 
         const sets: string[] = [];
         const values: unknown[] = [];
-        const pushSet = (column: string, value: unknown) => {
+        const pushSet = (column: string, value: unknown, cast?: string) => {
           values.push(value);
-          sets.push(`${column} = $${values.length}`);
+          const placeholder = `$${values.length}`;
+          sets.push(`${column} = ${cast ? `${placeholder}::${cast}` : placeholder}`);
         };
 
         const currentRow = existing.rows[0];
@@ -565,12 +584,22 @@ export function registerAdminDownsellsRoutes(app: Express): void {
         }
 
         if ('extra_plans' in payload || 'extraPlans' in payload) {
-          const rawExtraPlans = payload.extra_plans ?? (payload as { extraPlans?: unknown }).extraPlans;
-          const parsed = sanitizeExtraPlans(rawExtraPlans);
-          if (!parsed.ok) {
-            return res.status(400).json({ error: parsed.error });
-          }
-          pushSet('extra_plans', JSON.stringify(parsed.value));
+          const bodyWithAliases = payload as {
+            extra_plans?: unknown;
+            extraPlans?: unknown;
+            plan_label?: unknown;
+            planLabel?: unknown;
+          };
+          const rawExtra = bodyWithAliases.extra_plans ?? bodyWithAliases.extraPlans ?? [];
+          const fallbackLabelRaw =
+            bodyWithAliases.plan_label ??
+            bodyWithAliases.planLabel ??
+            currentRow.plan_label ??
+            '';
+          const fallbackLabel = String(fallbackLabelRaw ?? '').trim() || undefined;
+          const parsed = sanitizeExtraPlans(rawExtra, fallbackLabel);
+          logger.info({ downsell_id: downsellId, extra_plans_len: parsed.value.length }, '[ADMIN][DS] saving extra_plans');
+          pushSet('extra_plans', JSON.stringify(parsed.value), 'jsonb');
         }
 
         if ('media_url' in payload) {
