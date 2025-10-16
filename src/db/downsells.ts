@@ -18,6 +18,7 @@ export interface BotDownsell {
   plan_label: string | null;
   plan_price_cents?: number | null;
   plan_name?: string | null;
+  extra_plans: { label: string; price_cents: number }[];
   created_at: Date;
   updated_at: Date;
 }
@@ -43,6 +44,17 @@ function mapRow(row: any): BotDownsell {
         ? null
         : Number(row.plan_price_cents),
     plan_name: row.plan_name ? String(row.plan_name) : null,
+    extra_plans: Array.isArray(row.extra_plans)
+      ? row.extra_plans.map((plan: any) => {
+          const label = typeof plan?.label === 'string' ? plan.label : String(plan?.label ?? '');
+          const rawCents = Number(plan?.price_cents);
+          const centsFromNumber = Number.isFinite(rawCents) ? Math.round(rawCents) : null;
+          const rawPrice = Number(plan?.price);
+          const centsFromPrice = Number.isFinite(rawPrice) ? Math.round(rawPrice * 100) : null;
+          const price_cents = centsFromNumber ?? centsFromPrice ?? 0;
+          return { label, price_cents };
+        })
+      : [],
     created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     updated_at: row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at),
   };
@@ -66,6 +78,7 @@ export async function listActiveDownsellsByMoment(
             d.active,
             d.plan_label,
             d.plan_id,
+            COALESCE(d.extra_plans, '[]'::jsonb) AS extra_plans,
             d.created_at,
             d.updated_at
        FROM bot_downsells d
@@ -88,7 +101,17 @@ export async function listActiveDownsellsByMoment(
         typeof downsell.plan_price_cents === 'number' &&
         Number.isFinite(downsell.plan_price_cents) &&
         downsell.plan_price_cents > 0;
-      return hasPrice || hasPlan || hasPlanPrice;
+      const hasExtraPlan = Array.isArray(downsell.extra_plans)
+        ? downsell.extra_plans.some(
+            (plan) =>
+              typeof plan?.price_cents === 'number' &&
+              Number.isFinite(plan.price_cents) &&
+              plan.price_cents > 0 &&
+              typeof plan.label === 'string' &&
+              plan.label.trim().length > 0
+          )
+        : false;
+      return hasPrice || hasPlan || hasPlanPrice || hasExtraPlan;
     });
 }
 
@@ -107,6 +130,7 @@ export async function getDownsellById(id: number): Promise<BotDownsell | null> {
             d.active,
             d.plan_label,
             d.plan_id,
+            COALESCE(d.extra_plans, '[]'::jsonb) AS extra_plans,
             d.created_at,
             d.updated_at
        FROM bot_downsells d

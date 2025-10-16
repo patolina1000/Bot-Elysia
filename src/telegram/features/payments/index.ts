@@ -172,21 +172,32 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     return;
   }
 
-  const isDownsellAction = data.startsWith('downsell:');
+  const downsellMatch = data.match(/^downsell:(\d+)(?::p(\d+))?$/);
+  const isDownsellAction = Boolean(downsellMatch);
   ctx.logger.info(
     { bot_slug: ctx.bot_slug, pattern: 'downsell:', matched: isDownsellAction },
     '[DISPATCH] checking'
   );
-  if (isDownsellAction) {
-    const rawId = data.slice('downsell:'.length);
-    const downsellId = Number.parseInt(rawId, 10);
+  if (isDownsellAction && downsellMatch) {
+    const downsellId = Number.parseInt(downsellMatch[1] ?? '', 10);
+    const planIndexRaw = downsellMatch[2];
+    const selectedIndex = typeof planIndexRaw === 'string' ? Number.parseInt(planIndexRaw, 10) : 0;
 
-    if (!Number.isFinite(downsellId)) {
+    if (!Number.isFinite(downsellId) || Number.isNaN(downsellId)) {
       ctx.logger.warn(
         { bot_slug: ctx.bot_slug, callback_data: data },
         '[PIX][GUARD] unknown_downsell_action'
       );
       await ctx.answerCallbackQuery({ text: 'Oferta inválida.', show_alert: true });
+      return;
+    }
+
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data, downsell_id: downsellId, plan_index: selectedIndex },
+        '[PIX][GUARD] invalid_downsell_plan_index'
+      );
+      await ctx.answerCallbackQuery({ text: 'Opção inválida.', show_alert: true });
       return;
     }
 
@@ -210,18 +221,53 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       return;
     }
 
-    const priceCents =
+    const trimmedPlanLabel =
+      typeof downsell.plan_label === 'string' && downsell.plan_label.trim().length > 0
+        ? downsell.plan_label.trim()
+        : null;
+    const fallbackPlanLabel = trimmedPlanLabel ?? 'Oferta especial';
+    const basePriceCents =
       typeof downsell.price_cents === 'number' && Number.isFinite(downsell.price_cents) && downsell.price_cents > 0
         ? downsell.price_cents
-        : typeof downsell.plan_price_cents === 'number' &&
-            Number.isFinite(downsell.plan_price_cents) &&
-            downsell.plan_price_cents > 0
-        ? downsell.plan_price_cents
         : null;
+    const rawExtraPlans = Array.isArray(downsell.extra_plans) ? downsell.extra_plans : [];
+    const extraPlans = rawExtraPlans.filter(
+      (plan) =>
+        typeof plan?.label === 'string' &&
+        plan.label.trim().length > 0 &&
+        typeof plan?.price_cents === 'number' &&
+        Number.isFinite(plan.price_cents) &&
+        plan.price_cents > 0
+    );
 
-    if (!priceCents) {
+    let choiceLabel: string | null = null;
+    let choicePriceCents: number | null = null;
+
+    if (selectedIndex === 0) {
+      choiceLabel = fallbackPlanLabel;
+      choicePriceCents = basePriceCents;
+    } else {
+      const targetPlan = extraPlans[selectedIndex - 1];
+      if (!targetPlan) {
+        ctx.logger.warn(
+          { bot_slug: ctx.bot_slug, callback_data: data, downsell_id: downsellId, plan_index: selectedIndex },
+          '[PIX][GUARD] downsell_extra_plan_missing'
+        );
+        await ctx.answerCallbackQuery({ text: 'Opção indisponível.', show_alert: true });
+        return;
+      }
+      choiceLabel = targetPlan.label.trim();
+      choicePriceCents = targetPlan.price_cents;
+    }
+
+    if (!choicePriceCents || choicePriceCents <= 0) {
       ctx.logger.warn(
-        { bot_slug: ctx.bot_slug, callback_data: data, downsell_id: downsellId },
+        {
+          bot_slug: ctx.bot_slug,
+          callback_data: data,
+          downsell_id: downsellId,
+          plan_index: selectedIndex,
+        },
         '[PIX][GUARD] downsell_price_missing'
       );
       await ctx.answerCallbackQuery({ text: 'Preço indisponível no momento.', show_alert: true });
@@ -238,14 +284,17 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         bot_slug: ctx.bot_slug,
         telegram_id: telegramId,
         downsell_id: downsell.id,
-        price_cents: priceCents,
+        price_cents: choicePriceCents,
         pix_trace_id,
+        plan_index: selectedIndex,
+        plan_label: choiceLabel,
       }, '[PIX][CREATE] downsell callback');
 
-      const { transaction } = await createPixForCustomPrice(ctx.bot_slug, telegramId ?? null, priceCents, {
+      const { transaction } = await createPixForCustomPrice(ctx.bot_slug, telegramId ?? null, choicePriceCents, {
         bot_id: ctx.bot_id ?? null,
         downsell_id: downsell.id,
         source: 'downsells_callback',
+        plan_label: choiceLabel ?? undefined,
       });
 
       if (!transaction.qr_code) {
@@ -264,6 +313,8 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
         price_cents: transaction.value_cents,
         pix_trace_id,
         downsell_id: downsell.id,
+        plan_index: selectedIndex,
+        plan_label: choiceLabel,
       }, '[PIX][CREATE] downsell pix generated');
 
       await sendPixMessage(ctx, transaction, { source: 'downsell' });
@@ -292,6 +343,7 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
           data,
           downsell_id: downsellId,
           pix_trace_id: pix_trace_id,
+          plan_index: selectedIndex,
         },
         '[PIX][ERROR] downsell create failed'
       );

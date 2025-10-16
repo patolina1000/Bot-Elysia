@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { InlineKeyboard } from 'grammy';
 import { logger } from '../../../logger.js';
 import { pool } from '../../../db/pool.js';
 import {
@@ -32,9 +33,68 @@ type PlanRow = {
   is_active: boolean | null;
 };
 
+type DownsellExtraPlan = { label: string; price_cents: number };
+
 const LOCK_KEY = 4839201;
 const WORKER_INTERVAL_MS = 7000;
 const MAX_JOBS_PER_TICK = 50;
+
+function formatPriceBRL(cents: number): string {
+  return (cents / 100).toFixed(2).replace('.', ',');
+}
+
+function buildDownsellKeyboard(
+  downsellId: number,
+  options: { planLabel: string | null; mainPriceCents: number | null; extraPlans: DownsellExtraPlan[] }
+): InlineKeyboard | null {
+  const buttons: { text: string; data: string }[] = [];
+  const trimmedLabel = options.planLabel?.trim() ?? '';
+  const mainPrice =
+    typeof options.mainPriceCents === 'number' &&
+    Number.isFinite(options.mainPriceCents) &&
+    options.mainPriceCents > 0
+      ? Math.round(options.mainPriceCents)
+      : null;
+
+  if (mainPrice) {
+    const priceBRL = formatPriceBRL(mainPrice);
+    const buttonLabel = trimmedLabel ? trimmedLabel : 'Oferta especial';
+    buttons.push({
+      text: `${buttonLabel} — R$ ${priceBRL}`,
+      data: `downsell:${downsellId}:p0`,
+    });
+  }
+
+  const extras = Array.isArray(options.extraPlans) ? options.extraPlans : [];
+  let extraIndex = 1;
+  for (const plan of extras) {
+    const label = typeof plan?.label === 'string' ? plan.label.trim() : '';
+    const cents = Number(plan?.price_cents);
+    if (!label || !Number.isFinite(cents) || cents <= 0) {
+      continue;
+    }
+    const priceBRL = formatPriceBRL(Math.round(cents));
+    buttons.push({
+      text: `${label} — R$ ${priceBRL}`,
+      data: `downsell:${downsellId}:p${extraIndex}`,
+    });
+    extraIndex += 1;
+  }
+
+  if (buttons.length === 0) {
+    return null;
+  }
+
+  const keyboard = new InlineKeyboard();
+  buttons.forEach((btn, index) => {
+    if (index > 0) {
+      keyboard.row();
+    }
+    keyboard.text(btn.text, btn.data);
+  });
+
+  return keyboard;
+}
 
 async function acquireLock(): Promise<boolean> {
   const { rows } = await pool.query('SELECT pg_try_advisory_lock($1) AS locked', [LOCK_KEY]);
@@ -155,13 +215,28 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
     const downsell = await getDownsellById(job.downsell_id);
     const priceCents = toCents(downsell?.price_cents);
     const planPriceCents = toCents(downsell?.plan_price_cents);
+    const extraPlans = Array.isArray(downsell?.extra_plans) ? downsell.extra_plans : [];
     const resolveLabel = (value: string | null | undefined): string =>
       typeof value === 'string' ? value.trim() : '';
     // Prefer the custom label typed in the admin, but fall back to legacy plan_name values.
     const planLabel = resolveLabel(downsell?.plan_label) || resolveLabel(downsell?.plan_name);
     const hasPlanLabel = planLabel.length > 0;
     const hasPlan = Boolean(downsell?.plan_id);
-    const hasValidPrice = priceCents !== null && priceCents > 0;
+    const fallbackPlanLabel = hasPlanLabel ? planLabel : 'Oferta especial';
+    const primaryPriceCents =
+      typeof priceCents === 'number' && priceCents > 0
+        ? priceCents
+        : typeof planPriceCents === 'number' && planPriceCents > 0
+        ? planPriceCents
+        : null;
+    const hasValidPrice = primaryPriceCents !== null && primaryPriceCents > 0;
+    const hasExtraPlanOption = extraPlans.some(
+      (plan) =>
+        typeof plan?.price_cents === 'number' &&
+        plan.price_cents > 0 &&
+        typeof plan.label === 'string' &&
+        plan.label.trim().length > 0
+    );
     const defaultIntro = 'Clique abaixo para continuar:';
     const introText =
       (downsell?.button_intro_text && downsell.button_intro_text.trim()) || defaultIntro;
@@ -172,7 +247,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       return;
     }
 
-    if (!hasPlan && !hasValidPrice) {
+    if (!hasPlan && !hasValidPrice && !hasExtraPlanOption) {
       await markJobAsSkipped(job.id, 'downsell_price_missing', client);
       jobLogger.info('[DOWNSELL][WORKER] skipped due to missing price and no plan');
       return;
@@ -211,17 +286,13 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       }
     }
 
-    if (hasPlanLabel) {
-      const buttonPriceCents = priceCents ?? planPriceCents;
-      const priceLabel =
-        buttonPriceCents !== null && buttonPriceCents > 0
-          ? ` — R$ ${(buttonPriceCents / 100).toFixed(2).replace('.', ',')}`
-          : '';
-      const buttonText = `${planLabel}${priceLabel}`;
-      const keyboard: InlineKeyboardMarkup = {
-        inline_keyboard: [[{ text: buttonText, callback_data: `downsell:${downsell.id}` }]],
-      };
+    const keyboard = buildDownsellKeyboard(downsell.id, {
+      planLabel: hasPlanLabel ? planLabel : null,
+      mainPriceCents: primaryPriceCents,
+      extraPlans,
+    });
 
+    if (keyboard) {
       const sent = await bot.api.sendMessage(job.telegram_id, introText, {
         reply_markup: keyboard,
       });
@@ -309,7 +380,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       }
     }
 
-    const pixPriceCents = priceCents;
+    const pixPriceCents = primaryPriceCents;
     if (pixPriceCents === null || pixPriceCents <= 0) {
       await markJobAsSkipped(job.id, 'downsell_price_missing', client);
       jobLogger.info('[DOWNSELL][WORKER] skipped because price missing for PIX fallback');
@@ -320,6 +391,7 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       bot_id: botId,
       downsell_id: downsell.id,
       source: 'downsell_queue',
+      plan_label: fallbackPlanLabel,
     });
 
     const pixTraceId = generatePixTraceId(transaction.external_id, transaction.id);

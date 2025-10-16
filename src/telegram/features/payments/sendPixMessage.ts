@@ -88,6 +88,7 @@ export interface CreatePixForCustomPriceMeta {
   downsell_id?: number | null;
   source?: string | null;
   metadata?: Record<string, unknown> | null;
+  plan_label?: string | null;
 }
 
 export interface CreatePixForCustomPriceResult {
@@ -135,6 +136,10 @@ export async function createPixForCustomPrice(
     metadata.source = originMeta.source;
   }
 
+  if (originMeta.plan_label) {
+    metadata.plan_label = originMeta.plan_label;
+  }
+
   if (originMeta.metadata && typeof originMeta.metadata === 'object') {
     Object.assign(metadata, originMeta.metadata);
   }
@@ -179,6 +184,7 @@ export async function createPixForCustomPrice(
           bot_slug: botSlug,
           origin: 'downsell',
           downsell_id: originMeta.downsell_id ?? null,
+          plan_label: originMeta.plan_label ?? null,
         }),
       ]
     );

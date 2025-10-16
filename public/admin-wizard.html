@@ -2971,6 +2971,24 @@
             })
             .filter((plan) => plan.label !== '' || plan.price !== '');
         };
+
+        const existingExtras = Array.isArray(downsellsEditing?.extra_plans)
+          ? downsellsEditing.extra_plans
+          : [];
+        if (existingExtras.length > 0) {
+          existingExtras.forEach((plan) => {
+            const label = typeof plan?.label === 'string' ? plan.label : '';
+            const cents = Number(plan?.price_cents);
+            const formatted =
+              Number.isFinite(cents) && cents > 0
+                ? (cents / 100).toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
+                : '';
+            addRow({ label, price: formatted });
+          });
+        }
       }
 
       function openDownsellModal(item = null) {
@@ -3158,6 +3176,23 @@
         const trigger = dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start';
         const buttonIntroValue = (dsButtonIntroInput?.value || '').trim();
 
+        const extraPlansUI =
+          downsellsModal && typeof downsellsModal.__getExtraPlans === 'function'
+            ? downsellsModal.__getExtraPlans()
+            : [];
+        const extra_plans = Array.isArray(extraPlansUI)
+          ? extraPlansUI
+              .map((plan) => {
+                const label = (plan?.label || '').trim();
+                const price = (plan?.price || '').trim();
+                if (!label && !price) {
+                  return null;
+                }
+                return { label, price };
+              })
+              .filter(Boolean)
+          : [];
+
         const payload = {
           bot_slug: slug,
           copy: (dsCopyTextarea?.value || '').trim(),
@@ -3169,6 +3204,7 @@
           trigger,
           delay_minutes: delayMinutes,
           active: Boolean(dsActiveCheckbox?.checked),
+          extra_plans,
         };
 
         try {
