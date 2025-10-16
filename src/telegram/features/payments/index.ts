@@ -11,6 +11,7 @@ import { resolvePixGateway } from '../../../services/payments/pixGatewayResolver
 import { generatePixTraceId } from '../../../utils/pixLogging.js';
 import { sendPixMessage, createPixForCustomPrice } from './sendPixMessage.js';
 import { scheduleDownsellsForMoment } from '../../../services/downsells/scheduler.js';
+import { recordSent } from '../../../db/downsellsSent.js';
 
 export const paymentsFeature = new Composer<MyContext>();
 
@@ -274,6 +275,17 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       return;
     }
 
+    ctx.logger.info(
+      {
+        downsell_id: downsell.id,
+        plan_idx: selectedIndex,
+        plan_label: choiceLabel,
+        price_cents: choicePriceCents,
+        chat_id: ctx.chat?.id ?? ctx.from?.id ?? null,
+      },
+      '[DOWNSELL][CLICK]'
+    );
+
     const telegramId = ctx.from?.id ?? ctx.chat?.id ?? null;
     let pix_trace_id = 'tx:unknown';
 
@@ -293,9 +305,21 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       const { transaction } = await createPixForCustomPrice(ctx.bot_slug, telegramId ?? null, choicePriceCents, {
         bot_id: ctx.bot_id ?? null,
         downsell_id: downsell.id,
+        origin: 'downsells',
         source: 'downsells_callback',
         plan_label: choiceLabel ?? undefined,
+        price_cents: choicePriceCents,
       });
+
+      ctx.logger.info(
+        {
+          downsell_id: downsell.id,
+          plan_label: choiceLabel,
+          price_cents: choicePriceCents,
+          tx_id: transaction?.id ?? null,
+        },
+        '[DOWNSELL][PIX] created'
+      );
 
       if (!transaction.qr_code) {
         throw new Error('Código PIX indisponível.');
@@ -318,6 +342,24 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
       }, '[PIX][CREATE] downsell pix generated');
 
       await sendPixMessage(ctx, transaction, { source: 'downsell' });
+
+      if (typeof telegramId === 'number' && !Number.isNaN(telegramId)) {
+        try {
+          await recordSent({
+            bot_slug: ctx.bot_slug,
+            downsell_id: downsell.id,
+            telegram_id: telegramId,
+            transaction_id: String(transaction.id),
+            external_id: transaction.external_id,
+            plan_label: choiceLabel,
+            price_cents: choicePriceCents,
+            status: 'sent',
+            sent_at: new Date(),
+          });
+        } catch (recordErr) {
+          ctx.logger.warn({ err: recordErr }, '[DOWNSELL][METRICS] failed to record downsell sent');
+        }
+      }
 
       if (typeof telegramId === 'number' && !Number.isNaN(telegramId)) {
         try {

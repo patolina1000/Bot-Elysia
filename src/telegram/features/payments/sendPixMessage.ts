@@ -89,6 +89,8 @@ export interface CreatePixForCustomPriceMeta {
   source?: string | null;
   metadata?: Record<string, unknown> | null;
   plan_label?: string | null;
+  origin?: string | null;
+  price_cents?: number | null;
 }
 
 export interface CreatePixForCustomPriceResult {
@@ -125,8 +127,12 @@ export async function createPixForCustomPrice(
 
   const metadata: Record<string, unknown> = {
     bot_slug: botSlug,
-    origin: 'downsell',
   };
+
+  const resolvedOrigin = originMeta.origin ?? 'downsells';
+  if (resolvedOrigin) {
+    metadata.origin = resolvedOrigin;
+  }
 
   if (originMeta.downsell_id !== undefined) {
     metadata.downsell_id = originMeta.downsell_id;
@@ -138,6 +144,12 @@ export async function createPixForCustomPrice(
 
   if (originMeta.plan_label) {
     metadata.plan_label = originMeta.plan_label;
+  }
+
+  if (originMeta.price_cents !== undefined && originMeta.price_cents !== null) {
+    metadata.price_cents = originMeta.price_cents;
+  } else {
+    metadata.price_cents = priceCents;
   }
 
   if (originMeta.metadata && typeof originMeta.metadata === 'object') {
@@ -182,9 +194,10 @@ export async function createPixForCustomPrice(
         JSON.stringify({
           gateway: 'pushinpay',
           bot_slug: botSlug,
-          origin: 'downsell',
+          origin: resolvedOrigin,
           downsell_id: originMeta.downsell_id ?? null,
           plan_label: originMeta.plan_label ?? null,
+          price_cents: metadata.price_cents ?? null,
         }),
       ]
     );

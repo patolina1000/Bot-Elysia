@@ -578,6 +578,17 @@
       flex-wrap: wrap;
     }
 
+    .downsells-modal .ds-additional-plans__actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .downsells-modal .ds-additional-plans__counter {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
     .downsells-modal .ds-additional-plans__title {
       font-size: 14px;
       font-weight: 600;
@@ -2238,7 +2249,10 @@
           <div class="ds-additional-plans">
             <div class="ds-additional-plans__header">
               <span class="ds-additional-plans__title">Planos adicionais (opcional)</span>
-              <button type="button" id="ds-add-plan" class="btn-soft">+ Adicionar plano</button>
+              <div class="ds-additional-plans__actions">
+                <span id="ds-plans-count" class="ds-additional-plans__counter">0/8</span>
+                <button type="button" id="ds-add-plan" class="btn-soft">+ Adicionar plano</button>
+              </div>
             </div>
             <div id="ds-plans-list" class="ds-plans-list"></div>
             <template id="tpl-ds-plan-row">
@@ -2878,6 +2892,37 @@
         }
       }
 
+      const DS_EXTRA_PLANS_MAX = 8;
+
+      function isValidBRL(str) {
+        if (!str) return false;
+        const normalized = str.replace(/\./g, '').replace(',', '.');
+        const n = Number(normalized);
+        return Number.isFinite(n) && n > 0;
+      }
+
+      function collectExtraPlans(modalEl) {
+        if (!modalEl) {
+          return [];
+        }
+        const list = modalEl.querySelector('#ds-plans-list');
+        if (!list) {
+          return [];
+        }
+        const rows = Array.from(list.querySelectorAll('.ds-plan-row'));
+        return rows.map((r) => {
+          const [labelEl, priceEl] = r.querySelectorAll('input');
+          const label = (labelEl?.value || '').trim();
+          const price = (priceEl?.value || '').trim();
+          if (price && !isValidBRL(price)) {
+            r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            priceEl?.focus();
+            throw new Error('Preço inválido. Use ex.: 19,90');
+          }
+          return { label, price };
+        });
+      }
+
       function initDownsellPlansRepeater(modalEl) {
         if (!modalEl) {
           return;
@@ -2886,12 +2931,25 @@
         const list = modalEl.querySelector('#ds-plans-list');
         const addBtn = modalEl.querySelector('#ds-add-plan');
         const tpl = modalEl.querySelector('#tpl-ds-plan-row');
+        const counterEl = modalEl.querySelector('#ds-plans-count');
 
         if (!list || !addBtn || !tpl) {
           return;
         }
 
         list.innerHTML = '';
+
+        function updateCounter() {
+          if (!counterEl) {
+            return;
+          }
+          const count = list.querySelectorAll('.ds-plan-row').length;
+          counterEl.textContent = `${count}/${DS_EXTRA_PLANS_MAX}`;
+        }
+
+        function canAddMore() {
+          return list.querySelectorAll('.ds-plan-row').length < DS_EXTRA_PLANS_MAX;
+        }
 
         function addRow(data) {
           const fragment = tpl.content.firstElementChild;
@@ -2915,7 +2973,10 @@
           const removeBtn = node.querySelector('[data-remove]');
           if (removeBtn) {
             removeBtn.addEventListener('click', () => {
-              node.remove();
+              if (confirm('Remover este plano?')) {
+                node.remove();
+                updateCounter();
+              }
             });
           }
 
@@ -2946,37 +3007,60 @@
             });
           }
 
+          const actions = node.querySelector('.ds-plan-row__actions');
+          if (actions) {
+            const dupBtn = document.createElement('button');
+            dupBtn.type = 'button';
+            dupBtn.className = 'px-2 py-2 rounded-md border';
+            dupBtn.textContent = 'Duplicar';
+            dupBtn.title = 'Duplicar plano';
+            dupBtn.addEventListener('click', () => {
+              if (!canAddMore()) {
+                alert(`Limite de ${DS_EXTRA_PLANS_MAX} planos atingido.`);
+                return;
+              }
+              const [l, p] = node.querySelectorAll('input');
+              addRow({
+                label: l?.value || '',
+                price: p?.value || '',
+              });
+            });
+            const removeAnchor = actions.querySelector('[data-remove]');
+            if (removeAnchor) {
+              actions.insertBefore(dupBtn, removeAnchor);
+            } else {
+              actions.appendChild(dupBtn);
+            }
+          }
+
           list.appendChild(node);
+          updateCounter();
         }
 
         if (modalEl.__dsAddPlanHandler) {
           addBtn.removeEventListener('click', modalEl.__dsAddPlanHandler);
         }
 
-        const handleAdd = () => addRow();
+        const handleAdd = () => {
+          if (!canAddMore()) {
+            alert(`Limite de ${DS_EXTRA_PLANS_MAX} planos atingido.`);
+            return;
+          }
+          addRow();
+        };
         modalEl.__dsAddPlanHandler = handleAdd;
         addBtn.addEventListener('click', handleAdd);
 
-        modalEl.__getExtraPlans = () => {
-          const rows = Array.from(list.querySelectorAll('.ds-plan-row'));
-          return rows
-            .map((row) => {
-              const rowInputs = row.querySelectorAll('input');
-              const labelValue = rowInputs[0]?.value?.trim() || '';
-              const priceValue = rowInputs[1]?.value?.trim() || '';
-              return {
-                label: labelValue,
-                price: priceValue,
-              };
-            })
-            .filter((plan) => plan.label !== '' || plan.price !== '');
-        };
+        modalEl.__getExtraPlans = () => collectExtraPlans(modalEl);
 
         const existingExtras = Array.isArray(downsellsEditing?.extra_plans)
           ? downsellsEditing.extra_plans
           : [];
         if (existingExtras.length > 0) {
           existingExtras.forEach((plan) => {
+            if (!canAddMore()) {
+              return;
+            }
             const label = typeof plan?.label === 'string' ? plan.label : '';
             const cents = Number(plan?.price_cents);
             const formatted =
@@ -2989,6 +3073,8 @@
             addRow({ label, price: formatted });
           });
         }
+
+        updateCounter();
       }
 
       function openDownsellModal(item = null) {
@@ -3176,22 +3262,16 @@
         const trigger = dsMomentSelect?.value === 'after_pix' ? 'after_pix' : 'after_start';
         const buttonIntroValue = (dsButtonIntroInput?.value || '').trim();
 
-        const extraPlansUI =
-          downsellsModal && typeof downsellsModal.__getExtraPlans === 'function'
-            ? downsellsModal.__getExtraPlans()
+        let extra_plans = [];
+        try {
+          const extraPlansUI = collectExtraPlans(downsellsModal);
+          extra_plans = Array.isArray(extraPlansUI)
+            ? extraPlansUI.filter((plan) => (plan.label || plan.price))
             : [];
-        const extra_plans = Array.isArray(extraPlansUI)
-          ? extraPlansUI
-              .map((plan) => {
-                const label = (plan?.label || '').trim();
-                const price = (plan?.price || '').trim();
-                if (!label && !price) {
-                  return null;
-                }
-                return { label, price };
-              })
-              .filter(Boolean)
-          : [];
+        } catch (e) {
+          alert(e instanceof Error ? e.message : String(e));
+          return;
+        }
 
         const payload = {
           bot_slug: slug,
