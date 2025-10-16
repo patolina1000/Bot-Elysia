@@ -2226,6 +2226,120 @@
       <div id="downsells-empty" class="hidden">Nenhum downsell cadastrado para este bot.</div>
       <div id="downsells-list"></div>
     </section>
+
+    <!-- ========================= -->
+    <!-- Disparos (beta) — VISUAL  -->
+    <!-- ========================= -->
+    <section id="shots-section" class="mt-10">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h2 class="text-xl font-semibold">Disparos (beta)</h2>
+          <p class="text-sm opacity-80">Envie uma oferta para todos que já <code>/start</code> ou já geraram PIX. Apenas visual por enquanto.</p>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" id="shots-reload" class="px-3 py-1 rounded-md border shadow-sm hover:opacity-90">Recarregar</button>
+          <button type="button" id="shots-new" class="px-3 py-1 rounded-md border shadow-sm hover:opacity-90 bg-indigo-600 text-white">+ Novo disparo</button>
+        </div>
+      </div>
+
+      <div id="shots-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Cards renderizados via JS (visual only) -->
+      </div>
+    </section>
+
+    <!-- Modal do Disparo -->
+    <div id="shots-modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+      <div class="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-auto">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-black/10 dark:border-white/10">
+          <h3 class="text-lg font-semibold" data-shots-title> Novo disparo </h3>
+          <button type="button" id="shots-close" class="px-3 py-1 rounded-md border hover:opacity-90">Fechar</button>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <!-- Público-alvo -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Público-alvo</label>
+              <select id="shot-audience" class="w-full rounded-md border p-2">
+                <option value="started">Quem já deu /start</option>
+                <option value="pix_generated">Quem já gerou PIX</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium mb-1">Agendamento</label>
+              <div class="flex items-center gap-2">
+                <label class="flex items-center gap-1"><input type="radio" name="shot-when" value="now" checked> Enviar agora</label>
+                <label class="flex items-center gap-1"><input type="radio" name="shot-when" value="schedule"> Programar</label>
+              </div>
+              <div class="mt-2 grid grid-cols-2 gap-2" id="shot-schedule-fields" style="display:none">
+                <input type="date" id="shot-date" class="rounded-md border p-2">
+                <input type="time" id="shot-time" class="rounded-md border p-2" step="60">
+                <div class="col-span-2 text-xs opacity-70">Fuso horário: America/Sao_Paulo (GMT-3)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mensagens -->
+          <div class="grid grid-cols-1 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Texto acima do(s) botão(ões)</label>
+              <input type="text" id="shot-pretext" class="w-full rounded-md border p-2" placeholder="Intro opcional">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Copy (mensagem)</label>
+              <textarea id="shot-copy" rows="4" class="w-full rounded-md border p-2" placeholder="Escreva a mensagem do disparo"></textarea>
+            </div>
+          </div>
+
+          <!-- Repetidor de Ofertas (vários planos) -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium">Ofertas (botões) — opcional</label>
+              <button type="button" id="shot-offer-add" class="px-3 py-1 rounded-md border shadow-sm hover:opacity-90">+ Adicionar oferta</button>
+            </div>
+
+            <div id="shot-offers-list" class="space-y-2"></div>
+
+            <template id="tpl-shot-offer-row">
+              <div class="shot-offer-row grid grid-cols-12 gap-2 items-end rounded-md border p-2">
+                <div class="col-span-5">
+                  <label class="block text-sm mb-1">Texto no botão</label>
+                  <input type="text" class="w-full rounded-md border p-2" placeholder="Ex.: 1 Semana VIP">
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-sm mb-1">Preço (R$)</label>
+                  <input type="text" class="w-full rounded-md border p-2 shot-price-input" inputmode="decimal" placeholder="19,90">
+                </div>
+                <div class="col-span-5">
+                  <label class="block text-sm mb-1">URL da mídia (foto/vídeo/áudio/GIF) — opcional</label>
+                  <input type="text" class="w-full rounded-md border p-2" placeholder="https://...">
+                </div>
+                <div class="col-span-12 flex gap-1 justify-end">
+                  <button type="button" class="px-2 py-2 rounded-md border" data-move-up title="Mover para cima">↑</button>
+                  <button type="button" class="px-2 py-2 rounded-md border" data-move-down title="Mover para baixo">↓</button>
+                  <button type="button" class="px-2 py-2 rounded-md border" data-duplicate title="Duplicar">Duplicar</button>
+                  <button type="button" class="px-2 py-2 rounded-md border text-red-600" data-remove title="Remover">Remover</button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Ativo -->
+          <div class="flex items-center justify-between">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="shot-active" checked>
+              <span>Ativo</span>
+            </label>
+
+            <div class="flex gap-2">
+              <button type="button" id="shot-preview" class="px-3 py-1 rounded-md border shadow-sm hover:opacity-90">Pré-visualizar</button>
+              <button type="button" id="shot-save" class="px-3 py-1 rounded-md border shadow-sm hover:opacity-90 bg-indigo-600 text-white">Salvar (visual)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="downsells-modal" class="downsells-modal hidden" role="dialog" aria-modal="true" aria-labelledby="downsells-modal-title">
@@ -5346,6 +5460,268 @@
       } else {
         updateNoBotsVisibility();
       }
+    })();
+  </script>
+
+  <script>
+    (function() {
+      // Estado em memória (visual only)
+      const shotsState = { items: [] }; // cada item: { id, audience, when, date, time, pretext, copy, offers[], active }
+
+      // Atalhos
+      const $ = (sel, root = document) => root.querySelector(sel);
+      const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+      // Elementos
+      const listEl = document.getElementById('shots-list');
+      const btnNew = document.getElementById('shots-new');
+      const btnReload = document.getElementById('shots-reload');
+
+      const modal = document.getElementById('shots-modal');
+      const btnClose = document.getElementById('shots-close');
+      const titleEl = modal.querySelector('[data-shots-title]');
+
+      const fldAudience = document.getElementById('shot-audience');
+      const scheduleFields = document.getElementById('shot-schedule-fields');
+      const fldPretext = document.getElementById('shot-pretext');
+      const fldCopy = document.getElementById('shot-copy');
+      const chkActive = document.getElementById('shot-active');
+      const btnOfferAdd = document.getElementById('shot-offer-add');
+      const offersList = document.getElementById('shot-offers-list');
+      const tplOffer = document.getElementById('tpl-shot-offer-row');
+
+      const btnPreview = document.getElementById('shot-preview');
+      const btnSave = document.getElementById('shot-save');
+
+      // Radios de agendamento
+      const radiosWhen = $$('input[name="shot-when"]', modal);
+      const fldDate = document.getElementById('shot-date');
+      const fldTime = document.getElementById('shot-time');
+
+      let editingId = null;
+
+      // --------- Repetidor de ofertas ----------
+      function addOfferRow(data) {
+        const node = tplOffer.content.firstElementChild.cloneNode(true);
+        const [labelInput, priceInput, mediaInput] = node.querySelectorAll('input');
+
+        if (data) {
+          labelInput.value = data.label || '';
+          priceInput.value = data.price || '';
+          mediaInput.value = data.media_url || '';
+        }
+
+        // máscara simples de preço: troca '.' por ','
+        priceInput.addEventListener('blur', () => {
+          priceInput.value = priceInput.value.replace('.', ',');
+        });
+
+        node.querySelector('[data-remove]').addEventListener('click', () => {
+          if (confirm('Remover esta oferta?')) node.remove();
+        });
+        node.querySelector('[data-duplicate]').addEventListener('click', () => {
+          addOfferRow({
+            label: labelInput.value,
+            price: priceInput.value,
+            media_url: mediaInput.value,
+          });
+        });
+        node.querySelector('[data-move-up]').addEventListener('click', () => {
+          const prev = node.previousElementSibling;
+          if (prev) offersList.insertBefore(node, prev);
+        });
+        node.querySelector('[data-move-down]').addEventListener('click', () => {
+          const next = node.nextElementSibling;
+          if (next) offersList.insertBefore(next, node.nextElementSibling.nextElementSibling);
+          else offersList.appendChild(node);
+        });
+
+        offersList.appendChild(node);
+      }
+
+      function collectOffers() {
+        const rows = $$('.shot-offer-row', offersList);
+        return rows
+          .map((row) => {
+            const [labelInput, priceInput, mediaInput] = row.querySelectorAll('input');
+            return {
+              label: (labelInput.value || '').trim(),
+              price: (priceInput.value || '').trim(),
+              media_url: (mediaInput.value || '').trim(),
+            };
+          })
+          .filter((o) => o.label || o.price || o.media_url);
+      }
+
+      // --------- Modal ----------
+      function openModal(item) {
+        editingId = item?.id ?? null;
+        titleEl.textContent = editingId ? 'Editar disparo' : 'Novo disparo';
+
+        // reset
+        fldAudience.value = item?.audience || 'started';
+        radiosWhen.forEach((r) => (r.checked = (item?.when || 'now') === r.value));
+        scheduleFields.style.display = item?.when === 'schedule' ? '' : 'none';
+        fldDate.value = item?.date || '';
+        fldTime.value = item?.time || '';
+        fldPretext.value = item?.pretext || '';
+        fldCopy.value = item?.copy || '';
+        chkActive.checked = item?.active ?? true;
+
+        offersList.innerHTML = '';
+        (item?.offers || []).forEach(addOfferRow);
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+
+      function closeModal() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        editingId = null;
+        offersList.innerHTML = '';
+      }
+
+      btnOfferAdd.addEventListener('click', () => addOfferRow());
+
+      radiosWhen.forEach((r) => {
+        r.addEventListener('change', () => {
+          scheduleFields.style.display = r.value === 'schedule' && r.checked ? '' : 'none';
+        });
+      });
+
+      btnClose.addEventListener('click', closeModal);
+      btnNew.addEventListener('click', () => openModal(null));
+      btnReload.addEventListener('click', () => renderList());
+
+      btnPreview.addEventListener('click', () => {
+        const offers = collectOffers();
+        const when = radiosWhen.find((r) => r.checked)?.value || 'now';
+        const sched = when === 'schedule' ? ` (${fldDate.value} ${fldTime.value})` : ' (agora)';
+        alert(
+          `Prévia (visual)\n\n` +
+            `Público: ${fldAudience.value}\n` +
+            `Quando: ${when}${sched}\n` +
+            `Intro: ${fldPretext.value}\n` +
+            `Copy:\n${fldCopy.value}\n\n` +
+            `Ofertas: ${offers.length}`,
+        );
+      });
+
+      btnSave.addEventListener('click', () => {
+        const when = radiosWhen.find((r) => r.checked)?.value || 'now';
+        const item = {
+          id: editingId ?? Date.now() + Math.random(),
+          audience: fldAudience.value, // 'started' | 'pix_generated'
+          when, // 'now' | 'schedule'
+          date: fldDate.value || null, // só visual
+          time: fldTime.value || null, // só visual
+          pretext: fldPretext.value.trim(),
+          copy: fldCopy.value.trim(),
+          offers: collectOffers(), // [{label, price, media_url}]
+          active: !!chkActive.checked,
+        };
+
+        const idx = shotsState.items.findIndex((x) => x.id === item.id);
+        if (idx >= 0) shotsState.items[idx] = item;
+        else shotsState.items.unshift(item);
+
+        renderList();
+        closeModal();
+      });
+
+      // --------- Cards/List ----------
+      function renderList() {
+        listEl.innerHTML = '';
+        if (!shotsState.items.length) {
+          const empty = document.createElement('div');
+          empty.className = 'opacity-70 text-sm';
+          empty.textContent = 'Nenhum disparo criado ainda.';
+          listEl.appendChild(empty);
+          return;
+        }
+
+        for (const it of shotsState.items) {
+          const card = document.createElement('div');
+          card.className = 'rounded-xl border p-4 flex flex-col gap-3';
+
+          // título
+          const firstOffer = it.offers?.[0];
+          const title = firstOffer
+            ? `${firstOffer.label || 'Oferta'} — R$ ${firstOffer.price || '—'}`
+            : 'Disparo (sem ofertas)';
+          const top = document.createElement('div');
+          top.className = 'flex items-start justify-between gap-2';
+          top.innerHTML = `
+        <div>
+          <div class="font-semibold">${title}</div>
+          <div class="text-xs opacity-70">${it.audience === 'started' ? 'Público: /start' : 'Público: PIX gerado'}</div>
+          <div class="text-xs opacity-70">${
+            it.when === 'schedule'
+              ? `Programado: ${it.date || '—'} ${it.time || ''} (GMT-3)`
+              : 'Envio: agora'
+          }</div>
+        </div>
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full ${
+          it.active ? 'bg-green-600/20 text-green-700' : 'bg-gray-500/20'
+        }">${it.active ? 'Ativo' : 'Inativo'}</span>
+      `;
+          card.appendChild(top);
+
+          // intro + copy
+          if (it.pretext) {
+            const pre = document.createElement('div');
+            pre.className = 'text-xs opacity-70';
+            pre.textContent = `Intro: ${it.pretext}`;
+            card.appendChild(pre);
+          }
+          if (it.copy) {
+            const cp = document.createElement('div');
+            cp.className = 'text-sm';
+            cp.textContent = it.copy;
+            card.appendChild(cp);
+          }
+
+          // chips de ofertas
+          if (it.offers?.length) {
+            const chips = document.createElement('div');
+            chips.className = 'flex flex-wrap gap-2';
+            for (const o of it.offers) {
+              const chip = document.createElement('span');
+              chip.className = 'text-xs px-2 py-1 rounded-full border';
+              chip.textContent = `${o.label || 'Oferta'} — ${o.price || '—'}`;
+              chips.appendChild(chip);
+            }
+            card.appendChild(chips);
+          }
+
+          // ações
+          const actions = document.createElement('div');
+          actions.className = 'mt-2 flex gap-2';
+          const btnEdit = document.createElement('button');
+          btnEdit.className = 'px-3 py-1 rounded-md border';
+          btnEdit.textContent = 'Editar';
+          btnEdit.addEventListener('click', () => openModal(it));
+
+          const btnDelete = document.createElement('button');
+          btnDelete.className = 'px-3 py-1 rounded-md border text-red-600';
+          btnDelete.textContent = 'Excluir';
+          btnDelete.addEventListener('click', () => {
+            if (!confirm('Excluir este disparo (visual)?')) return;
+            shotsState.items = shotsState.items.filter((x) => x.id !== it.id);
+            renderList();
+          });
+
+          actions.appendChild(btnEdit);
+          actions.appendChild(btnDelete);
+          card.appendChild(actions);
+
+          listEl.appendChild(card);
+        }
+      }
+
+      // init
+      renderList();
     })();
   </script>
 </body>
