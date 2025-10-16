@@ -564,6 +564,80 @@
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 
+    .downsells-modal .ds-additional-plans {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .downsells-modal .ds-additional-plans__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .downsells-modal .ds-additional-plans__title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .downsells-modal .ds-plans-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .downsells-modal .ds-plan-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 160px) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #f9fafb;
+    }
+
+    .downsells-modal .ds-plan-row__field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    .downsells-modal .ds-plan-row__field--price {
+      width: min(100%, 160px);
+    }
+
+    .downsells-modal .ds-plan-row__label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .downsells-modal .ds-plan-row__actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 520px) {
+      .downsells-modal .ds-plan-row {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .downsells-modal .ds-plan-row__actions {
+        justify-content: flex-start;
+      }
+    }
+
     .downsells-modal label {
       display: flex;
       flex-direction: column;
@@ -2159,6 +2233,33 @@
             <input id="ds-price" type="text" placeholder="ex.: 19,90" autocomplete="off">
           </label>
         </div>
+        <!-- Planos adicionais (visual somente nesta etapa) -->
+        <div class="form-row">
+          <div class="ds-additional-plans">
+            <div class="ds-additional-plans__header">
+              <span class="ds-additional-plans__title">Planos adicionais (opcional)</span>
+              <button type="button" id="ds-add-plan" class="btn-soft">+ Adicionar plano</button>
+            </div>
+            <div id="ds-plans-list" class="ds-plans-list"></div>
+            <template id="tpl-ds-plan-row">
+              <div class="ds-plan-row">
+                <label class="ds-plan-row__field">
+                  <span class="ds-plan-row__label">Texto no botão</span>
+                  <input type="text" placeholder="Ex.: 1 Semana VIP">
+                </label>
+                <label class="ds-plan-row__field ds-plan-row__field--price">
+                  <span class="ds-plan-row__label">Preço (R$)</span>
+                  <input type="text" class="ds-price-input" inputmode="decimal" placeholder="19,90">
+                </label>
+                <div class="ds-plan-row__actions">
+                  <button type="button" class="btn-soft" data-move-up title="Mover para cima">↑</button>
+                  <button type="button" class="btn-soft" data-move-down title="Mover para baixo">↓</button>
+                  <button type="button" class="btn-danger" data-remove title="Remover">Remover</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
         <div class="form-row double">
           <label>Momento
             <select id="ds-moment">
@@ -2777,6 +2878,101 @@
         }
       }
 
+      function initDownsellPlansRepeater(modalEl) {
+        if (!modalEl) {
+          return;
+        }
+
+        const list = modalEl.querySelector('#ds-plans-list');
+        const addBtn = modalEl.querySelector('#ds-add-plan');
+        const tpl = modalEl.querySelector('#tpl-ds-plan-row');
+
+        if (!list || !addBtn || !tpl) {
+          return;
+        }
+
+        list.innerHTML = '';
+
+        function addRow(data) {
+          const fragment = tpl.content.firstElementChild;
+          if (!fragment) {
+            return;
+          }
+          const node = fragment.cloneNode(true);
+          const inputs = node.querySelectorAll('input');
+          const labelInput = inputs[0];
+          const priceInput = inputs[1];
+
+          if (data && typeof data === 'object') {
+            if (labelInput && data.label) {
+              labelInput.value = data.label;
+            }
+            if (priceInput && data.price) {
+              priceInput.value = data.price;
+            }
+          }
+
+          const removeBtn = node.querySelector('[data-remove]');
+          if (removeBtn) {
+            removeBtn.addEventListener('click', () => {
+              node.remove();
+            });
+          }
+
+          const moveUpBtn = node.querySelector('[data-move-up]');
+          if (moveUpBtn) {
+            moveUpBtn.addEventListener('click', () => {
+              const prev = node.previousElementSibling;
+              if (prev) {
+                list.insertBefore(node, prev);
+              }
+            });
+          }
+
+          const moveDownBtn = node.querySelector('[data-move-down]');
+          if (moveDownBtn) {
+            moveDownBtn.addEventListener('click', () => {
+              const next = node.nextElementSibling;
+              if (next) {
+                list.insertBefore(next, node);
+              }
+            });
+          }
+
+          const priceEl = node.querySelector('.ds-price-input');
+          if (priceEl) {
+            priceEl.addEventListener('blur', () => {
+              priceEl.value = priceEl.value.replace(/\./g, ',');
+            });
+          }
+
+          list.appendChild(node);
+        }
+
+        if (modalEl.__dsAddPlanHandler) {
+          addBtn.removeEventListener('click', modalEl.__dsAddPlanHandler);
+        }
+
+        const handleAdd = () => addRow();
+        modalEl.__dsAddPlanHandler = handleAdd;
+        addBtn.addEventListener('click', handleAdd);
+
+        modalEl.__getExtraPlans = () => {
+          const rows = Array.from(list.querySelectorAll('.ds-plan-row'));
+          return rows
+            .map((row) => {
+              const rowInputs = row.querySelectorAll('input');
+              const labelValue = rowInputs[0]?.value?.trim() || '';
+              const priceValue = rowInputs[1]?.value?.trim() || '';
+              return {
+                label: labelValue,
+                price: priceValue,
+              };
+            })
+            .filter((plan) => plan.label !== '' || plan.price !== '');
+        };
+      }
+
       function openDownsellModal(item = null) {
         downsellsEditing = item && typeof item === 'object' ? { ...item } : null;
         if (downsellsModal) {
@@ -2866,6 +3062,10 @@
               ? downsellsEditing.plan_name
               : '';
           dsPlanLabelInput.value = existingLabel;
+        }
+
+        if (downsellsModal) {
+          initDownsellPlansRepeater(downsellsModal);
         }
 
         downsellsModal?.classList.remove('hidden');
