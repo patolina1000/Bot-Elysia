@@ -22,6 +22,7 @@ type DownsellPayload = {
   sort_order?: number | null;
   active?: boolean | null;
   delay_minutes?: number | null;
+  extra_plans?: unknown;
 };
 
 type BotPlanRow = {
@@ -69,6 +70,37 @@ function parsePriceToCents(value: unknown): number {
 
   const number = Number(normalized);
   return Number.isFinite(number) ? Math.round(number * 100) : Number.NaN;
+}
+
+function toCentsBRL(input: unknown): number | null {
+  if (typeof input !== 'string' && typeof input !== 'number') return null;
+  const str = String(input).trim().replace(/\s+/g, '');
+
+  if (!str) return null;
+  const normalized = str.replace('.', '').replace(',', '.');
+  const value = Number(normalized);
+  if (Number.isNaN(value) || value < 0) return null;
+  return Math.round(value * 100);
+}
+
+type SanitizedExtraPlan = { label: string; price_cents: number };
+
+function sanitizeExtraPlans(raw: any): { ok: boolean; value: SanitizedExtraPlan[]; error?: string } {
+  if (!raw) return { ok: true, value: [] };
+  if (!Array.isArray(raw)) return { ok: false, value: [], error: 'extra_plans must be an array' };
+
+  const MAX = 8;
+  if (raw.length > MAX) return { ok: false, value: [], error: `max ${MAX} extra plans` };
+
+  const out: SanitizedExtraPlan[] = [];
+  for (const item of raw) {
+    const label = (item?.label ?? '').toString().trim();
+    const cents = toCentsBRL(item?.price ?? item?.price_cents);
+    if (!label) return { ok: false, value: [], error: 'extra_plans[].label is required' };
+    if (cents == null || cents <= 0) return { ok: false, value: [], error: 'extra_plans[].price is invalid' };
+    out.push({ label, price_cents: cents });
+  }
+  return { ok: true, value: out };
 }
 
 function normalizeMediaType(value: unknown): DownsellMediaType | null {
@@ -239,6 +271,13 @@ async function ensureDownsellSchema(): Promise<void> {
           EXECUTE 'ALTER TABLE bot_downsells
                    ADD COLUMN button_intro_text text NULL';
         END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='bot_downsells' AND column_name='extra_plans'
+        ) THEN
+          EXECUTE 'ALTER TABLE bot_downsells
+                   ADD COLUMN extra_plans jsonb NOT NULL DEFAULT ''[]''::jsonb';
+        END IF;
       END$$;
     `);
   } catch (err) {
@@ -271,6 +310,7 @@ export async function listDownsells(req: Request, res: Response): Promise<Respon
           sort_order,
           plan_label,
           plan_label AS plan_name,
+          COALESCE(extra_plans, '[]'::jsonb) AS extra_plans,
           created_at,
           updated_at
         FROM public.bot_downsells
@@ -280,7 +320,12 @@ export async function listDownsells(req: Request, res: Response): Promise<Respon
       [botSlug]
     );
 
-    return res.status(200).json({ items: rows });
+    const items = rows.map((row: any) => ({
+      ...row,
+      extra_plans: Array.isArray(row.extra_plans) ? row.extra_plans : [],
+    }));
+
+    return res.status(200).json({ items });
   } catch (err) {
     logger.error({ err }, '[ADMIN][DOWNSELLS][GET] error');
     return res.status(500).json({
@@ -364,11 +409,18 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           });
         }
 
+        const rawExtraPlans = payload.extra_plans ?? (payload as { extraPlans?: unknown }).extraPlans;
+        const extraPlansParsed = sanitizeExtraPlans(rawExtraPlans);
+        if (!extraPlansParsed.ok) {
+          return res.status(400).json({ ok: false, error: extraPlansParsed.error });
+        }
+        const extraPlans = extraPlansParsed.value;
+
         const insertQuery = `
           INSERT INTO bot_downsells
-            (bot_slug, price_cents, copy, button_intro_text, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, created_at, updated_at)
+            (bot_slug, price_cents, copy, button_intro_text, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, extra_plans, created_at, updated_at)
           VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), now())
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, now(), now())
           RETURNING *;
         `;
         const values = [
@@ -384,9 +436,15 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           active,
           finalPlanLabel,
           planId,
+          JSON.stringify(extraPlans),
         ];
         const { rows } = await pool.query(insertQuery, values);
-        return res.status(201).json({ ok: true, downsell: rows[0] });
+        const downsell = rows[0];
+        const response = {
+          ...downsell,
+          extra_plans: Array.isArray(downsell.extra_plans) ? downsell.extra_plans : [],
+        };
+        return res.status(201).json({ ok: true, downsell: response });
       } catch (err) {
         logger.error({ err }, '[ADMIN][DOWNSELLS][POST] error');
         return res.status(500).json({ ok: false, error: 'internal_error', details: err instanceof Error ? err.message : String(err) });
@@ -506,6 +564,15 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           pushSet('plan_label', planLabel.length > 0 ? planLabel : null);
         }
 
+        if ('extra_plans' in payload || 'extraPlans' in payload) {
+          const rawExtraPlans = payload.extra_plans ?? (payload as { extraPlans?: unknown }).extraPlans;
+          const parsed = sanitizeExtraPlans(rawExtraPlans);
+          if (!parsed.ok) {
+            return res.status(400).json({ error: parsed.error });
+          }
+          pushSet('extra_plans', JSON.stringify(parsed.value));
+        }
+
         if ('media_url' in payload) {
           const mediaUrl = payload.media_url === null ? null : sanitizeStr(payload.media_url, 2000);
           pushSet('media_url', mediaUrl);
@@ -601,11 +668,15 @@ export function registerAdminDownsellsRoutes(app: Express): void {
           UPDATE bot_downsells
              SET ${sets.join(', ')}
            WHERE id = $${values.length}
-           RETURNING id, bot_slug, price_cents, copy, button_intro_text, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, created_at, updated_at;
+           RETURNING id, bot_slug, price_cents, copy, button_intro_text, media_url, media_type, trigger, delay_minutes, sort_order, active, plan_label, plan_id, COALESCE(extra_plans, '[]'::jsonb) AS extra_plans, created_at, updated_at;
         `;
 
         const result = await pool.query(sql, values);
-        const updated = result.rows[0];
+        const updatedRow = result.rows[0];
+        const updated = {
+          ...updatedRow,
+          extra_plans: Array.isArray(updatedRow.extra_plans) ? updatedRow.extra_plans : [],
+        };
         logger.info({ id: updated.id, bot_slug: updated.bot_slug }, '[ADMIN][DOWNSELLS][PUT] updated');
         return res.status(200).json(updated);
       } catch (err) {
