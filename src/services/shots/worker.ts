@@ -302,9 +302,10 @@ async function handleJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
       '[SHOTS][WORKER] job completed successfully'
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
-    await markShotAsError(job.id, message, client);
+    // DO NOT call markShotAsError here with the aborted transaction client
+    // It will be handled in the outer catch block after ROLLBACK
     jobLogger.error({ err }, '[SHOTS][WORKER] job failed');
+    throw err; // Re-throw to trigger ROLLBACK in outer handler
   }
 }
 
@@ -340,11 +341,25 @@ export function startShotsWorker(): void {
         await handleJob(job, client);
         await client.query('COMMIT');
       } catch (batchErr) {
+        // Rollback the aborted transaction
         await client.query('ROLLBACK').catch(() => undefined);
-        workerLogger.error({ err: batchErr }, '[SHOTS][WORKER] batch failed, rolled back');
-      } finally {
         client.release();
+        
+        // Now mark the shot as error using a separate connection (NOT the aborted transaction)
+        const errorMessage = batchErr instanceof Error ? batchErr.message : String(batchErr ?? 'unknown error');
+        try {
+          await markShotAsError(job.id, errorMessage); // No client param = uses pool directly
+          workerLogger.error({ err: batchErr, shot_id: job.id }, '[SHOTS][WORKER] batch failed, marked as error');
+        } catch (markErr) {
+          workerLogger.error(
+            { err: markErr, original_error: batchErr, shot_id: job.id },
+            '[SHOTS][WORKER] failed to mark shot as error after batch failure'
+          );
+        }
+        return; // Don't re-release client in finally block
       }
+      
+      client.release();
     } catch (err) {
       workerLogger.error({ err }, '[SHOTS][WORKER] tick failed');
     } finally {

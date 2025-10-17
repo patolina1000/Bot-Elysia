@@ -1,6 +1,8 @@
 # 🚨 RESUMO EXECUTIVO - Fix shots_queue
 
-## 🔴 Problema
+## 🔴 Problemas
+
+### Problema 1: Tabela shots_queue corrompida
 
 A tabela `shots_queue` em produção está **completamente corrompida**:
 
@@ -9,13 +11,23 @@ A tabela `shots_queue` em produção está **completamente corrompida**:
 - ❌ 17 colunas ao invés de 12
 - ❌ Estrutura incompatível com o código TypeScript
 
-## ✅ Solução
+### Problema 2: Gerenciamento de transações bugado (descoberto após fix 1)
+
+O worker de shots tinha um bug crítico:
+
+- ❌ Tentava executar comandos em transações abortadas
+- ❌ Erro: "current transaction is aborted, commands ignored until end of transaction block"
+- ❌ Worker travava ao tentar marcar erros
+
+## ✅ Soluções
+
+### Solução 1: Reconstrução da Tabela
 
 Criada migração que **reconstrói a tabela** de forma segura:
 
 **`src/db/migrations/20251020_rebuild_shots_queue_table.sql`**
 
-### O que a migração faz:
+O que a migração faz:
 
 1. 💾 Faz backup dos dados (`shots_queue_backup_20251020`)
 2. 🗑️ Remove a tabela corrompida
@@ -23,14 +35,33 @@ Criada migração que **reconstrói a tabela** de forma segura:
 4. 🔄 Restaura os dados automaticamente
 5. ✅ Verifica a estrutura final
 
+### Solução 2: Correção do Worker
+
+Corrigido gerenciamento de transações no worker:
+
+**`src/services/shots/worker.ts`**
+
+O que foi corrigido:
+
+1. ✅ Removido `markShotAsError` de dentro de transações abortadas
+2. ✅ Implementado ROLLBACK antes de marcar erros
+3. ✅ Usa nova conexão do pool para marcar erros
+4. ✅ Erro handling robusto com fallback logging
+
 ## 🚀 Próximos Passos
 
-### Para aplicar o fix:
+### Para aplicar os fixes:
 
 ```bash
 # 1. Fazer commit e push das mudanças
-git add .
-git commit -m "fix: rebuild shots_queue table with correct structure"
+git add src/db/migrations/20251020_rebuild_shots_queue_table.sql
+git add src/services/shots/worker.ts
+git add SHOTS_QUEUE_FIX.md SHOTS_TRANSACTION_FIX.md SHOTS_FIX_SUMMARY.md
+git commit -m "fix: rebuild shots_queue table and correct transaction management
+
+- Rebuild shots_queue table with correct 12-column structure
+- Fix transaction management in shots worker
+- Add proper error handling after ROLLBACK"
 git push
 
 # 2. Deploy no Render
@@ -38,6 +69,7 @@ git push
 
 # 3. Verificar logs para confirmar sucesso:
 # Procure por: "✅✅✅ SUCCESS: shots_queue table rebuilt correctly"
+# E: "[SHOTS][WORKER] job completed successfully"
 ```
 
 ## 📊 Estrutura Final Esperada
@@ -88,12 +120,19 @@ curl -X POST https://bot-elysia.onrender.com/admin/api/shots \
 
 ---
 
-## 📁 Arquivos Criados
+## 📁 Arquivos Criados/Modificados
 
+### Migrações:
 - `src/db/migrations/20251019_fix_shots_queue_media_columns.sql`
 - `src/db/migrations/20251020_cleanup_shots_queue_structure.sql`
 - `src/db/migrations/20251020_rebuild_shots_queue_table.sql` ⭐ **PRINCIPAL**
-- `SHOTS_QUEUE_FIX.md` - Análise detalhada
+
+### Código Corrigido:
+- `src/services/shots/worker.ts` ⭐ **TRANSACTION FIX**
+
+### Documentação:
+- `SHOTS_QUEUE_FIX.md` - Análise detalhada da tabela
+- `SHOTS_TRANSACTION_FIX.md` - Análise detalhada do worker
 - `SHOTS_FIX_SUMMARY.md` - Este resumo
 
 ---
