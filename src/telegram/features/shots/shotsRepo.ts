@@ -54,23 +54,56 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
 
     const { rows: tgRows } = await client.query(audienceSql, [input.bot_slug]);
 
-    // expandir fila
+    // === Enfileira destinatários na shots_queue, com colunas explícitas ===
+    // - Evita depender da ordem de colunas
+    // - Usa ON CONFLICT DO NOTHING para não duplicar (mesmo sem índice alvo)
+    // - Faz chunking para audiências grandes
+
+    const telegramIds: (number | string)[] =
+      (tgRows ?? []).map(r => r.telegram_id).filter(Boolean);
+
+    // Se não houver público, encerramos cedo sem falhar:
+    if (telegramIds.length === 0) {
+      await client.query('COMMIT');
+      return { shotId, queued: 0 };
+    }
+
+    const deliverAt =
+      (input as any)?.send_at === 'now'
+        ? new Date()
+        : (input as any)?.scheduled_at
+          ? new Date((input as any).scheduled_at)
+          : input.deliver_at ?? new Date();
+
+    const CHUNK = 1000;
     let queued = 0;
-    if (tgRows.length > 0) {
-      const values: string[] = [];
-      const params: any[] = [];
-      let p = 1;
-      for (const r of tgRows) {
-        values.push(`($${p++}, $${p++}, $${p++}, 'scheduled', $${p++})`);
-        params.push(shotId, input.bot_slug, r.telegram_id, input.deliver_at);
-      }
+    for (let i = 0; i < telegramIds.length; i += CHUNK) {
+      const chunk = telegramIds.slice(i, i + CHUNK);
+
+      // placeholders: ($1, $2, $N, $last)
+      // $1 = shotId
+      // $2..$(chunk.length+1) = telegram_ids
+      // $(chunk.length+2) = deliverAt
+      const valuesSql = chunk
+        .map((_, idx) => `($1, $${idx + 2}, $${chunk.length + 2}, 'scheduled')`)
+        .join(', ');
+
+      const params: any[] = [shotId, ...chunk, deliverAt];
+
+      // IMPORTANTE: colunas explícitas!
+      // Se sua tabela tiver mais colunas (attempt_count, last_error etc.),
+      // confie nos defaults. Aqui só definimos o mínimo necessário.
       await client.query(
-        `INSERT INTO public.shots_queue (shot_id, bot_slug, telegram_id, status, deliver_at)
-         VALUES ${values.join(',')}
-         ON CONFLICT (shot_id, telegram_id) DO NOTHING`,
+        `
+          INSERT INTO public.shots_queue
+            (shot_id, telegram_id, deliver_at, status)
+          VALUES
+            ${valuesSql}
+          ON CONFLICT DO NOTHING
+        `,
         params
       );
-      queued = tgRows.length;
+      queued += chunk.length;
     }
 
     await client.query('COMMIT');
