@@ -3059,10 +3059,10 @@
           <!-- Público-alvo (chips) -->
           <div class="form-row">
             <div id="shot-audience-group" class="form-section">
-              <span class="form-section__title">Público-alvo</span>
+              <span class="form-section__title text-zinc-900 dark:text-zinc-100 font-medium">Público-alvo</span>
               <div class="chips-group">
-                <button type="button" id="shot-audience-start" class="chip selected">Quem já deu /start</button>
-                <button type="button" id="shot-audience-pix" class="chip">Quem gerou PIX</button>
+                <button type="button" id="shot-audience-start" class="chip selected" role="button" aria-pressed="false">Quem já deu /start</button>
+                <button type="button" id="shot-audience-pix" class="chip" role="button" aria-pressed="false">Quem gerou PIX</button>
               </div>
               <small class="form-section__help">Escolha para quem este disparo será enviado.</small>
             </div>
@@ -3070,13 +3070,13 @@
           <!-- Envio (segmentado) -->
           <div class="form-row">
             <div id="shot-send-group" class="form-section">
-              <span class="form-section__title">Envio</span>
+              <span class="form-section__title text-zinc-900 dark:text-zinc-100 font-medium">Envio</span>
               <div class="segmented-control">
-                <button type="button" id="shot-send-now" class="segmented-control__option selected">
+                <button type="button" id="shot-send-now" class="segmented-control__option selected" role="button" aria-pressed="false">
                   <span>⚡</span>
                   <span>Agora</span>
                 </button>
-                <button type="button" id="shot-send-schedule" class="segmented-control__option">
+                <button type="button" id="shot-send-schedule" class="segmented-control__option" role="button" aria-pressed="false">
                   <span>🗓️</span>
                   <span>Programar</span>
                 </button>
@@ -3084,7 +3084,7 @@
             </div>
           </div>
           <!-- Agendamento (condicional, oculto por padrão) -->
-          <div id="shot-schedule-block" class="form-row hidden">
+          <div id="shot-schedule-block" class="form-row hidden" aria-hidden="true">
             <div class="form-section">
               <span class="form-section__title">Agendamento</span>
               <div class="schedule-fields">
@@ -5867,6 +5867,130 @@
       });
 
       void loadDownsells({ silent: true });
+
+      /* ===== Disparos: wire-up do modal (UI) ===== */
+      (function ShotsUI() {
+        // Helpers (usa os já existentes se houver)
+        const $  = (sel, ctx=document) => ctx.querySelector(sel);
+        const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+
+        // Elementos
+        const elAudienceStart = $('#shot-audience-start');
+        const elAudiencePix   = $('#shot-audience-pix');
+        const elSendNow       = $('#shot-send-now');
+        const elSendSched     = $('#shot-send-schedule');
+        const elSchedBlock    = $('#shot-schedule-block');
+        const elDate          = $('#shot-schedule-date');
+        const elTime          = $('#shot-schedule-time');
+        const elCTA           = $('#shot-primary-cta');
+
+        // Estado local do modal (UI)
+        const shotState = {
+          audience: 'start',     // 'start' | 'pix'
+          send: 'now',           // 'now' | 'schedule'
+        };
+
+        // === Estilização: usar mesma classe "selecionado" do projeto ===
+        // Tente primeiro 'active'; se a sua UI usa 'selected', aplique as duas.
+        function setSelected(el, on) {
+          if (!el) return;
+          el.classList.toggle('active', on);
+          el.classList.toggle('selected', on);
+          el.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+
+        function updateCTA() {
+          if (!elCTA) return;
+          if (shotState.send === 'now') {
+            elCTA.textContent = '⚡ Disparar agora';
+            elCTA.dataset.action = 'send_now';
+          } else {
+            elCTA.textContent = '🗓️ Agendar disparo';
+            elCTA.dataset.action = 'schedule';
+          }
+        }
+
+        function toggleScheduleBlock() {
+          if (!elSchedBlock) return;
+          const show = shotState.send === 'schedule';
+          elSchedBlock.classList.toggle('hidden', !show);
+          elSchedBlock.setAttribute('aria-hidden', show ? 'false' : 'true');
+        }
+
+        // Público-alvo
+        function selectAudience(target) {
+          shotState.audience = target;            // 'start' | 'pix'
+          setSelected(elAudienceStart, target === 'start');
+          setSelected(elAudiencePix,   target === 'pix');
+        }
+
+        // Envio
+        function selectSend(mode) {
+          shotState.send = mode;                  // 'now' | 'schedule'
+          setSelected(elSendNow,   mode === 'now');
+          setSelected(elSendSched, mode === 'schedule');
+          toggleScheduleBlock();
+          updateCTA();
+        }
+
+        // Eventos
+        elAudienceStart?.addEventListener('click', () => selectAudience('start'));
+        elAudiencePix  ?.addEventListener('click', () => selectAudience('pix'));
+        elSendNow      ?.addEventListener('click', () => selectSend('now'));
+        elSendSched    ?.addEventListener('click', () => selectSend('schedule'));
+
+        // Init padrão
+        selectAudience('start');
+        selectSend('now');
+
+        // Exponha um coletor para o passo de envio/agendamento (próximo passo)
+        window.getShotFormState = function getShotFormState() {
+          // Campos básicos já existentes no formulário:
+          const label     = $('#shot_button_label')?.value?.trim() || '';
+          const priceBRL  = $('#shot_price_brl')?.value?.trim() || '';
+          const intro     = $('#shot_intro_text')?.value?.trim() || '';
+          const copy      = $('#shot_copy')?.value?.trim() || '';
+          const mediaURL  = $('#shot_media_url')?.value?.trim() || '';
+          const active    = !!$('#shot_active')?.checked;
+
+          // Planos extras (se tiver repeater visual)
+          const extras = $$('#shot-extra-plans [data-field="label"]').map((_, i, arr) => null); // placeholder
+          const extraRows = $$('#shot-extra-plans > *');
+          const extraPlans = extraRows.map(row => ({
+            label: row.querySelector('[data-field="label"]')?.value?.trim() || '',
+            price_brl: row.querySelector('[data-field="price_brl"]')?.value?.trim() || '',
+          })).filter(p => p.label);
+
+          // Schedule datetime (se Programar)
+          let schedule_at = null;
+          if (shotState.send === 'schedule') {
+            const d = elDate?.value?.trim();
+            const t = elTime?.value?.trim();
+            if (d && t) {
+              // Monta ISO local (será convertido no backend p/ America/Sao_Paulo)
+              schedule_at = `${d}T${t}:00`;
+            }
+          }
+
+          return {
+            // UI state
+            audience: shotState.audience,      // 'start' | 'pix'
+            send_mode: shotState.send,         // 'now' | 'schedule'
+            schedule_at,                       // string ISO local ou null
+
+            // Form fields
+            button_label: label,
+            price_brl: priceBRL,
+            intro_text: intro,
+            copy,
+            media_url: mediaURL,
+            active,
+
+            // Extras
+            extra_plans: extraPlans,
+          };
+        };
+      })();
 
       // ===== DISPAROS (Shots) - Modal logic =====
       const shotBackdrop = document.getElementById('shot-backdrop');
