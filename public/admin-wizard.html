@@ -1391,6 +1391,160 @@
       }
     }
 
+    /* Força legibilidade dos rótulos do modal Disparos */
+    .shot-label {
+      color: #0a0a0a !important;    /* preto no claro */
+      font-weight: 600;
+    }
+    .dark .shot-label {
+      color: #f5f5f5 !important;    /* quase branco no dark */
+    }
+
+    /* Popover do calendário */
+    #shot-date-popover {
+      position: absolute;
+      z-index: 60;
+      width: 18rem; 
+      background: var(--calendar-bg, #fff);
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 0.75rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15);
+    }
+    .dark #shot-date-popover {
+      --calendar-bg: #0b0b0d;
+      border-color: rgba(255,255,255,.08);
+    }
+    #shot-date-popover.hidden { display: none; }
+    .shot-cal-grid { 
+      display: grid; 
+      grid-template-columns: repeat(7, 1fr); 
+      gap: .25rem; 
+      padding: .5rem .75rem 1rem; 
+    }
+    .shot-cal-day {
+      text-align: center; 
+      padding: .5rem 0; 
+      border-radius: .5rem; 
+      cursor: pointer; 
+      user-select: none;
+      font-size: 14px;
+      color: #1f2937;
+    }
+    .dark .shot-cal-day {
+      color: #e2e8f0;
+    }
+    .shot-cal-day:hover:not(.disabled) { 
+      box-shadow: inset 0 0 0 1.5px rgba(99,102,241,.45); 
+    }
+    .shot-cal-day.disabled {
+      color: #b91c1c !important; 
+      background: #fee2e2; 
+      cursor: not-allowed;
+    }
+    .dark .shot-cal-day.disabled { 
+      color: #fecaca !important; 
+      background: rgba(185,28,28,.15); 
+    }
+    .shot-cal-day.today { 
+      outline: 2px dashed rgba(99,102,241,.5); 
+      outline-offset: 2px; 
+    }
+    .shot-cal-head { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      padding: .5rem .75rem;
+      border-bottom: 1px solid rgba(0,0,0,.05);
+      margin-bottom: .5rem;
+    }
+    .dark .shot-cal-head {
+      border-bottom-color: rgba(255,255,255,.05);
+    }
+    .shot-cal-head h4 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+    .dark .shot-cal-head h4 {
+      color: #e2e8f0;
+    }
+    .shot-cal-nav { 
+      display: inline-flex; 
+      gap: .5rem; 
+    }
+    .shot-cal-nav button {
+      background: transparent;
+      border: 1px solid #d1d5db;
+      border-radius: .5rem;
+      padding: .25rem .5rem;
+      cursor: pointer;
+      font-size: 14px;
+      color: #6b7280;
+      transition: all 0.15s ease;
+    }
+    .dark .shot-cal-nav button {
+      border-color: #475569;
+      color: #94a3b8;
+    }
+    .shot-cal-nav button:hover {
+      background: rgba(99,102,241,.1);
+      border-color: #6366f1;
+      color: #4338ca;
+    }
+    .dark .shot-cal-nav button:hover {
+      background: rgba(99,102,241,.2);
+      border-color: #818cf8;
+      color: #a5b4fc;
+    }
+    .shot-cal-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: .25rem;
+      padding: .25rem .75rem .5rem;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #6b7280;
+      text-align: center;
+    }
+    .dark .shot-cal-weekdays {
+      color: #94a3b8;
+    }
+
+    /* Timepicker custom */
+    .shot-time-picker {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .shot-time-picker select {
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #ffffff;
+      color: #1f2937;
+      flex: 1;
+      cursor: pointer;
+    }
+    .dark .shot-time-picker select {
+      background: rgba(15, 23, 42, 0.7);
+      border-color: #334155;
+      color: #e2e8f0;
+    }
+    .shot-time-picker select option:disabled {
+      opacity: 0.4;
+    }
+    .shot-time-picker .separator {
+      font-size: 18px;
+      font-weight: 600;
+      color: #6b7280;
+    }
+    .dark .shot-time-picker .separator {
+      color: #94a3b8;
+    }
+
     @media (max-width: 640px) {
       #shots-card {
         padding: 18px;
@@ -3059,7 +3213,7 @@
           <!-- Público-alvo (chips) -->
           <div class="form-row">
             <div id="shot-audience-group" class="form-section">
-              <span class="form-section__title text-zinc-900 dark:text-zinc-100 font-medium">Público-alvo</span>
+              <span class="form-section__title shot-label text-zinc-900 dark:text-zinc-100 font-medium">Público-alvo</span>
               <div class="chips-group">
                 <button type="button" id="shot-audience-start" class="chip selected" role="button" aria-pressed="false">Quem já deu /start</button>
                 <button type="button" id="shot-audience-pix" class="chip" role="button" aria-pressed="false">Quem gerou PIX</button>
@@ -3070,7 +3224,7 @@
           <!-- Envio (segmentado) -->
           <div class="form-row">
             <div id="shot-send-group" class="form-section">
-              <span class="form-section__title text-zinc-900 dark:text-zinc-100 font-medium">Envio</span>
+              <span class="form-section__title shot-label text-zinc-900 dark:text-zinc-100 font-medium">Envio</span>
               <div class="segmented-control">
                 <button type="button" id="shot-send-now" class="segmented-control__option selected" role="button" aria-pressed="false">
                   <span>⚡</span>
@@ -3090,11 +3244,46 @@
               <div class="schedule-fields">
                 <label>
                   <span>Data</span>
-                  <input id="shot-schedule-date" type="date">
+                  <input id="shot-schedule-date" type="text" placeholder="dd/mm/aaaa" readonly style="cursor: pointer;">
                 </label>
                 <label>
                   <span>Hora</span>
-                  <input id="shot-schedule-time" type="time">
+                  <div class="shot-time-picker">
+                    <select id="shot-time-hour">
+                      <option value="00">00</option>
+                      <option value="01">01</option>
+                      <option value="02">02</option>
+                      <option value="03">03</option>
+                      <option value="04">04</option>
+                      <option value="05">05</option>
+                      <option value="06">06</option>
+                      <option value="07">07</option>
+                      <option value="08">08</option>
+                      <option value="09">09</option>
+                      <option value="10">10</option>
+                      <option value="11">11</option>
+                      <option value="12">12</option>
+                      <option value="13">13</option>
+                      <option value="14">14</option>
+                      <option value="15">15</option>
+                      <option value="16">16</option>
+                      <option value="17">17</option>
+                      <option value="18">18</option>
+                      <option value="19">19</option>
+                      <option value="20">20</option>
+                      <option value="21">21</option>
+                      <option value="22">22</option>
+                      <option value="23">23</option>
+                    </select>
+                    <span class="separator">:</span>
+                    <select id="shot-time-minute">
+                      <option value="00">00</option>
+                      <option value="15">15</option>
+                      <option value="30">30</option>
+                      <option value="45">45</option>
+                    </select>
+                  </div>
+                  <input id="shot-schedule-time" type="hidden">
                 </label>
                 <div id="shot-schedule-tz" class="tz-badge">America/São_Paulo (GMT-3)</div>
               </div>
@@ -3136,6 +3325,26 @@
           <button type="button" id="shot-primary-cta" class="btn-gradient">Disparar agora ⚡</button>
         </div>
       </form>
+      <!-- Popover do calendário (datepicker customizado) -->
+      <div id="shot-date-popover" class="hidden">
+        <div class="shot-cal-head">
+          <h4 id="shot-cal-month-year"></h4>
+          <div class="shot-cal-nav">
+            <button type="button" id="shot-cal-prev" aria-label="Mês anterior">◀</button>
+            <button type="button" id="shot-cal-next" aria-label="Próximo mês">▶</button>
+          </div>
+        </div>
+        <div class="shot-cal-weekdays">
+          <div>Dom</div>
+          <div>Seg</div>
+          <div>Ter</div>
+          <div>Qua</div>
+          <div>Qui</div>
+          <div>Sex</div>
+          <div>Sáb</div>
+        </div>
+        <div class="shot-cal-grid" id="shot-cal-grid"></div>
+      </div>
     </div>
   </div>
 
@@ -5964,11 +6173,13 @@
           // Schedule datetime (se Programar)
           let schedule_at = null;
           if (shotState.send === 'schedule') {
-            const d = elDate?.value?.trim();
-            const t = elTime?.value?.trim();
-            if (d && t) {
-              // Monta ISO local (será convertido no backend p/ America/Sao_Paulo)
-              schedule_at = `${d}T${t}:00`;
+            const dMask = elDate?.value?.trim();  // dd/mm/aaaa
+            const h = elTime?.value?.trim();      // HH:MM
+            if (dMask && h) {
+              // Converter dd/mm/aaaa para YYYY-MM-DD
+              const [dd, mm, yyyy] = dMask.split('/');
+              const isoDate = `${yyyy}-${mm}-${dd}`;  // YYYY-MM-DD
+              schedule_at = `${isoDate}T${h}:00`;
             }
           }
 
@@ -5990,6 +6201,277 @@
             extra_plans: extraPlans,
           };
         };
+      })();
+
+      /* ===== Disparos: Calendário e Timepicker customizado ===== */
+      (function ShotsCalendarUI() {
+        const $ = (sel, ctx=document) => ctx.querySelector(sel);
+
+        const elDateInput = $('#shot-schedule-date');
+        const elPopover = $('#shot-date-popover');
+        const elGrid = $('#shot-cal-grid');
+        const elMonthYear = $('#shot-cal-month-year');
+        const elPrev = $('#shot-cal-prev');
+        const elNext = $('#shot-cal-next');
+        const elHourSelect = $('#shot-time-hour');
+        const elMinuteSelect = $('#shot-time-minute');
+        const elTimeHidden = $('#shot-schedule-time');
+
+        if (!elDateInput || !elPopover) return;
+
+        const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                           'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+        // Estado interno
+        let currentYear = new Date().getFullYear();
+        let currentMonth = new Date().getMonth();
+        let selectedDate = null; // Objeto Date ou null
+
+        // Função para obter a data de hoje em São Paulo
+        function getTodaySP() {
+          const now = new Date();
+          // Converte para São Paulo (GMT-3)
+          const spOffset = -3 * 60; // minutos
+          const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+          const spTime = new Date(utc + (spOffset * 60000));
+          return new Date(spTime.getFullYear(), spTime.getMonth(), spTime.getDate());
+        }
+
+        // Função para renderizar o calendário
+        function renderCalendar() {
+          const today = getTodaySP();
+          const firstDay = new Date(currentYear, currentMonth, 1);
+          const lastDay = new Date(currentYear, currentMonth + 1, 0);
+          const prevLastDay = new Date(currentYear, currentMonth, 0);
+          
+          const firstDayOfWeek = firstDay.getDay();
+          const lastDate = lastDay.getDate();
+          const prevLastDate = prevLastDay.getDate();
+
+          // Atualizar cabeçalho
+          elMonthYear.textContent = `${MONTHS_PT[currentMonth]} ${currentYear}`;
+
+          // Limpar grid
+          elGrid.innerHTML = '';
+
+          // Dias do mês anterior (vazios)
+          for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+            const day = prevLastDate - i;
+            const dayEl = document.createElement('div');
+            dayEl.className = 'shot-cal-day disabled';
+            dayEl.textContent = day;
+            dayEl.style.opacity = '0.3';
+            elGrid.appendChild(dayEl);
+          }
+
+          // Dias do mês atual
+          for (let day = 1; day <= lastDate; day++) {
+            const date = new Date(currentYear, currentMonth, day);
+            const dayEl = document.createElement('div');
+            dayEl.className = 'shot-cal-day';
+            dayEl.textContent = day;
+
+            // Verificar se é hoje
+            if (date.getTime() === today.getTime()) {
+              dayEl.classList.add('today');
+            }
+
+            // Verificar se é passado
+            if (date < today) {
+              dayEl.classList.add('disabled');
+            } else {
+              // Dia válido - adicionar evento de clique
+              dayEl.addEventListener('click', () => selectDate(date));
+            }
+
+            elGrid.appendChild(dayEl);
+          }
+
+          // Completar grid com dias do próximo mês
+          const totalCells = elGrid.children.length;
+          const remainingCells = 42 - totalCells; // 6 semanas * 7 dias
+          for (let i = 1; i <= remainingCells; i++) {
+            const dayEl = document.createElement('div');
+            dayEl.className = 'shot-cal-day disabled';
+            dayEl.textContent = i;
+            dayEl.style.opacity = '0.3';
+            elGrid.appendChild(dayEl);
+          }
+        }
+
+        // Função para selecionar uma data
+        function selectDate(date) {
+          selectedDate = date;
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          elDateInput.value = `${day}/${month}/${year}`;
+          closePopover();
+          updateTimeOptions(); // Atualizar opções de hora quando a data muda
+        }
+
+        // Função para abrir o popover
+        function openPopover() {
+          const rect = elDateInput.getBoundingClientRect();
+          elPopover.style.top = `${rect.bottom + 8}px`;
+          elPopover.style.left = `${rect.left}px`;
+          elPopover.classList.remove('hidden');
+          renderCalendar();
+        }
+
+        // Função para fechar o popover
+        function closePopover() {
+          elPopover.classList.add('hidden');
+        }
+
+        // Eventos do calendário
+        elDateInput.addEventListener('click', openPopover);
+        elDateInput.addEventListener('focus', openPopover);
+
+        elPrev?.addEventListener('click', (e) => {
+          e.preventDefault();
+          currentMonth--;
+          if (currentMonth < 0) {
+            currentMonth = 11;
+            currentYear--;
+          }
+          renderCalendar();
+        });
+
+        elNext?.addEventListener('click', (e) => {
+          e.preventDefault();
+          currentMonth++;
+          if (currentMonth > 11) {
+            currentMonth = 0;
+            currentYear++;
+          }
+          renderCalendar();
+        });
+
+        // Fechar ao clicar fora
+        document.addEventListener('click', (e) => {
+          if (!elPopover.contains(e.target) && e.target !== elDateInput) {
+            closePopover();
+          }
+        });
+
+        // Fechar com ESC
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !elPopover.classList.contains('hidden')) {
+            closePopover();
+          }
+        });
+
+        // ===== Timepicker logic =====
+        function updateTimeHidden() {
+          const hour = elHourSelect?.value || '00';
+          const minute = elMinuteSelect?.value || '00';
+          if (elTimeHidden) {
+            elTimeHidden.value = `${hour}:${minute}`;
+          }
+        }
+
+        function updateTimeOptions() {
+          if (!elHourSelect || !elMinuteSelect) return;
+
+          // Obter data selecionada
+          const dateValue = elDateInput?.value?.trim();
+          if (!dateValue) {
+            // Se não há data, liberar todas as opções
+            Array.from(elHourSelect.options).forEach(opt => {
+              opt.disabled = false;
+              opt.style.opacity = '1';
+            });
+            Array.from(elMinuteSelect.options).forEach(opt => {
+              opt.disabled = false;
+              opt.style.opacity = '1';
+            });
+            return;
+          }
+
+          // Parsear data dd/mm/aaaa
+          const [dd, mm, yyyy] = dateValue.split('/');
+          const selectedDateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+          const today = getTodaySP();
+
+          // Verificar se é hoje
+          const isToday = selectedDateObj.getTime() === today.getTime();
+
+          if (!isToday) {
+            // Liberar todas as opções
+            Array.from(elHourSelect.options).forEach(opt => {
+              opt.disabled = false;
+              opt.style.opacity = '1';
+            });
+            Array.from(elMinuteSelect.options).forEach(opt => {
+              opt.disabled = false;
+              opt.style.opacity = '1';
+            });
+            return;
+          }
+
+          // Se é hoje, bloquear horas passadas
+          const now = new Date();
+          const currentHour = now.getHours();
+          const currentMinute = now.getMinutes();
+          
+          // Arredondar para o próximo bloco de 15 minutos
+          let minMinute = Math.ceil(currentMinute / 15) * 15;
+          let minHour = currentHour;
+          if (minMinute >= 60) {
+            minMinute = 0;
+            minHour++;
+          }
+
+          // Atualizar opções de hora
+          Array.from(elHourSelect.options).forEach(opt => {
+            const hour = parseInt(opt.value);
+            if (hour < minHour) {
+              opt.disabled = true;
+              opt.style.opacity = '0.4';
+            } else {
+              opt.disabled = false;
+              opt.style.opacity = '1';
+            }
+          });
+
+          // Atualizar opções de minuto
+          const selectedHour = parseInt(elHourSelect.value);
+          Array.from(elMinuteSelect.options).forEach(opt => {
+            const minute = parseInt(opt.value);
+            if (selectedHour === minHour && minute < minMinute) {
+              opt.disabled = true;
+              opt.style.opacity = '0.4';
+            } else if (selectedHour < minHour) {
+              opt.disabled = true;
+              opt.style.opacity = '0.4';
+            } else {
+              opt.disabled = false;
+              opt.style.opacity = '1';
+            }
+          });
+
+          // Ajustar seleção se necessário
+          if (parseInt(elHourSelect.value) < minHour) {
+            elHourSelect.value = String(minHour).padStart(2, '0');
+          }
+          if (parseInt(elHourSelect.value) === minHour && parseInt(elMinuteSelect.value) < minMinute) {
+            elMinuteSelect.value = String(minMinute).padStart(2, '0');
+          }
+
+          updateTimeHidden();
+        }
+
+        elHourSelect?.addEventListener('change', () => {
+          updateTimeOptions();
+        });
+
+        elMinuteSelect?.addEventListener('change', () => {
+          updateTimeHidden();
+        });
+
+        // Inicializar com valor padrão
+        updateTimeHidden();
       })();
 
       // ===== DISPAROS (Shots) - Modal logic =====
