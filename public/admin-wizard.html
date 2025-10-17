@@ -2817,6 +2817,36 @@
               <input id="shot_price_brl" type="text" placeholder="ex.: 29,90" autocomplete="off">
             </label>
           </div>
+          <!-- Planos extras (repeater visual) -->
+          <div class="form-row">
+            <div id="shot-extra-plans" class="shot-additional-plans">
+              <div class="shot-additional-plans__header">
+                <span class="shot-additional-plans__title">Planos extras (opcional)</span>
+                <div class="shot-additional-plans__actions">
+                  <span id="shot-plans-count" class="shot-additional-plans__counter">0/8</span>
+                  <button type="button" id="shot-add-extra-plan" class="btn-soft">+ Adicionar plano</button>
+                </div>
+              </div>
+              <div id="shot-extra-plans-list" class="shot-plans-list"></div>
+              <template id="shot-extra-plan-tpl">
+                <div class="shot-plan-row">
+                  <label class="shot-plan-row__field">
+                    <span class="shot-plan-row__label">Texto do botão</span>
+                    <input type="text" placeholder="Ex.: Plano Premium">
+                  </label>
+                  <label class="shot-plan-row__field shot-plan-row__field--price">
+                    <span class="shot-plan-row__label">Preço (R$)</span>
+                    <input type="text" class="shot-price-input" inputmode="decimal" placeholder="49,90">
+                  </label>
+                  <div class="shot-plan-row__actions">
+                    <button type="button" class="btn-soft" data-move-up title="Mover para cima">↑</button>
+                    <button type="button" class="btn-soft" data-move-down title="Mover para baixo">↓</button>
+                    <button type="button" class="btn-danger" data-remove title="Remover">Remover</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
           <div class="form-row double">
             <label>Momento
               <select id="shot_moment">
@@ -2851,36 +2881,6 @@
               <input type="file" id="shot_media_upload" class="hidden" accept="image/*,video/*,audio/*">
               <button type="button" id="shot-media-upload-btn" class="btn-soft">Enviar arquivo…</button>
               <button type="button" id="shot-media-preview-btn" class="btn-soft">Pré-visualizar</button>
-            </div>
-          </div>
-          <!-- Planos extras (repeater visual) -->
-          <div class="form-row">
-            <div id="shot-extra-plans" class="shot-additional-plans">
-              <div class="shot-additional-plans__header">
-                <span class="shot-additional-plans__title">Planos extras (opcional)</span>
-                <div class="shot-additional-plans__actions">
-                  <span id="shot-plans-count" class="shot-additional-plans__counter">0/8</span>
-                  <button type="button" id="shot-add-extra-plan" class="btn-soft">+ Adicionar plano</button>
-                </div>
-              </div>
-              <div id="shot-extra-plans-list" class="shot-plans-list"></div>
-              <template id="shot-extra-plan-tpl">
-                <div class="shot-plan-row">
-                  <label class="shot-plan-row__field">
-                    <span class="shot-plan-row__label">Texto do botão</span>
-                    <input type="text" placeholder="Ex.: Plano Premium">
-                  </label>
-                  <label class="shot-plan-row__field shot-plan-row__field--price">
-                    <span class="shot-plan-row__label">Preço (R$)</span>
-                    <input type="text" class="shot-price-input" inputmode="decimal" placeholder="49,90">
-                  </label>
-                  <div class="shot-plan-row__actions">
-                    <button type="button" class="btn-soft" data-move-up title="Mover para cima">↑</button>
-                    <button type="button" class="btn-soft" data-move-down title="Mover para baixo">↓</button>
-                    <button type="button" class="btn-danger" data-remove title="Remover">Remover</button>
-                  </div>
-                </div>
-              </template>
             </div>
           </div>
           <label class="checkbox-row">
