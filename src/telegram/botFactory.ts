@@ -202,3 +202,7 @@ export function invalidateBotInstanceBySlug(slug: string) {
     rootLogger.info({ botSlug: slug }, 'Bot instance invalidated');
   }
 }
+
+export function getExistingBotInstanceBySlug(slug: string): Bot<MyContext> | undefined {
+  return botInstances.get(slug);
+}

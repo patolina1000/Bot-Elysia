@@ -1,4 +1,4 @@
-import type { Bot } from 'grammy';
+import type { Bot, Context } from 'grammy';
 import type { Message, ParseMode } from 'grammy/types';
 
 export type ChatId = Parameters<Bot['api']['sendMessage']>[0];
@@ -45,7 +45,11 @@ function resolveMediaUrl(shot: SendableShot): string | null {
   return null;
 }
 
-export async function sendWithMedia(bot: Bot, chatId: ChatId, shot: SendableShot): Promise<Message> {
+export async function sendWithMedia<C extends Context>(
+  bot: Bot<C>,
+  chatId: ChatId,
+  shot: SendableShot
+): Promise<Message> {
   const parseMode = resolveParseMode(shot);
   const text = resolveText(shot);
   const caption = text ? text : undefined;

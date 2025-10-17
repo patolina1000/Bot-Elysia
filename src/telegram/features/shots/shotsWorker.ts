@@ -3,6 +3,7 @@ import type { Bot } from 'grammy';
 import { getPool } from '../../db/pool';
 import { logger } from '../../../logger.js';
 import { sendWithMedia, type SendableShot, type ChatId } from './utilSend';
+import type { MyContext } from '../../grammYContext.js';
 
 const MAX_BATCH = 30;
 const MAX_ATTEMPTS = 5;
@@ -63,7 +64,9 @@ export async function pickDueShots(client: PoolClient): Promise<ShotsQueueJob[]>
   return rows.map(mapQueueRow);
 }
 
-export async function startShotsWorker(getBotBySlug: (slug: string) => Bot | undefined): Promise<NodeJS.Timeout> {
+export async function startShotsWorker(
+  getBotBySlug: (slug: string) => Bot<MyContext> | undefined
+): Promise<NodeJS.Timeout> {
   const pool = await getPool();
 
   const tick = async () => {
