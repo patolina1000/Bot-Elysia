@@ -5,7 +5,8 @@ import { pool } from './db/pool.js';
 import { telegramMediaCache } from './services/TelegramMediaCache.js';
 import { getLastSentByBot, profileSend } from './services/TelegramSendProfiler.js';
 import { startDownsellWorker } from './telegram/features/downsells/dispatcher.js';
-import { startShotsWorker } from './telegram/features/shots/dispatcher.js';
+import { startShotsWorker } from './telegram/features/shots/shotsWorker.js';
+import { botRegistry } from './telegram/botRegistry.js';
 
 const app = createApp();
 
@@ -75,7 +76,16 @@ function scheduleTelegramKeepAlive() {
 scheduleTelegramKeepAlive();
 
 startDownsellWorker(app);
-startShotsWorker(app);
+
+void (async () => {
+  try {
+    await botRegistry.loadAllEnabledBots();
+    await startShotsWorker((slug) => botRegistry.get(slug));
+    logger.info('[SHOTS][WORKER] iniciado');
+  } catch (err) {
+    logger.error({ err }, '[SHOTS][WORKER] falha ao iniciar');
+  }
+})();
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'Server started');
