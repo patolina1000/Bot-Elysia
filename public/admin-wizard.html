@@ -2226,6 +2226,34 @@
       <div id="downsells-empty" class="hidden">Nenhum downsell cadastrado para este bot.</div>
       <div id="downsells-list"></div>
     </section>
+
+    <!-- === Disparos (beta) — CLONE ESTÉTICO DO DOWNSELLS === -->
+    <section id="shots-card" class="mt-8 rounded-2xl border border-zinc-200/70 dark:border-zinc-800/70 bg-white dark:bg-zinc-900 shadow-sm">
+      <header class="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-zinc-200/70 dark:border-zinc-800/70">
+        <div>
+          <h2 id="shots-title" class="text-lg sm:text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Disparos <span class="text-xs align-middle uppercase tracking-wider text-zinc-500 dark:text-zinc-400">(beta)</span>
+          </h2>
+          <p class="text-sm text-zinc-600 dark:text-zinc-400">Envie mensagens programadas ou imediatas para quem já iniciou o bot ou gerou PIX.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="shot-reload-btn" type="button" class="btn-soft">Recarregar</button>
+          <button id="shot-new-btn" type="button" class="btn-gradient">Novo disparo</button>
+        </div>
+      </header>
+
+      <!-- Estado vazio -->
+      <div id="shots-empty" class="px-4 sm:px-6 py-12">
+        <div class="border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-8 text-center">
+          <p class="text-sm text-zinc-600 dark:text-zinc-400">Nenhum disparo criado ainda.</p>
+        </div>
+      </div>
+
+      <!-- Grid de itens -->
+      <div id="shots-list" class="hidden px-4 sm:px-6 py-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <!-- Cards renderizados via JS (somente visual por enquanto) -->
+      </div>
+    </section>
   </div>
 
   <div id="downsells-modal" class="downsells-modal hidden" role="dialog" aria-modal="true" aria-labelledby="downsells-modal-title">
@@ -2317,6 +2345,97 @@
       </div>
       <div class="footer">
         <button type="button" id="downsells-save" class="btn-gradient">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- === Modal Disparos === -->
+  <div id="shot-backdrop" class="fixed inset-0 bg-black/40 backdrop-blur-sm hidden"></div>
+  <div id="shot-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+    <div class="min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6">
+      <div class="w-full max-w-3xl rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800/70 shadow-xl">
+        <header class="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-zinc-200/70 dark:border-zinc-800/70">
+          <h3 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            <span data-shot-title="create">Novo disparo</span>
+            <span data-shot-title="edit" class="hidden">Editar disparo</span>
+          </h3>
+          <button type="button" class="btn-outline" data-shot-close>Fechar</button>
+        </header>
+
+        <form id="shot-form" class="px-4 sm:px-6 py-6 space-y-6" data-mode="create" data-disparo-id="">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="label">Texto do botão</label>
+              <input id="shot_button_label" class="input" placeholder="Ex.: Acessar agora">
+            </div>
+            <div>
+              <label class="label">Preço (BRL)</label>
+              <input id="shot_price_brl" class="input" inputmode="decimal" placeholder="Ex.: 9,90">
+            </div>
+            <div>
+              <label class="label">Momento</label>
+              <select id="shot_moment" class="input">
+                <option value="after_start">Após /start</option>
+                <option value="after_pix">Após gerar PIX</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Atraso (min)</label>
+              <input id="shot_delay_min" class="input" inputmode="numeric" placeholder="Ex.: 15">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="label">Texto acima do botão (opcional)</label>
+              <input id="shot_intro_text" class="input" placeholder="Ex.: Oferta por tempo limitado">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="label">Copy</label>
+              <textarea id="shot_copy" class="textarea" rows="4" placeholder="Escreva a mensagem do disparo..."></textarea>
+            </div>
+            <div>
+              <label class="label">Mídia (URL)</label>
+              <input id="shot_media_url" class="input" placeholder="https://...">
+              <div class="mt-2 flex items-center gap-2">
+                <input id="shot_media_upload" type="file" class="hidden" accept="image/*,video/*,audio/*">
+                <button type="button" class="btn-soft" data-shot-upload>Abrir arquivo</button>
+                <span id="shot_media_hint" class="text-xs text-zinc-500">Imagem/Vídeo/Áudio</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <input id="shot_active" type="checkbox" class="checkbox" checked>
+              <label for="shot_active" class="text-sm text-zinc-700 dark:text-zinc-300">Ativo</label>
+            </div>
+          </div>
+
+          <!-- Repeater Planos Extras (visual) -->
+          <div class="mt-4">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Planos extras</h4>
+              <button type="button" id="shot-add-extra-plan" class="btn-soft">Adicionar</button>
+            </div>
+            <div id="shot-extra-plans" class="space-y-3"></div>
+
+            <!-- Template -->
+            <template id="shot-extra-plan-tpl">
+              <div class="rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 p-3 flex items-start gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+                  <input class="input" data-field="label" placeholder="Rótulo do botão">
+                  <input class="input" data-field="price_brl" placeholder="Preço (BRL)" inputmode="decimal">
+                </div>
+                <div class="flex items-center gap-2">
+                  <button type="button" class="btn-outline" data-action="up">↑</button>
+                  <button type="button" class="btn-outline" data-action="down">↓</button>
+                  <button type="button" class="btn-soft" data-action="dup">Duplicar</button>
+                  <button type="button" class="btn-danger" data-action="del">Remover</button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <footer class="mt-6 flex items-center justify-end gap-2 border-t border-zinc-200/70 dark:border-zinc-800/70 pt-4">
+            <button type="button" class="btn-outline" data-shot-close>Cancelar</button>
+            <button type="submit" class="btn-gradient">Salvar (visual)</button>
+          </footer>
+        </form>
       </div>
     </div>
   </div>
@@ -5340,6 +5459,206 @@
           event.returnValue = '';
         }
       });
+
+      // ===== Disparos (somente UI) =====
+      (function () {
+        const $ = (sel, el = document) => el.querySelector(sel);
+        const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
+
+        // Card elements
+        const list = $('#shots-list');
+        const empty = $('#shots-empty');
+        const btnNew = $('#shot-new-btn');
+        const btnReload = $('#shot-reload-btn');
+
+        // Modal elements
+        const modal = $('#shot-modal');
+        const backdrop = $('#shot-backdrop');
+        const form = $('#shot-form');
+
+        // Mock state (somente visual)
+        let SHOTS = []; // [{ id, active, button_label, price_brl, moment, delay_min, copy, intro_text, media_url, extras:[] }]
+
+        function toggleModal(show) {
+          modal.classList.toggle('hidden', !show);
+          backdrop.classList.toggle('hidden', !show);
+        }
+
+        function resetForm() {
+          form.dataset.mode = 'create';
+          form.dataset.disparoId = '';
+          $('#shot_button_label').value = '';
+          $('#shot_price_brl').value = '';
+          $('#shot_moment').value = 'after_start';
+          $('#shot_delay_min').value = '';
+          $('#shot_intro_text').value = '';
+          $('#shot_copy').value = '';
+          $('#shot_media_url').value = '';
+          $('#shot_active').checked = true;
+          $('#shot-extra-plans').innerHTML = '';
+          $$('[data-shot-title="create"]').forEach(el => el.classList.remove('hidden'));
+          $$('[data-shot-title="edit"]').forEach(el => el.classList.add('hidden'));
+        }
+
+        function openCreate() {
+          resetForm();
+          toggleModal(true);
+        }
+
+        function openEdit(item) {
+          resetForm();
+          form.dataset.mode = 'edit';
+          form.dataset.disparoId = String(item.id);
+          $('#shot_button_label').value = item.button_label || '';
+          $('#shot_price_brl').value = item.price_brl || '';
+          $('#shot_moment').value = item.moment || 'after_start';
+          $('#shot_delay_min').value = item.delay_min || '';
+          $('#shot_intro_text').value = item.intro_text || '';
+          $('#shot_copy').value = item.copy || '';
+          $('#shot_media_url').value = item.media_url || '';
+          $('#shot_active').checked = !!item.active;
+          // extras (visual)
+          (item.extras || []).forEach(addExtraPlanRow);
+          $$('[data-shot-title="create"]').forEach(el => el.classList.add('hidden'));
+          $$('[data-shot-title="edit"]').forEach(el => el.classList.remove('hidden'));
+          toggleModal(true);
+        }
+
+        function addExtraPlanRow(data = {}, options = {}) {
+          const opts = options && typeof options === 'object' ? options : {};
+          const container = $('#shot-extra-plans');
+          const tpl = $('#shot-extra-plan-tpl');
+          const node = tpl.content.firstElementChild.cloneNode(true);
+          const labelInput = node.querySelector('[data-field="label"]');
+          const priceInput = node.querySelector('[data-field="price_brl"]');
+          labelInput.value = data.label || '';
+          priceInput.value = data.price_brl || '';
+          node.querySelector('[data-action="up"]').onclick = () => {
+            if (node.previousElementSibling) {
+              container.insertBefore(node, node.previousElementSibling);
+            }
+          };
+          node.querySelector('[data-action="down"]').onclick = () => {
+            if (node.nextElementSibling) {
+              container.insertBefore(node.nextElementSibling, node);
+            }
+          };
+          node.querySelector('[data-action="dup"]').onclick = () => {
+            addExtraPlanRow({
+              label: labelInput.value,
+              price_brl: priceInput.value,
+            }, { insertAfter: node });
+          };
+          node.querySelector('[data-action="del"]').onclick = () => node.remove();
+
+          if (opts.insertAfter && opts.insertAfter.parentNode === container) {
+            container.insertBefore(node, opts.insertAfter.nextElementSibling);
+          } else {
+            container.appendChild(node);
+          }
+
+          return node;
+        }
+
+        function render() {
+          if (!SHOTS.length) {
+            empty.classList.remove('hidden');
+            list.classList.add('hidden');
+            list.innerHTML = '';
+            return;
+          }
+          empty.classList.add('hidden');
+          list.classList.remove('hidden');
+          list.innerHTML = SHOTS.map(item => {
+            const badge = item.active ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
+            const price = item.price_brl ? `R$ ${item.price_brl}` : '—';
+            const moment = item.moment === 'after_pix' ? 'Após gerar PIX' : 'Após /start';
+            const delay = item.delay_min ? ` +${item.delay_min} min` : '';
+            const intro = item.intro_text ? `<span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">Intro</span>` : '';
+            const img = item.media_url ? `<div class="h-28 w-full overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800"><img class="w-full h-full object-cover" src="${item.media_url}" alt=""></div>` : '';
+            return `
+      <article class="rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 bg-white dark:bg-zinc-900 p-4 flex flex-col gap-3">
+        ${img}
+        <div class="flex items-center justify-between">
+          <h5 class="font-medium text-zinc-900 dark:text-zinc-100">${item.button_label || 'Sem rótulo'}${intro}</h5>
+          <span class="text-xs px-2 py-0.5 rounded-full ${badge}">${item.active ? 'Ativo' : 'Inativo'}</span>
+        </div>
+        <p class="text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2">${item.copy || ''}</p>
+        <div class="text-xs text-zinc-500 dark:text-zinc-400">Momento: ${moment}${delay} • Preço: ${price}</div>
+        <div class="mt-2 flex items-center gap-2">
+          <button class="btn-outline" data-shot-edit="${item.id}">Editar</button>
+          <button class="btn-danger" data-shot-del="${item.id}">Excluir</button>
+        </div>
+      </article>`;
+          }).join('');
+          // wire per-card actions
+          $$('#shots-list [data-shot-edit]').forEach(btn => {
+            btn.onclick = () => {
+              const id = Number(btn.getAttribute('data-shot-edit'));
+              const item = SHOTS.find(s => s.id === id);
+              if (item) openEdit(item);
+            };
+          });
+          $$('#shots-list [data-shot-del]').forEach(btn => {
+            btn.onclick = () => {
+              const id = Number(btn.getAttribute('data-shot-del'));
+              SHOTS = SHOTS.filter(s => s.id !== id);
+              render();
+            };
+          });
+        }
+
+        function gatherForm() {
+          const extras = Array.from($('#shot-extra-plans').children).map(row => ({
+            label: row.querySelector('[data-field="label"]').value.trim(),
+            price_brl: row.querySelector('[data-field="price_brl"]').value.trim(),
+          }));
+          return {
+            id: form.dataset.mode === 'edit' ? Number(form.dataset.disparoId) : Date.now(),
+            button_label: $('#shot_button_label').value.trim(),
+            price_brl: $('#shot_price_brl').value.trim(),
+            moment: $('#shot_moment').value,
+            delay_min: $('#shot_delay_min').value.trim(),
+            intro_text: $('#shot_intro_text').value.trim(),
+            copy: $('#shot_copy').value.trim(),
+            media_url: $('#shot_media_url').value.trim(),
+            active: $('#shot_active').checked,
+            extras,
+          };
+        }
+
+        // Eventos
+        btnNew?.addEventListener('click', openCreate);
+        btnReload?.addEventListener('click', () => render());
+        $$('[data-shot-close]').forEach(b => b.addEventListener('click', () => toggleModal(false)));
+        $('[data-shot-upload]')?.addEventListener('click', () => $('#shot_media_upload').click());
+        $('#shot_media_upload')?.addEventListener('change', (e) => {
+          // TODO: integrar upload real (reutilizar mesma rota do upload já usada no projeto)
+          const file = e.target.files?.[0];
+          if (file) $('#shot_media_hint').textContent = file.name;
+        });
+        $('#shot-add-extra-plan')?.addEventListener('click', () => addExtraPlanRow());
+
+        form?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const data = gatherForm();
+          if (form.dataset.mode === 'edit') {
+            SHOTS = SHOTS.map(s => s.id === data.id ? data : s);
+          } else {
+            SHOTS.unshift(data);
+          }
+          toggleModal(false);
+          render();
+        });
+
+        // Inicialização (com mock)
+        function initShotsUI() {
+          // mock inicial vazio; manter consistência com estado vazio
+          SHOTS = [];
+          render();
+        }
+        document.addEventListener('DOMContentLoaded', initShotsUI);
+      })();
 
       if (getAdminToken()) {
         loadBots();
