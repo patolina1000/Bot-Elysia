@@ -29,13 +29,18 @@ function normalizeMediaType(value: unknown): NewShot['media_type'] {
 
 export async function postCreateShot(req: Request, res: Response) {
   try {
-    const { bot_slug, audience, send_at, media_type, message_text, media_url, parse_mode } = req.body || {};
+    const body = req.body || {};
+    const { audience, send_at, media_type, message_text, media_url, parse_mode } = body;
 
-    if (!bot_slug || !audience || !media_type) {
+    const botSlug =
+      ((body?.bot_slug as string | undefined) ?? (req.query?.bot as string | undefined) ?? (req.params?.bot as string | undefined) ?? '')
+        .toString()
+        .trim();
+
+    if (!botSlug || !audience || !media_type) {
       return res.status(400).json({ error: 'bot_slug, audience e media_type são obrigatórios' });
     }
 
-    const botSlug = (bot_slug ?? '').toString().trim();
     const audienceValue = normalizeAudience(audience);
     const mediaType = normalizeMediaType(media_type);
     const messageText =

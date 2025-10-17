@@ -61,7 +61,7 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
     const { rows: tgRows } = await client.query(audienceSql, [input.bot_slug]);
     logger.info({ bot_slug: input.bot_slug, audience: input.audience, total: tgRows.length }, '[SHOTS] audience expanded');
 
-    // === Enfileira destinatários na shots_queue (colunas explícitas, sem bot_slug) ===
+    // === Enfileira destinatários na shots_queue (colunas explícitas, com bot_slug) ===
     // Usa índice único (shot_id, telegram_id) + ON CONFLICT DO NOTHING
     // e chunking para audiências grandes.
     const telegramIds: (number | string)[] =
@@ -75,13 +75,13 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
       for (let i = 0; i < telegramIds.length; i += CHUNK) {
         const chunk = telegramIds.slice(i, i + CHUNK);
         const valuesSql = chunk
-          .map((_, idx) => `($1, $${idx + 2}, $${chunk.length + 2}, 'scheduled')`)
+          .map((_, idx) => `($1, $2, $${idx + 3}, $${chunk.length + 3}, 'scheduled')`)
           .join(', ');
-        const params: any[] = [shotId, ...chunk, deliverAt];
+        const params: any[] = [shotId, input.bot_slug, ...chunk, deliverAt];
         await client.query(
           `
             INSERT INTO public.shots_queue
-              (shot_id, telegram_id, deliver_at, status)
+              (shot_id, bot_slug, telegram_id, deliver_at, status)
             VALUES
               ${valuesSql}
             ON CONFLICT DO NOTHING
