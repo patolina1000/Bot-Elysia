@@ -2,7 +2,7 @@ import { PoolClient } from 'pg';
 import { getPool } from '../../db/pool.js';
 
 export type Audience = 'started' | 'pix';
-export type MediaType = 'text' | 'photo' | 'video' | 'audio' | 'animation';
+export type MediaType = 'text' | 'photo' | 'video' | 'audio' | 'animation' | 'document';
 
 export interface NewShot {
   bot_slug: string;
@@ -24,7 +24,15 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
       `INSERT INTO public.shots (bot_slug, audience, media_type, message_text, media_url, parse_mode, deliver_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING id`,
-      [input.bot_slug, input.audience, input.media_type, input.message_text ?? null, input.media_url ?? null, input.parse_mode ?? 'HTML', input.deliver_at]
+      [
+        input.bot_slug,
+        input.audience,
+        input.media_type,
+        input.message_text ?? null,
+        input.media_url ?? null,
+        input.parse_mode ?? 'HTML',
+        input.deliver_at,
+      ]
     );
     const shotId = shotRows[0].id as number;
 
@@ -93,6 +101,10 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
   } finally {
     client.release();
   }
+}
+
+export async function createShotAndQueue(input: NewShot) {
+  return createShotAndExpandQueue(input);
 }
 
 export async function listShots(bot_slug?: string) {

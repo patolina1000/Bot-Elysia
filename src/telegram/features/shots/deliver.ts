@@ -5,7 +5,7 @@ import { getBotBySlug } from '../../botRegistry.js';
 export type ShotHeader = {
   id: number;
   bot_slug: string;
-  media_type: 'text' | 'photo' | 'video' | 'audio' | 'animation';
+  media_type: 'text' | 'photo' | 'video' | 'audio' | 'animation' | 'document';
   message_text: string | null;
   media_url: string | null;
   parse_mode: string | null;
@@ -46,6 +46,11 @@ export async function deliverShot(header: ShotHeader, telegramId: string | numbe
     case 'animation': {
       if (!header.media_url) throw new Error('media_url ausente para animation');
       await api.sendAnimation(telegramId, header.media_url, { ...parseModeOpt, caption });
+      break;
+    }
+    case 'document': {
+      if (!header.media_url) throw new Error('media_url ausente para document');
+      await api.sendDocument(telegramId, header.media_url, { ...parseModeOpt, caption });
       break;
     }
     default:
