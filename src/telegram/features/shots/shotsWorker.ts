@@ -1,158 +1,263 @@
-import type { PoolClient } from 'pg';
 import type { Bot } from 'grammy';
 import { getPool } from '../../db/pool';
 import { logger } from '../../../logger.js';
-import { sendWithMedia, type SendableShot, type ChatId } from './utilSend';
+import { sendWithMedia, type ChatId, type SendableShot } from './utilSend';
 import type { MyContext } from '../../grammYContext.js';
 
-const MAX_BATCH = 30;
-const MAX_ATTEMPTS = 5;
+const workerLogger = logger.child({ worker: 'shots' });
 
-export interface ShotsQueueJob {
+type GetBotBySlug = (slug: string) => Bot<MyContext> | undefined;
+
+type QueueRow = {
   id: number;
-  bot_slug: string;
   shot_id: number;
   telegram_id: ChatId;
-  deliver_at: Date;
-  status: string;
-  attempt_count: number;
-  last_error: string | null;
-  sent_message_id: string | null;
-}
+};
 
-interface ShotRow extends SendableShot {
+type ShotHeader = SendableShot & {
   id: number;
-  status: string;
+  bot_slug: string;
+  status: string | null;
+};
+
+function normalizeChatId(raw: unknown): ChatId {
+  if (typeof raw === 'bigint') {
+    return raw.toString();
+  }
+  if (typeof raw === 'number') {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      throw new Error('Invalid telegram id');
+    }
+    return trimmed;
+  }
+  if (raw === null || raw === undefined) {
+    throw new Error('Missing telegram id');
+  }
+  return String(raw);
 }
 
-function mapQueueRow(row: any): ShotsQueueJob {
-  const telegramRaw = row.telegram_id;
-  let telegramId: ChatId;
-  if (typeof telegramRaw === 'bigint') {
-    telegramId = telegramRaw.toString();
-  } else if (typeof telegramRaw === 'number') {
-    telegramId = telegramRaw;
-  } else if (typeof telegramRaw === 'string') {
-    telegramId = telegramRaw.trim();
-  } else {
-    telegramId = String(telegramRaw);
+function mapQueueRow(row: any): QueueRow {
+  const id = Number(row.id);
+  const shotId = Number(row.shot_id);
+  if (!Number.isFinite(id) || !Number.isFinite(shotId)) {
+    throw new Error('Invalid queue row identifiers');
   }
 
   return {
-    id: Number(row.id),
-    bot_slug: String(row.bot_slug),
-    shot_id: Number(row.shot_id),
-    telegram_id: telegramId,
-    deliver_at: row.deliver_at instanceof Date ? row.deliver_at : new Date(row.deliver_at),
-    status: String(row.status),
-    attempt_count: Number(row.attempt_count ?? 0),
-    last_error: row.last_error ?? null,
-    sent_message_id: row.sent_message_id ?? null,
+    id,
+    shot_id: shotId,
+    telegram_id: normalizeChatId(row.telegram_id),
   };
 }
 
-export async function pickDueShots(client: PoolClient): Promise<ShotsQueueJob[]> {
-  const { rows } = await client.query(
-    `SELECT q.*
-       FROM public.shots_queue q
-      WHERE q.status = 'scheduled' AND q.deliver_at <= NOW()
-      ORDER BY q.deliver_at ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT ${MAX_BATCH}`
-  );
+function mapShotHeader(row: any): ShotHeader {
+  const id = Number(row.id);
+  if (!Number.isFinite(id)) {
+    throw new Error('Invalid shot identifier');
+  }
 
-  return rows.map(mapQueueRow);
+  return {
+    id,
+    bot_slug: String(row.bot_slug),
+    media_type: row.media_type ?? null,
+    message_text: row.message_text ?? null,
+    media_url: row.media_url ?? null,
+    parse_mode: row.parse_mode ?? null,
+    status: row.status ?? null,
+  };
+}
+
+async function deliverShot(
+  header: ShotHeader,
+  telegramId: ChatId,
+  getBotBySlug: GetBotBySlug
+): Promise<void> {
+  const bot = getBotBySlug(header.bot_slug);
+  if (!bot) {
+    throw new Error(`Bot not found for slug ${header.bot_slug}`);
+  }
+
+  await sendWithMedia(bot, telegramId, header);
+}
+
+export async function processDueShots(
+  getBotBySlug: GetBotBySlug,
+  batchSize = 100
+): Promise<{ picked: number; sent: number }> {
+  const pool = await getPool();
+  const client = await pool.connect();
+
+  let picked: QueueRow[] = [];
+  let headerById: Map<number, ShotHeader> = new Map();
+
+  try {
+    await client.query('BEGIN');
+
+    const pickSql = `
+      WITH due AS (
+        SELECT q.id
+          FROM public.shots_queue q
+          JOIN public.shots s ON s.id = q.shot_id
+         WHERE q.status = 'scheduled'
+           AND q.deliver_at <= NOW()
+           AND COALESCE(s.status, 'scheduled') <> 'canceled'
+         ORDER BY q.deliver_at ASC
+         FOR UPDATE SKIP LOCKED
+         LIMIT $1
+      )
+      UPDATE public.shots_queue q
+         SET status = 'sending',
+             updated_at = NOW()
+        FROM due
+       WHERE q.id = due.id
+      RETURNING q.id, q.shot_id, q.telegram_id
+    `;
+    const { rows: pickedRows } = await client.query(pickSql, [batchSize]);
+    picked = pickedRows.map(mapQueueRow);
+
+    if (picked.length === 0) {
+      await client.query('COMMIT');
+      return { picked: 0, sent: 0 };
+    }
+
+    const shotIds = [...new Set(picked.map((row) => row.shot_id))];
+    const { rows: shotRows } = await client.query(
+      `
+        SELECT s.id,
+               s.bot_slug,
+               s.media_type,
+               s.message_text,
+               s.media_url,
+               s.parse_mode,
+               s.status
+          FROM public.shots s
+         WHERE s.id = ANY($1::bigint[])
+      `,
+      [shotIds]
+    );
+
+    headerById = new Map<number, ShotHeader>(shotRows.map((row) => {
+      const header = mapShotHeader(row);
+      return [header.id, header];
+    }));
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  let sent = 0;
+  for (const job of picked) {
+    const header = headerById.get(job.shot_id);
+    if (!header) {
+      workerLogger.warn({ jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] missing shot header');
+      await markJobAsError(job.id, `Missing shot header ${job.shot_id}`);
+      continue;
+    }
+
+    const status = typeof header.status === 'string' ? header.status.toLowerCase() : '';
+    if (status === 'canceled') {
+      workerLogger.info({ jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] shot canceled, skipping job');
+      await skipJob(job.id, 'shot-canceled');
+      continue;
+    }
+
+    try {
+      await deliverShot(header, job.telegram_id, getBotBySlug);
+      await markJobAsSent(job.id);
+      sent += 1;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
+      workerLogger.error({ err, jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] failed to deliver shot');
+      await markJobAsError(job.id, message);
+    }
+  }
+
+  return { picked: picked.length, sent };
+}
+
+async function markJobAsSent(queueId: number): Promise<void> {
+  const pool = await getPool();
+  await pool.query(
+    `UPDATE public.shots_queue
+        SET status='sent', updated_at=NOW()
+      WHERE id=$1`,
+    [queueId]
+  );
+}
+
+async function skipJob(queueId: number, _reason: string): Promise<void> {
+  const pool = await getPool();
+  await pool.query(
+    `UPDATE public.shots_queue
+        SET status='skipped', updated_at=NOW()
+      WHERE id=$1`,
+    [queueId]
+  );
+}
+
+async function markJobAsError(queueId: number, _errMsg: string): Promise<void> {
+  const pool = await getPool();
+  await pool.query(
+    `UPDATE public.shots_queue
+        SET status='error', updated_at=NOW()
+      WHERE id=$1`,
+    [queueId]
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function runShotsWorkerForever(
+  getBotBySlug: GetBotBySlug,
+  options: { batchSize?: number; intervalMs?: number } = {}
+): Promise<void> {
+  const batchSize = options.batchSize ?? 100;
+  const intervalMs = options.intervalMs ?? 1000;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      await processDueShots(getBotBySlug, batchSize);
+    } catch (err) {
+      workerLogger.error({ err }, '[SHOTS][WORKER] loop iteration failed');
+    }
+    await delay(intervalMs);
+  }
 }
 
 export async function startShotsWorker(
-  getBotBySlug: (slug: string) => Bot<MyContext> | undefined
+  getBotBySlug: GetBotBySlug,
+  options: { batchSize?: number; intervalMs?: number } = {}
 ): Promise<NodeJS.Timeout> {
-  const pool = await getPool();
+  const batchSize = options.batchSize ?? 100;
+  const intervalMs = options.intervalMs ?? 1000;
 
   const tick = async () => {
-    const client = await pool.connect();
     try {
-      await client.query('BEGIN');
-      const due = await pickDueShots(client);
-      if (due.length === 0) {
-        await client.query('COMMIT');
-        return;
+      const result = await processDueShots(getBotBySlug, batchSize);
+      if (result.picked > 0) {
+        workerLogger.info({ picked: result.picked, sent: result.sent }, '[SHOTS][WORKER] processed batch');
       }
-
-      for (const job of due) {
-        try {
-          const { rows } = await client.query<ShotRow>(
-            `SELECT * FROM public.shots WHERE id = $1`,
-            [job.shot_id]
-          );
-          const shot = rows[0];
-
-          if (!shot || shot.status !== 'scheduled') {
-            await client.query(
-              `UPDATE public.shots_queue SET status = 'skipped', updated_at = NOW() WHERE id = $1`,
-              [job.id]
-            );
-            continue;
-          }
-
-          const bot = getBotBySlug(job.bot_slug);
-          if (!bot) {
-            throw new Error(`[SHOT] Bot não encontrado para slug ${job.bot_slug}`);
-          }
-
-          const sent = await sendWithMedia(bot, job.telegram_id, shot);
-
-          await client.query(
-            `UPDATE public.shots_queue
-                SET status = 'sent', sent_message_id = $1, updated_at = NOW()
-              WHERE id = $2`,
-            [sent?.message_id ?? null, job.id]
-          );
-
-          await client.query(
-            `INSERT INTO public.shots_sent (shot_id, bot_slug, telegram_id, message_id, status)
-             VALUES ($1, $2, $3, $4, 'sent')`,
-            [job.shot_id, job.bot_slug, job.telegram_id, sent?.message_id ?? null]
-          );
-        } catch (err) {
-          const attempts = job.attempt_count + 1;
-          const backoffSec = Math.min(900, Math.pow(2, attempts) * 15);
-          const nextDeliver = new Date(Date.now() + backoffSec * 1000);
-          const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
-
-          await client.query(
-            `UPDATE public.shots_queue
-               SET attempt_count = $1,
-                   last_error = $2,
-                   deliver_at = $3,
-                   status = CASE WHEN $1 >= $4 THEN 'error' ELSE 'scheduled' END,
-                   updated_at = NOW()
-             WHERE id = $5`,
-            [attempts, message, nextDeliver, MAX_ATTEMPTS, job.id]
-          );
-
-          logger.error({ err, jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] failed to process job');
-        }
-      }
-
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      logger.error({ err: e }, '[SHOTS][WORKER] tick failed');
-    } finally {
-      client.release();
+    } catch (err) {
+      workerLogger.error({ err }, '[SHOTS][WORKER] tick failed');
     }
   };
 
-  void tick().catch((err) => {
-    logger.error({ err }, '[SHOTS][WORKER] initial tick failed');
-  });
+  await tick();
 
   const interval = setInterval(() => {
-    void tick().catch((err) => {
-      logger.error({ err }, '[SHOTS][WORKER] tick execution error');
-    });
-  }, 3000);
+    void tick();
+  }, intervalMs);
 
   return interval;
 }
