@@ -50,3 +50,7 @@ class TelegramBotRegistry {
 }
 
 export const botRegistry = new TelegramBotRegistry();
+
+export function getBotBySlug(slug: string): Bot<MyContext> | undefined {
+  return botRegistry.get(slug);
+}

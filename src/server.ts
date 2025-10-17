@@ -90,7 +90,7 @@ function startShotsWorkerOnce() {
 
   void (async () => {
     try {
-      await runShotsWorkerForever((slug) => botRegistry.get(slug));
+      await runShotsWorkerForever();
     } catch (err) {
       logger.error({ err }, '[SHOTS][WORKER][FATAL] loop interrompido');
     }

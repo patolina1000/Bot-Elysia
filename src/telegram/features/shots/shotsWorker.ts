@@ -1,23 +1,19 @@
-import type { Bot } from 'grammy';
 import { getPool } from '../../db/pool';
 import { logger } from '../../../logger.js';
-import { sendWithMedia, type ChatId, type SendableShot } from './utilSend';
-import type { MyContext } from '../../grammYContext.js';
+import { deliverShot, type ShotHeader as DeliverableShotHeader } from './deliver.js';
 
 const workerLogger = logger.child({ worker: 'shots' });
 
-type GetBotBySlug = (slug: string) => Bot<MyContext> | undefined;
+type ChatId = string | number;
+
+type ShotHeader = DeliverableShotHeader & {
+  status: string | null;
+};
 
 type QueueRow = {
   id: number;
   shot_id: number;
   telegram_id: ChatId;
-};
-
-type ShotHeader = SendableShot & {
-  id: number;
-  bot_slug: string;
-  status: string | null;
 };
 
 function normalizeChatId(raw: unknown): ChatId {
@@ -54,6 +50,24 @@ function mapQueueRow(row: any): QueueRow {
   };
 }
 
+const ALLOWED_MEDIA_TYPES: DeliverableShotHeader['media_type'][] = [
+  'text',
+  'photo',
+  'video',
+  'audio',
+  'animation',
+];
+
+function normalizeMediaType(raw: unknown): DeliverableShotHeader['media_type'] {
+  if (typeof raw === 'string') {
+    const lowered = raw.trim().toLowerCase();
+    if (ALLOWED_MEDIA_TYPES.includes(lowered as DeliverableShotHeader['media_type'])) {
+      return lowered as DeliverableShotHeader['media_type'];
+    }
+  }
+  return 'text';
+}
+
 function mapShotHeader(row: any): ShotHeader {
   const id = Number(row.id);
   if (!Number.isFinite(id)) {
@@ -62,30 +76,16 @@ function mapShotHeader(row: any): ShotHeader {
 
   return {
     id,
-    bot_slug: String(row.bot_slug),
-    media_type: row.media_type ?? null,
-    message_text: row.message_text ?? null,
-    media_url: row.media_url ?? null,
-    parse_mode: row.parse_mode ?? null,
-    status: row.status ?? null,
+    bot_slug: String(row.bot_slug ?? ''),
+    media_type: normalizeMediaType(row.media_type),
+    message_text: typeof row.message_text === 'string' ? row.message_text : null,
+    media_url: typeof row.media_url === 'string' ? row.media_url : null,
+    parse_mode: typeof row.parse_mode === 'string' ? row.parse_mode : null,
+    status: typeof row.status === 'string' ? row.status : null,
   };
 }
 
-async function deliverShot(
-  header: ShotHeader,
-  telegramId: ChatId,
-  getBotBySlug: GetBotBySlug
-): Promise<void> {
-  const bot = getBotBySlug(header.bot_slug);
-  if (!bot) {
-    throw new Error(`Bot not found for slug ${header.bot_slug}`);
-  }
-
-  await sendWithMedia(bot, telegramId, header);
-}
-
 export async function processDueShots(
-  getBotBySlug: GetBotBySlug,
   batchSize = 100
 ): Promise<{ picked: number; sent: number }> {
   const pool = await getPool();
@@ -170,7 +170,7 @@ export async function processDueShots(
     }
 
     try {
-      await deliverShot(header, job.telegram_id, getBotBySlug);
+      await deliverShot(header, job.telegram_id);
       await markJobAsSent(job.id);
       sent += 1;
     } catch (err) {
@@ -218,7 +218,6 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function runShotsWorkerForever(
-  getBotBySlug: GetBotBySlug,
   options: { batchSize?: number; intervalMs?: number } = {}
 ): Promise<void> {
   const batchSize = options.batchSize ?? 100;
@@ -227,7 +226,7 @@ export async function runShotsWorkerForever(
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
-      await processDueShots(getBotBySlug, batchSize);
+      await processDueShots(batchSize);
     } catch (err) {
       workerLogger.error({ err }, '[SHOTS][WORKER] loop iteration failed');
     }
@@ -236,7 +235,6 @@ export async function runShotsWorkerForever(
 }
 
 export async function startShotsWorker(
-  getBotBySlug: GetBotBySlug,
   options: { batchSize?: number; intervalMs?: number } = {}
 ): Promise<NodeJS.Timeout> {
   const batchSize = options.batchSize ?? 100;
@@ -244,7 +242,7 @@ export async function startShotsWorker(
 
   const tick = async () => {
     try {
-      const result = await processDueShots(getBotBySlug, batchSize);
+      const result = await processDueShots(batchSize);
       if (result.picked > 0) {
         workerLogger.info({ picked: result.picked, sent: result.sent }, '[SHOTS][WORKER] processed batch');
       }
