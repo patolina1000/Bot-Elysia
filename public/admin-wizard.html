@@ -6599,7 +6599,7 @@
       const shotForm = document.getElementById('shot-form');
       const shotNewBtn = document.getElementById('shot-new-btn');
       const shotReloadBtn = document.getElementById('shot-reload-btn');
-      const shotSaveBtn = document.getElementById('shot-save-btn');
+      // const shotSaveBtn = document.getElementById('shot-save-btn'); // REMOVED: using #shot-primary-cta instead
       const shotsList = document.getElementById('shots-list');
       const shotsEmpty = document.getElementById('shots-empty');
       const shotsSlugLabel = document.getElementById('shots-current-slug');
@@ -7058,7 +7058,10 @@
         });
       });
 
-      shotSaveBtn?.addEventListener('click', async () => {
+      // REMOVED: shotSaveBtn listener - now using #shot-primary-cta
+      // Wire up the real primary CTA button to call saveShotForm()
+      const shotPrimaryCta = document.getElementById('shot-primary-cta');
+      shotPrimaryCta?.addEventListener('click', async () => {
         await saveShotForm();
       });
 
