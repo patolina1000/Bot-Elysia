@@ -6738,19 +6738,7 @@
       });
 
       shotReloadBtn?.addEventListener('click', () => {
-        // Placeholder for reload logic
-        if (shotsEmpty) {
-          shotsEmpty.classList.remove('hidden');
-          shotsEmpty.textContent = 'Nenhum disparo criado ainda.';
-        }
-        if (shotsList) {
-          shotsList.innerHTML = '';
-        }
-        // Update slug label
-        if (shotsSlugLabel && plansBotSlugInput) {
-          const slug = (plansBotSlugInput.value || '').trim();
-          shotsSlugLabel.textContent = slug || '—';
-        }
+        void loadShots();
       });
 
       // Close modal buttons
@@ -6763,9 +6751,8 @@
         });
       });
 
-      shotSaveBtn?.addEventListener('click', () => {
-        // Placeholder for save logic - just close modal for now (visual only)
-        closeShotModal();
+      shotSaveBtn?.addEventListener('click', async () => {
+        await saveShot();
       });
 
       shotAddExtraPlanBtn?.addEventListener('click', () => {
@@ -6798,26 +6785,350 @@
         }
       });
 
-      // Initialize empty state
-      if (shotsEmpty) {
-        shotsEmpty.classList.remove('hidden');
-        shotsEmpty.textContent = 'Nenhum disparo criado ainda.';
+      // Load/render functions for shots
+      async function fetchShots(botSlug) {
+        const url = `/admin/api/shots?bot_slug=${encodeURIComponent(botSlug)}&ts=${Date.now()}`;
+        return fetchJSON(url, { cache: 'no-store' });
       }
-      if (shotsList) {
+
+      function updateShotsSlugLabel(slug) {
+        if (shotsSlugLabel) {
+          shotsSlugLabel.textContent = slug || '—';
+        }
+      }
+
+      function renderShotsPlaceholder(message) {
+        if (!shotsList || !shotsEmpty) return;
         shotsList.innerHTML = '';
+        shotsEmpty.classList.remove('hidden');
+        shotsEmpty.textContent = message;
       }
-      // Update slug label
-      if (shotsSlugLabel && plansBotSlugInput) {
-        const slug = (plansBotSlugInput.value || '').trim();
-        shotsSlugLabel.textContent = slug || '—';
+
+      function renderShotItems(items) {
+        if (!shotsList || !shotsEmpty) return;
+        
+        if (!Array.isArray(items) || items.length === 0) {
+          renderShotsPlaceholder('Nenhum disparo criado ainda.');
+          return;
+        }
+
+        shotsEmpty.classList.add('hidden');
+        shotsList.innerHTML = '';
+
+        const fragment = document.createDocumentFragment();
+        items.forEach((item) => {
+          const div = document.createElement('div');
+          div.className = 'shots-item';
+          
+          const header = document.createElement('div');
+          header.className = 'shots-item-header';
+          
+          const buttonText = document.createElement('strong');
+          buttonText.textContent = item.button_text || 'Sem título';
+          header.appendChild(buttonText);
+
+          const badge = document.createElement('span');
+          badge.className = `shots-badge ${item.active ? 'active' : ''}`;
+          badge.textContent = item.active ? 'ativo' : 'inativo';
+          header.appendChild(badge);
+
+          div.appendChild(header);
+
+          // Price or extra plans
+          if (item.price_cents) {
+            const price = document.createElement('div');
+            price.className = 'shots-item-price';
+            price.textContent = `Preço: ${centsToBRL(item.price_cents)}`;
+            div.appendChild(price);
+          } else if (item.extra_plans && item.extra_plans.length > 0) {
+            const price = document.createElement('div');
+            price.className = 'shots-item-price';
+            price.textContent = `${item.extra_plans.length} opções de preço`;
+            div.appendChild(price);
+          }
+
+          // Audience
+          const audience = document.createElement('div');
+          audience.className = 'shots-item-moment';
+          const audienceText = item.audience === 'pix' ? 'Público: Quem criou PIX' : 'Público: Quem iniciou o bot';
+          audience.textContent = audienceText;
+          div.appendChild(audience);
+
+          // Status
+          const status = document.createElement('div');
+          status.className = 'shots-item-moment';
+          status.textContent = `Status: ${item.status}`;
+          div.appendChild(status);
+
+          // Actions
+          const actions = document.createElement('div');
+          actions.className = 'shots-item-actions';
+
+          const sendBtn = document.createElement('button');
+          sendBtn.type = 'button';
+          sendBtn.className = 'btn-primary';
+          sendBtn.textContent = 'Disparar Agora';
+          sendBtn.addEventListener('click', async () => {
+            if (confirm(`Disparar "${item.button_text}" agora?`)) {
+              await queueShot(item.id);
+            }
+          });
+          actions.appendChild(sendBtn);
+
+          const scheduleBtn = document.createElement('button');
+          scheduleBtn.type = 'button';
+          scheduleBtn.className = 'btn-secondary';
+          scheduleBtn.textContent = 'Agendar';
+          scheduleBtn.addEventListener('click', () => {
+            showScheduleDialog(item.id);
+          });
+          actions.appendChild(scheduleBtn);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'btn-danger';
+          deleteBtn.textContent = 'Excluir';
+          deleteBtn.addEventListener('click', async () => {
+            if (confirm(`Excluir disparo "${item.button_text}"?`)) {
+              await deleteShot(item.id);
+            }
+          });
+          actions.appendChild(deleteBtn);
+
+          div.appendChild(actions);
+          fragment.appendChild(div);
+        });
+
+        shotsList.appendChild(fragment);
       }
+
+      async function loadShots() {
+        if (!shotsList || !shotsEmpty) return;
+
+        const slug = (plansBotSlugInput?.value || '').trim();
+        updateShotsSlugLabel(slug);
+
+        if (!slug) {
+          renderShotsPlaceholder('Informe o slug do bot para listar disparos.');
+          return;
+        }
+
+        renderShotsPlaceholder('Carregando disparos...');
+
+        try {
+          const response = await fetchShots(slug);
+          const items = Array.isArray(response?.items) ? response.items : [];
+          renderShotItems(items);
+        } catch (error) {
+          console.error('[shots] erro ao carregar', error);
+          const message = error instanceof Error ? error.message : 'Erro ao carregar disparos.';
+          renderShotsPlaceholder(message);
+          showToast(message);
+        }
+      }
+
+      function collectShotExtraPlans() {
+        if (!shotExtraPlansList) return [];
+        
+        const rows = Array.from(shotExtraPlansList.querySelectorAll('.shot-plan-row'));
+        return rows.map((r) => {
+          const [labelEl, priceEl] = r.querySelectorAll('input');
+          const label = (labelEl?.value || '').trim();
+          const price = (priceEl?.value || '').trim();
+          return { label, price };
+        }).filter(p => p.label && p.price);
+      }
+
+      async function saveShot() {
+        const slug = (plansBotSlugInput?.value || '').trim();
+        if (!slug) {
+          alert('Informe o slug do bot.');
+          return;
+        }
+
+        if (!getAdminToken()) {
+          alert('Token de admin não configurado.');
+          return;
+        }
+
+        const buttonText = shotButtonLabelInput?.value?.trim() || '';
+        if (!buttonText) {
+          alert('Informe o texto do botão.');
+          shotButtonLabelInput?.focus();
+          return;
+        }
+
+        const priceBrl = shotPriceBrlInput?.value?.trim() || '';
+        const extraPlans = collectShotExtraPlans();
+
+        if (!priceBrl && extraPlans.length === 0) {
+          alert('Informe um preço OU adicione planos extras.');
+          shotPriceBrlInput?.focus();
+          return;
+        }
+
+        const payload = {
+          bot_slug: slug,
+          audience: shotState.audience || 'started',
+          send_mode: shotState.send || 'now',
+          button_text: buttonText,
+          price_cents: priceBrl ? priceBrl : null,
+          price: priceBrl,
+          extra_plans: extraPlans,
+          intro_text: shotIntroTextInput?.value?.trim() || null,
+          copy: shotCopyTextarea?.value?.trim() || null,
+          media_url: shotMediaUrlInput?.value?.trim() || null,
+          timezone: 'America/Sao_Paulo',
+        };
+
+        // Add schedule info if scheduled
+        if (shotState.send === 'schedule') {
+          const dateInput = document.getElementById('shot_schedule_date');
+          const timeInput = document.getElementById('shot_schedule_time');
+          const date = dateInput?.value?.trim();
+          const time = timeInput?.value?.trim();
+          
+          if (!date || !time) {
+            alert('Para agendar, informe data e horário.');
+            return;
+          }
+          
+          payload.date = date;
+          payload.time = time;
+        }
+
+        try {
+          const response = await fetch('/admin/api/shots', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getAdminToken()}`,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erro ao salvar disparo');
+          }
+
+          const result = await response.json();
+          showToast('Disparo criado com sucesso!');
+          closeShotModal();
+          await loadShots();
+        } catch (error) {
+          console.error('[shots] erro ao salvar', error);
+          alert(error instanceof Error ? error.message : 'Erro ao salvar disparo');
+        }
+      }
+
+      async function queueShot(shotId) {
+        if (!getAdminToken()) {
+          alert('Token de admin não configurado.');
+          return;
+        }
+
+        try {
+          const response = await fetch(`/admin/api/shots/${shotId}/queue`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${getAdminToken()}`,
+            },
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erro ao enfileirar disparo');
+          }
+
+          const result = await response.json();
+          showToast(`${result.queued || 0} disparos enfileirados!`);
+          await loadShots();
+        } catch (error) {
+          console.error('[shots] erro ao enfileirar', error);
+          alert(error instanceof Error ? error.message : 'Erro ao enfileirar disparo');
+        }
+      }
+
+      function showScheduleDialog(shotId) {
+        const date = prompt('Data (YYYY-MM-DD):');
+        const time = prompt('Hora (HH:MM):');
+        
+        if (date && time) {
+          void scheduleShot(shotId, date, time);
+        }
+      }
+
+      async function scheduleShot(shotId, date, time) {
+        if (!getAdminToken()) {
+          alert('Token de admin não configurado.');
+          return;
+        }
+
+        try {
+          const response = await fetch(`/admin/api/shots/${shotId}/schedule`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getAdminToken()}`,
+            },
+            body: JSON.stringify({ date, time, timezone: 'America/Sao_Paulo' }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erro ao agendar disparo');
+          }
+
+          const result = await response.json();
+          showToast(`Disparo agendado para ${result.scheduled_at}! ${result.queued || 0} usuários na fila.`);
+          await loadShots();
+        } catch (error) {
+          console.error('[shots] erro ao agendar', error);
+          alert(error instanceof Error ? error.message : 'Erro ao agendar disparo');
+        }
+      }
+
+      async function deleteShot(shotId) {
+        if (!getAdminToken()) {
+          alert('Token de admin não configurado.');
+          return;
+        }
+
+        try {
+          const response = await fetch(`/admin/api/shots/${shotId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${getAdminToken()}`,
+            },
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erro ao excluir disparo');
+          }
+
+          showToast('Disparo excluído!');
+          await loadShots();
+        } catch (error) {
+          console.error('[shots] erro ao excluir', error);
+          alert(error instanceof Error ? error.message : 'Erro ao excluir disparo');
+        }
+      }
+
+      // Initialize empty state
+      renderShotsPlaceholder('Nenhum disparo criado ainda.');
+      updateShotsSlugLabel('—');
 
       // Update shots slug label when bot slug changes
       plansBotSlugInput?.addEventListener('input', () => {
-        if (shotsSlugLabel) {
-          const slug = (plansBotSlugInput.value || '').trim();
-          shotsSlugLabel.textContent = slug || '—';
-        }
+        const slug = (plansBotSlugInput.value || '').trim();
+        updateShotsSlugLabel(slug);
+      });
+
+      // Auto-load shots when bot slug changes
+      plansBotSlugInput?.addEventListener('change', () => {
+        void loadShots();
       });
 
       plansLoadBtn?.addEventListener('click', () => {
