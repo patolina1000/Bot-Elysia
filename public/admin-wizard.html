@@ -832,6 +832,457 @@
       }
     }
 
+    /* Disparos (shots) */
+    #shots-card {
+      margin-top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    #shots-card .shots-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    #shots-card .shots-header h2 {
+      margin: 0;
+      font-size: 22px;
+      color: #111827;
+    }
+
+    #shots-card .shots-header p {
+      margin: 4px 0 0;
+      color: #6b7280;
+      font-size: 14px;
+      max-width: 520px;
+    }
+
+    .shots-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    #shots-card .current-slug {
+      font-size: 13px;
+      color: #4b5563;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    #shots-card .current-slug strong {
+      color: #111827;
+    }
+
+    #shots-card #shots-empty {
+      border: 1px dashed #cbd5f5;
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      background: #f8fafc;
+    }
+
+    #shots-list {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .shots-item {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .shots-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+    }
+
+    .shots-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .shots-item-price {
+      font-weight: 600;
+      color: #0f172a;
+      font-size: 16px;
+    }
+
+    .shots-item-moment {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .shots-badge {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #1f2937;
+    }
+
+    .shots-badge.active {
+      border-color: #86efac;
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .shots-image {
+      width: 100%;
+      max-height: 180px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+    }
+
+    .shots-item-copy {
+      font-size: 13px;
+      color: #374151;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      margin: 0;
+    }
+
+    .shots-item-intro {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #4b5563;
+      background: #eef2ff;
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+
+    .shots-item-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .shots-modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 48px 16px;
+      z-index: 2000;
+    }
+
+    .shots-modal .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+    }
+
+    .shots-modal .modal-content {
+      position: relative;
+      width: min(720px, 100%);
+      background: #ffffff;
+      border-radius: 18px;
+      border: 1px solid #e5e7eb;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.25);
+      z-index: 1;
+      max-height: calc(100vh - 96px);
+      overflow-y: auto;
+    }
+
+    .shots-modal .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .shots-modal .modal-header h3 {
+      margin: 0;
+      font-size: 20px;
+      color: #111827;
+    }
+
+    .shots-modal .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .shots-modal .form-row {
+      display: grid;
+      gap: 12px;
+    }
+
+    .shots-modal .form-row.double {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .shots-modal .shot-additional-plans {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .shots-modal .shot-additional-plans__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .shots-modal .shot-additional-plans__actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .shots-modal .shot-additional-plans__counter {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .shots-modal .shot-additional-plans__title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .shots-modal .shot-plans-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .shots-modal .shot-plan-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 160px) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #f9fafb;
+    }
+
+    .shots-modal .shot-plan-row__field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    .shots-modal .shot-plan-row__field--price {
+      width: min(100%, 160px);
+    }
+
+    .shots-modal .shot-plan-row__label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .shots-modal .shot-plan-row__actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 520px) {
+      .shots-modal .shot-plan-row {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .shots-modal .shot-plan-row__actions {
+        justify-content: flex-start;
+      }
+    }
+
+    .shots-modal label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    .shots-modal textarea,
+    .shots-modal select,
+    .shots-modal input[type="text"],
+    .shots-modal input[type="number"] {
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #ffffff;
+      color: inherit;
+    }
+
+    .shots-modal textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    .shots-modal .file-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .shots-modal .footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .shots-modal .footer button {
+      min-width: 120px;
+    }
+
+    .shots-modal .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    .shots-modal .checkbox-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+
+    @media (max-width: 640px) {
+      #shots-card {
+        padding: 18px;
+      }
+
+      .shots-modal {
+        padding: 32px 12px;
+      }
+
+      .shots-modal .modal-content {
+        padding: 20px;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #shots-card {
+        background: #0f172a;
+        border-color: #1e293b;
+        box-shadow: 0 20px 45px rgba(2, 6, 23, 0.6);
+      }
+
+      #shots-card .shots-header h2 {
+        color: #f8fafc;
+      }
+
+      #shots-card .shots-header p,
+      #shots-card .current-slug,
+      #shots-card .current-slug strong {
+        color: #cbd5f5;
+      }
+
+      #shots-card #shots-empty {
+        background: rgba(30, 41, 59, 0.6);
+        border-color: rgba(99, 102, 241, 0.45);
+        color: #e2e8f0;
+      }
+
+      .shots-item {
+        background: rgba(15, 23, 42, 0.75);
+        border-color: #1e293b;
+        box-shadow: 0 20px 35px rgba(2, 6, 23, 0.65);
+      }
+
+      .shots-item-price {
+        color: #f8fafc;
+      }
+
+      .shots-item-moment {
+        color: #94a3b8;
+      }
+
+      .shots-badge {
+        background: rgba(15, 23, 42, 0.8);
+        border-color: #334155;
+        color: #e2e8f0;
+      }
+
+      .shots-badge.active {
+        background: rgba(22, 101, 52, 0.25);
+        border-color: rgba(34, 197, 94, 0.65);
+        color: #bbf7d0;
+      }
+
+      .shots-image {
+        border-color: #1e293b;
+        background: rgba(15, 23, 42, 0.6);
+      }
+
+      .shots-item-copy {
+        color: #e2e8f0;
+      }
+
+      .shots-modal .modal-content {
+        background: #0b1220;
+        border-color: #1e293b;
+        box-shadow: 0 35px 60px rgba(2, 6, 23, 0.7);
+      }
+
+      .shots-modal .modal-header h3,
+      .shots-modal label,
+      .shots-modal .checkbox-row {
+        color: #e2e8f0;
+      }
+
+      .shots-modal textarea,
+      .shots-modal select,
+      .shots-modal input[type="text"] {
+        background: rgba(15, 23, 42, 0.7);
+        border-color: #334155;
+        color: #e2e8f0;
+      }
+
+      .shots-modal textarea::placeholder,
+      .shots-modal input::placeholder {
+        color: #94a3b8;
+      }
+    }
+
     #plans-card hr {
       border: none;
       border-top: 1px solid #e5e7eb;
@@ -1987,6 +2438,13 @@
     #downsells-card .current-slug {
       color: #fff !important;
     }
+
+    /* Melhorar contraste da seção Disparos (beta) */
+    #shots-card .shots-header h2,
+    #shots-card .shots-header p,
+    #shots-card .current-slug {
+      color: #fff !important;
+    }
   </style>
 </head>
 <body id="admin-wizard">
@@ -2226,6 +2684,24 @@
       <div id="downsells-empty" class="hidden">Nenhum downsell cadastrado para este bot.</div>
       <div id="downsells-list"></div>
     </section>
+
+    <section id="shots-card">
+      <div class="shots-header">
+        <div>
+          <h2>Disparos <span style="font-size: 14px; color: #6b7280; font-weight: 400;">(beta)</span></h2>
+          <p>Envie mensagens programadas ou imediatas para quem já iniciou o bot ou gerou PIX.</p>
+        </div>
+        <div class="shots-actions">
+          <button type="button" id="shot-reload-btn" class="btn-outline">Recarregar</button>
+          <button type="button" id="shot-new-btn" class="btn-gradient">Novo disparo</button>
+        </div>
+      </div>
+      <div class="current-slug">
+        Bot atual: <strong id="shots-current-slug">—</strong>
+      </div>
+      <div id="shots-empty" class="hidden">Nenhum disparo criado ainda.</div>
+      <div id="shots-list"></div>
+    </section>
   </div>
 
   <div id="downsells-modal" class="downsells-modal hidden" role="dialog" aria-modal="true" aria-labelledby="downsells-modal-title">
@@ -2318,6 +2794,105 @@
       <div class="footer">
         <button type="button" id="downsells-save" class="btn-gradient">Salvar</button>
       </div>
+    </div>
+  </div>
+
+  <div id="shot-backdrop" class="shots-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shot-modal-title">
+    <div class="modal-backdrop" data-shot-close></div>
+    <div id="shot-modal" class="modal-content">
+      <form id="shot-form" data-mode="create" data-disparo-id="">
+        <div class="modal-header">
+          <h3 id="shot-modal-title">
+            <span data-shot-title="create">Novo disparo</span>
+            <span data-shot-title="edit" class="hidden">Editar disparo</span>
+          </h3>
+          <button type="button" data-shot-close class="btn-outline">Fechar</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row double">
+            <label>Texto do botão
+              <input id="shot_button_label" type="text" placeholder="ex.: Acessar agora" autocomplete="off">
+            </label>
+            <label>Preço (R$)
+              <input id="shot_price_brl" type="text" placeholder="ex.: 29,90" autocomplete="off">
+            </label>
+          </div>
+          <div class="form-row double">
+            <label>Momento
+              <select id="shot_moment">
+                <option value="after_start">Após /start</option>
+                <option value="after_pix">Após gerar PIX</option>
+              </select>
+            </label>
+            <label>Atraso (min)
+              <input id="shot_delay_min" type="number" inputmode="numeric" min="0" max="10080" step="1" placeholder="ex.: 30">
+            </label>
+          </div>
+          <div class="form-row">
+            <label for="shot_intro_text">Texto acima do botão (opcional)
+              <input id="shot_intro_text"
+                     class="form-control"
+                     type="text"
+                     placeholder="Clique abaixo:"
+                     maxlength="200">
+              <small class="form-text">Se preenchido, exibe chip "Intro" no card.</small>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Copy
+              <textarea id="shot_copy" placeholder="Escreva a mensagem do disparo..."></textarea>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>URL da mídia (foto/vídeo/áudio)
+              <input id="shot_media_url" type="text" placeholder="https://..." autocomplete="off">
+            </label>
+            <div class="file-actions">
+              <input type="file" id="shot_media_upload" class="hidden" accept="image/*,video/*,audio/*">
+              <button type="button" id="shot-media-upload-btn" class="btn-soft">Enviar arquivo…</button>
+              <button type="button" id="shot-media-preview-btn" class="btn-soft">Pré-visualizar</button>
+            </div>
+          </div>
+          <!-- Planos extras (repeater visual) -->
+          <div class="form-row">
+            <div id="shot-extra-plans" class="shot-additional-plans">
+              <div class="shot-additional-plans__header">
+                <span class="shot-additional-plans__title">Planos extras (opcional)</span>
+                <div class="shot-additional-plans__actions">
+                  <span id="shot-plans-count" class="shot-additional-plans__counter">0/8</span>
+                  <button type="button" id="shot-add-extra-plan" class="btn-soft">+ Adicionar plano</button>
+                </div>
+              </div>
+              <div id="shot-extra-plans-list" class="shot-plans-list"></div>
+              <template id="shot-extra-plan-tpl">
+                <div class="shot-plan-row">
+                  <label class="shot-plan-row__field">
+                    <span class="shot-plan-row__label">Texto do botão</span>
+                    <input type="text" placeholder="Ex.: Plano Premium">
+                  </label>
+                  <label class="shot-plan-row__field shot-plan-row__field--price">
+                    <span class="shot-plan-row__label">Preço (R$)</span>
+                    <input type="text" class="shot-price-input" inputmode="decimal" placeholder="49,90">
+                  </label>
+                  <div class="shot-plan-row__actions">
+                    <button type="button" class="btn-soft" data-move-up title="Mover para cima">↑</button>
+                    <button type="button" class="btn-soft" data-move-down title="Mover para baixo">↓</button>
+                    <button type="button" class="btn-danger" data-remove title="Remover">Remover</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+          <label class="checkbox-row">
+            <input id="shot_active" type="checkbox">
+            <span>Ativo</span>
+          </label>
+        </div>
+        <div class="footer">
+          <button type="button" data-shot-close class="btn-outline">Cancelar</button>
+          <button type="button" id="shot-save-btn" class="btn-gradient">Salvar</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -5049,6 +5624,304 @@
       });
 
       void loadDownsells({ silent: true });
+
+      // ===== DISPAROS (Shots) - Modal logic =====
+      const shotBackdrop = document.getElementById('shot-backdrop');
+      const shotModal = document.getElementById('shot-modal');
+      const shotForm = document.getElementById('shot-form');
+      const shotNewBtn = document.getElementById('shot-new-btn');
+      const shotReloadBtn = document.getElementById('shot-reload-btn');
+      const shotSaveBtn = document.getElementById('shot-save-btn');
+      const shotsList = document.getElementById('shots-list');
+      const shotsEmpty = document.getElementById('shots-empty');
+      const shotsSlugLabel = document.getElementById('shots-current-slug');
+      
+      // Form fields
+      const shotButtonLabelInput = document.getElementById('shot_button_label');
+      const shotPriceBrlInput = document.getElementById('shot_price_brl');
+      const shotMomentSelect = document.getElementById('shot_moment');
+      const shotDelayMinInput = document.getElementById('shot_delay_min');
+      const shotIntroTextInput = document.getElementById('shot_intro_text');
+      const shotCopyTextarea = document.getElementById('shot_copy');
+      const shotMediaUrlInput = document.getElementById('shot_media_url');
+      const shotMediaUploadInput = document.getElementById('shot_media_upload');
+      const shotMediaUploadBtn = document.getElementById('shot-media-upload-btn');
+      const shotMediaPreviewBtn = document.getElementById('shot-media-preview-btn');
+      const shotActiveCheckbox = document.getElementById('shot_active');
+
+      // Repeater elements
+      const shotExtraPlansContainer = document.getElementById('shot-extra-plans');
+      const shotExtraPlansList = document.getElementById('shot-extra-plans-list');
+      const shotAddExtraPlanBtn = document.getElementById('shot-add-extra-plan');
+      const shotExtraPlanTpl = document.getElementById('shot-extra-plan-tpl');
+      const shotPlansCounter = document.getElementById('shot-plans-count');
+
+      const SHOT_EXTRA_PLANS_MAX = 8;
+
+      function openShotModal() {
+        if (!shotBackdrop || !shotModal || !shotForm) return;
+
+        // Set mode to create
+        shotForm.dataset.mode = 'create';
+        shotForm.dataset.disparoId = '';
+
+        // Clear all form fields
+        if (shotButtonLabelInput) shotButtonLabelInput.value = '';
+        if (shotPriceBrlInput) shotPriceBrlInput.value = '';
+        if (shotMomentSelect) shotMomentSelect.value = 'after_start';
+        if (shotDelayMinInput) shotDelayMinInput.value = '';
+        if (shotIntroTextInput) shotIntroTextInput.value = '';
+        if (shotCopyTextarea) shotCopyTextarea.value = '';
+        if (shotMediaUrlInput) shotMediaUrlInput.value = '';
+        if (shotMediaUploadInput) shotMediaUploadInput.value = '';
+        if (shotActiveCheckbox) shotActiveCheckbox.checked = false;
+
+        // Clear extra plans repeater
+        if (shotExtraPlansList) {
+          shotExtraPlansList.innerHTML = '';
+          updateShotPlansCounter();
+        }
+
+        // Show/hide title elements
+        const createTitles = shotModal.querySelectorAll('[data-shot-title="create"]');
+        const editTitles = shotModal.querySelectorAll('[data-shot-title="edit"]');
+        createTitles.forEach(el => el.classList.remove('hidden'));
+        editTitles.forEach(el => el.classList.add('hidden'));
+
+        // Show modal
+        shotBackdrop.classList.remove('hidden');
+
+        // Focus first field
+        setTimeout(() => {
+          shotButtonLabelInput?.focus();
+        }, 100);
+      }
+
+      function closeShotModal() {
+        if (!shotBackdrop) return;
+
+        // Hide modal
+        shotBackdrop.classList.add('hidden');
+
+        // Reset form
+        if (shotForm) {
+          shotForm.dataset.mode = 'create';
+          shotForm.dataset.disparoId = '';
+        }
+
+        // Clear fields
+        if (shotButtonLabelInput) shotButtonLabelInput.value = '';
+        if (shotPriceBrlInput) shotPriceBrlInput.value = '';
+        if (shotMomentSelect) shotMomentSelect.value = 'after_start';
+        if (shotDelayMinInput) shotDelayMinInput.value = '';
+        if (shotIntroTextInput) shotIntroTextInput.value = '';
+        if (shotCopyTextarea) shotCopyTextarea.value = '';
+        if (shotMediaUrlInput) shotMediaUrlInput.value = '';
+        if (shotMediaUploadInput) shotMediaUploadInput.value = '';
+        if (shotActiveCheckbox) shotActiveCheckbox.checked = false;
+
+        // Clear extra plans
+        if (shotExtraPlansList) {
+          shotExtraPlansList.innerHTML = '';
+          updateShotPlansCounter();
+        }
+
+        // Return focus to new button
+        setTimeout(() => {
+          shotNewBtn?.focus();
+        }, 100);
+      }
+
+      function updateShotPlansCounter() {
+        if (!shotPlansCounter || !shotExtraPlansList) return;
+        const count = shotExtraPlansList.querySelectorAll('.shot-plan-row').length;
+        shotPlansCounter.textContent = `${count}/${SHOT_EXTRA_PLANS_MAX}`;
+      }
+
+      function canAddMoreShotPlans() {
+        if (!shotExtraPlansList) return false;
+        return shotExtraPlansList.querySelectorAll('.shot-plan-row').length < SHOT_EXTRA_PLANS_MAX;
+      }
+
+      function addShotPlanRow(data = null) {
+        if (!shotExtraPlanTpl || !shotExtraPlansList) return;
+        if (!canAddMoreShotPlans()) {
+          alert(`Limite de ${SHOT_EXTRA_PLANS_MAX} planos atingido.`);
+          return;
+        }
+
+        const fragment = shotExtraPlanTpl.content.firstElementChild;
+        if (!fragment) return;
+
+        const node = fragment.cloneNode(true);
+        const inputs = node.querySelectorAll('input');
+        const labelInput = inputs[0];
+        const priceInput = inputs[1];
+
+        if (data && typeof data === 'object') {
+          if (labelInput && data.label) labelInput.value = data.label;
+          if (priceInput && data.price) priceInput.value = data.price;
+        }
+
+        // Remove button
+        const removeBtn = node.querySelector('[data-remove]');
+        if (removeBtn) {
+          removeBtn.addEventListener('click', () => {
+            if (confirm('Remover este plano?')) {
+              node.remove();
+              updateShotPlansCounter();
+            }
+          });
+        }
+
+        // Move up button
+        const moveUpBtn = node.querySelector('[data-move-up]');
+        if (moveUpBtn) {
+          moveUpBtn.addEventListener('click', () => {
+            const prev = node.previousElementSibling;
+            if (prev) {
+              shotExtraPlansList.insertBefore(node, prev);
+            }
+          });
+        }
+
+        // Move down button
+        const moveDownBtn = node.querySelector('[data-move-down]');
+        if (moveDownBtn) {
+          moveDownBtn.addEventListener('click', () => {
+            const next = node.nextElementSibling;
+            if (next) {
+              shotExtraPlansList.insertBefore(next, node);
+            }
+          });
+        }
+
+        // Price input formatting
+        const priceEl = node.querySelector('.shot-price-input');
+        if (priceEl) {
+          priceEl.addEventListener('blur', () => {
+            priceEl.value = priceEl.value.replace(/\./g, ',');
+          });
+        }
+
+        // Duplicate button
+        const actions = node.querySelector('.shot-plan-row__actions');
+        if (actions) {
+          const dupBtn = document.createElement('button');
+          dupBtn.type = 'button';
+          dupBtn.className = 'px-2 py-2 rounded-md border';
+          dupBtn.textContent = 'Duplicar';
+          dupBtn.title = 'Duplicar plano';
+          dupBtn.addEventListener('click', () => {
+            if (!canAddMoreShotPlans()) {
+              alert(`Limite de ${SHOT_EXTRA_PLANS_MAX} planos atingido.`);
+              return;
+            }
+            const [l, p] = node.querySelectorAll('input');
+            addShotPlanRow({
+              label: l?.value || '',
+              price: p?.value || '',
+            });
+          });
+          const removeAnchor = actions.querySelector('[data-remove]');
+          if (removeAnchor) {
+            actions.insertBefore(dupBtn, removeAnchor);
+          } else {
+            actions.appendChild(dupBtn);
+          }
+        }
+
+        shotExtraPlansList.appendChild(node);
+        updateShotPlansCounter();
+      }
+
+      // Event listeners
+      shotNewBtn?.addEventListener('click', () => {
+        openShotModal();
+      });
+
+      shotReloadBtn?.addEventListener('click', () => {
+        // Placeholder for reload logic
+        if (shotsEmpty) {
+          shotsEmpty.classList.remove('hidden');
+          shotsEmpty.textContent = 'Nenhum disparo criado ainda.';
+        }
+        if (shotsList) {
+          shotsList.innerHTML = '';
+        }
+        // Update slug label
+        if (shotsSlugLabel && plansBotSlugInput) {
+          const slug = (plansBotSlugInput.value || '').trim();
+          shotsSlugLabel.textContent = slug || '—';
+        }
+      });
+
+      // Close modal buttons
+      const shotCloseButtons = shotBackdrop?.querySelectorAll('[data-shot-close]');
+      shotCloseButtons?.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          if (e.target === shotBackdrop || e.target.hasAttribute('data-shot-close')) {
+            closeShotModal();
+          }
+        });
+      });
+
+      shotSaveBtn?.addEventListener('click', () => {
+        // Placeholder for save logic - just close modal for now (visual only)
+        closeShotModal();
+      });
+
+      shotAddExtraPlanBtn?.addEventListener('click', () => {
+        addShotPlanRow();
+      });
+
+      shotMediaUploadBtn?.addEventListener('click', () => {
+        shotMediaUploadInput?.click();
+      });
+
+      shotMediaUploadInput?.addEventListener('change', () => {
+        const file = shotMediaUploadInput.files?.[0];
+        if (file) {
+          // Placeholder - just show file name in console
+          console.log('[shots] File selected:', file.name);
+          shotMediaUploadInput.value = '';
+        }
+      });
+
+      shotMediaPreviewBtn?.addEventListener('click', () => {
+        const url = (shotMediaUrlInput?.value || '').trim();
+        if (!url) return;
+        window.open(url, '_blank', 'noopener');
+      });
+
+      // ESC key to close modal
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && shotBackdrop && !shotBackdrop.classList.contains('hidden')) {
+          closeShotModal();
+        }
+      });
+
+      // Initialize empty state
+      if (shotsEmpty) {
+        shotsEmpty.classList.remove('hidden');
+        shotsEmpty.textContent = 'Nenhum disparo criado ainda.';
+      }
+      if (shotsList) {
+        shotsList.innerHTML = '';
+      }
+      // Update slug label
+      if (shotsSlugLabel && plansBotSlugInput) {
+        const slug = (plansBotSlugInput.value || '').trim();
+        shotsSlugLabel.textContent = slug || '—';
+      }
+
+      // Update shots slug label when bot slug changes
+      plansBotSlugInput?.addEventListener('input', () => {
+        if (shotsSlugLabel) {
+          const slug = (plansBotSlugInput.value || '').trim();
+          shotsSlugLabel.textContent = slug || '—';
+        }
+      });
 
       plansLoadBtn?.addEventListener('click', () => {
         void loadPlans();
