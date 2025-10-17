@@ -10,6 +10,7 @@ import { adminBotsRouter } from './admin/bots.js';
 import { createBotRouter } from './admin/createBot.js';
 import { registerAdminDownsellsRoutes } from './admin/downsells.js';
 import { registerAdminPlansRoutes } from './admin/plans.js';
+import { adminMetricsRouter } from './admin/metrics.js';
 
 export function createApp() {
   const app = express();
@@ -39,6 +40,7 @@ export function createApp() {
   mountAdminUpload(app);
   app.use(createBotRouter);
   app.use(adminBotsRouter);
+  app.use(adminMetricsRouter);
   registerAdminDownsellsRoutes(app);
   registerAdminPlansRoutes(app);
 

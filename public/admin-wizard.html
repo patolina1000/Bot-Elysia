@@ -5167,6 +5167,36 @@
         await scheduleMetricsRefresh({ slug, limit, silent: false });
       }
 
+      // Chat metrics card update
+      async function updateMetricsCard(slug) {
+        if (!slug) {
+          // Reset to defaults
+          document.getElementById('metric-active-count').textContent = '0';
+          document.getElementById('metric-blocked-count').textContent = '0';
+          document.getElementById('metric-unknown-count').textContent = '0';
+          return;
+        }
+
+        try {
+          const url = `/admin/metrics/chats?bot_slug=${encodeURIComponent(slug)}&days=30`;
+          const data = await fetchJSON(url);
+          
+          if (data && data.ok) {
+            document.getElementById('metric-active-count').textContent = String(data.active || 0);
+            document.getElementById('metric-blocked-count').textContent = String(data.blocked || 0);
+            document.getElementById('metric-unknown-count').textContent = String(data.unknown || 0);
+          } else {
+            throw new Error('Invalid response format');
+          }
+        } catch (error) {
+          console.error('Failed to update metrics card:', error);
+          // On failure, set to 0
+          document.getElementById('metric-active-count').textContent = '0';
+          document.getElementById('metric-blocked-count').textContent = '0';
+          document.getElementById('metric-unknown-count').textContent = '0';
+        }
+      }
+
       function renderLatencyPlaceholder(message = 'Nenhum envio registrado ainda.') {
         const canvas = getLatencyCanvas();
         if (!canvas) {
@@ -5374,6 +5404,9 @@
 
           if (targetId) {
             await selectBot(targetId);
+          } else {
+            // Clear metrics card if no bot is selected
+            void updateMetricsCard('');
           }
         } catch (err) {
           alert(err instanceof Error ? err.message : 'Erro ao carregar bots.');
@@ -5436,6 +5469,9 @@
         if (metricsBotSelect && targetBot.slug) {
           metricsBotSelect.value = targetBot.slug;
         }
+
+        // Update chat metrics card
+        void updateMetricsCard(targetBot.slug || '');
 
         destroyLatencyChart();
         await loadBotPane(botId);
