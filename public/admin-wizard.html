@@ -3692,7 +3692,7 @@
 
       renderPixPreview();
 
-      let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
+      let ADMIN_TOKEN = localStorage.getItem('admin_token') || 'SEU_TOKEN_AQUI';
       if (ADMIN_TOKEN) {
         tokenInput.value = ADMIN_TOKEN;
       }
@@ -3708,6 +3708,45 @@
 
       function getAdminToken() {
         return (ADMIN_TOKEN || '').trim();
+      }
+
+      async function api(path, opts = {}) {
+        const token = getAdminToken() || 'SEU_TOKEN_AQUI';
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(opts.headers || {}),
+        };
+
+        try {
+          const response = await fetch(path, { ...opts, headers });
+          let data = null;
+          try {
+            data = await response.json();
+          } catch (error) {
+            data = {};
+          }
+
+          if (!response.ok) {
+            return {
+              ok: false,
+              status: response.status,
+              ...(data && typeof data === 'object' ? data : {}),
+              error: (data && typeof data === 'object' && data.error) || `Erro ${response.status}`,
+            };
+          }
+
+          if (data && typeof data === 'object' && !('ok' in data)) {
+            return { ok: true, ...data };
+          }
+
+          return data ?? { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error instanceof Error ? error.message : 'Erro na requisição',
+          };
+        }
       }
 
       function showToast(message) {
@@ -6152,6 +6191,7 @@
         elAudiencePix  ?.addEventListener('click', () => selectAudience('pix'));
         elSendNow      ?.addEventListener('click', () => selectSend('now'));
         elSendSched    ?.addEventListener('click', () => selectSend('schedule'));
+        elCTA          ?.addEventListener('click', () => { void createShotFromUI(); });
 
         // Init padrão
         selectAudience('start');
@@ -6528,7 +6568,6 @@
       const shotForm = document.getElementById('shot-form');
       const shotNewBtn = document.getElementById('shot-new-btn');
       const shotReloadBtn = document.getElementById('shot-reload-btn');
-      const shotSaveBtn = document.getElementById('shot-save-btn');
       const shotsList = document.getElementById('shots-list');
       const shotsEmpty = document.getElementById('shots-empty');
       const shotsSlugLabel = document.getElementById('shots-current-slug');
@@ -6554,6 +6593,175 @@
       const shotPlansCounter = document.getElementById('shot-plans-count');
 
       const SHOT_EXTRA_PLANS_MAX = 8;
+
+      function getShotBotSlugValue() {
+        const explicitInput = document.querySelector('#shot-bot-slug');
+        const fallback = plansBotSlugInput;
+        return (explicitInput?.value || fallback?.value || '').trim();
+      }
+
+      function getShotAudienceValue() {
+        const audienceField = document.querySelector('#shot-audience');
+        if (audienceField && audienceField instanceof HTMLSelectElement) {
+          return (audienceField.value || 'started').trim() || 'started';
+        }
+
+        const state = typeof window.getShotFormState === 'function' ? window.getShotFormState() : null;
+        return state?.audience === 'pix' ? 'pix' : 'started';
+      }
+
+      function getShotWhenValue() {
+        const whenField = document.querySelector('#shot-send-at');
+        const direct = whenField?.value?.trim();
+        if (direct) {
+          return direct;
+        }
+
+        const state = typeof window.getShotFormState === 'function' ? window.getShotFormState() : null;
+        if (state?.send_mode === 'schedule' && state?.schedule_at) {
+          return state.schedule_at;
+        }
+
+        return 'now';
+      }
+
+      function getShotMediaTypeValue(defaultUrl) {
+        const mediaTypeField = document.querySelector('#shot-media-type');
+        if (mediaTypeField && mediaTypeField instanceof HTMLSelectElement) {
+          const value = (mediaTypeField.value || '').trim();
+          if (value) {
+            return value;
+          }
+        }
+
+        if (!defaultUrl) {
+          return 'text';
+        }
+
+        const lowerUrl = defaultUrl.toLowerCase();
+        if (/\.(png|jpe?g|gif|webp|heic|heif)$/i.test(lowerUrl)) {
+          return 'photo';
+        }
+        if (/\.(mp4|mov|m4v|webm)$/i.test(lowerUrl)) {
+          return 'video';
+        }
+        if (/\.(mp3|ogg|wav|m4a)$/i.test(lowerUrl)) {
+          return 'audio';
+        }
+
+        return 'document';
+      }
+
+      function formatShotDateTime(value) {
+        if (!value) {
+          return '—';
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return value;
+        }
+
+        try {
+          return date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        } catch (error) {
+          return date.toLocaleString('pt-BR');
+        }
+      }
+
+      async function createShotFromUI() {
+        const botSlug = getShotBotSlugValue();
+        if (!botSlug) {
+          alert('Informe o slug do bot.');
+          return;
+        }
+
+        const messageInput = document.querySelector('#shot-message') || shotCopyTextarea;
+        const messageText = messageInput?.value?.trim() || '';
+        if (!messageText) {
+          alert('Escreva a mensagem do disparo.');
+          messageInput?.focus?.();
+          return;
+        }
+
+        const mediaInput = document.querySelector('#shot-media-url');
+        const mediaUrl = mediaInput?.value?.trim() || shotMediaUrlInput?.value?.trim() || '';
+
+        const body = {
+          bot_slug: botSlug,
+          audience: getShotAudienceValue(),
+          send_at: getShotWhenValue() || 'now',
+          media_type: getShotMediaTypeValue(mediaUrl),
+          message_text: messageText,
+          media_url: mediaUrl || undefined,
+          parse_mode: 'HTML',
+        };
+
+        const cta = document.getElementById('shot-primary-cta');
+        if (cta) {
+          cta.disabled = true;
+        }
+
+        const result = await api('/admin/api/shots', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+
+        if (cta) {
+          cta.disabled = false;
+        }
+
+        if (result?.ok) {
+          alert(`Disparo #${result.id ?? '—'} criado. Fila: ${result.queued ?? 0}`);
+          closeShotModal();
+        } else {
+          alert(`Erro: ${result?.error || 'Não foi possível criar o disparo.'}`);
+        }
+
+        await refreshShotsList();
+      }
+
+      async function refreshShotsList() {
+        if (!shotsList || !shotsEmpty) {
+          return;
+        }
+
+        const botSlug = getShotBotSlugValue();
+        updateShotsSlugLabel(botSlug);
+
+        if (!botSlug) {
+          renderShotsPlaceholder('Informe o slug do bot para listar disparos.');
+          return;
+        }
+
+        renderShotsPlaceholder('Carregando disparos...');
+
+        const response = await api(`/admin/api/shots${botSlug ? `?bot=${encodeURIComponent(botSlug)}` : ''}`);
+        if (response?.ok === false) {
+          const message = response?.error || 'Erro ao carregar disparos.';
+          renderShotsPlaceholder(message);
+          alert(message);
+          return;
+        }
+
+        const items = Array.isArray(response?.items) ? response.items : [];
+        renderShotItems(items);
+      }
+
+      async function cancelShot(id) {
+        if (!id) {
+          return;
+        }
+
+        const result = await api(`/admin/api/shots/${id}/cancel`, { method: 'POST' });
+        if (result?.ok) {
+          alert('Disparo cancelado.');
+        } else {
+          alert(`Erro ao cancelar: ${result?.error || 'Operação não realizada.'}`);
+        }
+
+        await refreshShotsList();
+      }
 
       function openShotModal() {
         if (!shotBackdrop || !shotModal || !shotForm) return;
@@ -6738,7 +6946,7 @@
       });
 
       shotReloadBtn?.addEventListener('click', () => {
-        void loadShots();
+        void refreshShotsList();
       });
 
       // Close modal buttons
@@ -6749,10 +6957,6 @@
             closeShotModal();
           }
         });
-      });
-
-      shotSaveBtn?.addEventListener('click', async () => {
-        await saveShot();
       });
 
       shotAddExtraPlanBtn?.addEventListener('click', () => {
@@ -6785,12 +6989,6 @@
         }
       });
 
-      // Load/render functions for shots
-      async function fetchShots(botSlug) {
-        const url = `/admin/api/shots?bot_slug=${encodeURIComponent(botSlug)}&ts=${Date.now()}`;
-        return fetchJSON(url, { cache: 'no-store' });
-      }
-
       function updateShotsSlugLabel(slug) {
         if (shotsSlugLabel) {
           shotsSlugLabel.textContent = slug || '—';
@@ -6806,7 +7004,7 @@
 
       function renderShotItems(items) {
         if (!shotsList || !shotsEmpty) return;
-        
+
         if (!Array.isArray(items) || items.length === 0) {
           renderShotsPlaceholder('Nenhum disparo criado ainda.');
           return;
@@ -6817,303 +7015,70 @@
 
         const fragment = document.createDocumentFragment();
         items.forEach((item) => {
-          const div = document.createElement('div');
-          div.className = 'shots-item';
-          
+          const container = document.createElement('div');
+          container.className = 'shots-item';
+
           const header = document.createElement('div');
           header.className = 'shots-item-header';
-          
-          const buttonText = document.createElement('strong');
-          buttonText.textContent = item.button_text || 'Sem título';
-          header.appendChild(buttonText);
 
-          const badge = document.createElement('span');
-          badge.className = `shots-badge ${item.active ? 'active' : ''}`;
-          badge.textContent = item.active ? 'ativo' : 'inativo';
-          header.appendChild(badge);
+          const title = document.createElement('strong');
+          title.textContent = `#${item?.id ?? '—'}`;
+          header.appendChild(title);
 
-          div.appendChild(header);
+          const statusBadge = document.createElement('span');
+          statusBadge.className = 'shots-badge';
+          statusBadge.textContent = item?.status || 'desconhecido';
+          header.appendChild(statusBadge);
 
-          // Price or extra plans
-          if (item.price_cents) {
-            const price = document.createElement('div');
-            price.className = 'shots-item-price';
-            price.textContent = `Preço: ${centsToBRL(item.price_cents)}`;
-            div.appendChild(price);
-          } else if (item.extra_plans && item.extra_plans.length > 0) {
-            const price = document.createElement('div');
-            price.className = 'shots-item-price';
-            price.textContent = `${item.extra_plans.length} opções de preço`;
-            div.appendChild(price);
-          }
+          container.appendChild(header);
 
-          // Audience
           const audience = document.createElement('div');
           audience.className = 'shots-item-moment';
-          const audienceText = item.audience === 'pix' ? 'Público: Quem criou PIX' : 'Público: Quem iniciou o bot';
-          audience.textContent = audienceText;
-          div.appendChild(audience);
+          const audienceLabel = (item?.audience || '').toString().toLowerCase();
+          audience.textContent = audienceLabel === 'pix' ? 'Público: Quem gerou PIX' : 'Público: Quem iniciou o bot';
+          container.appendChild(audience);
 
-          // Status
-          const status = document.createElement('div');
-          status.className = 'shots-item-moment';
-          status.textContent = `Status: ${item.status}`;
-          div.appendChild(status);
+          const deliver = document.createElement('div');
+          deliver.className = 'shots-item-moment';
+          deliver.textContent = item?.deliver_at ? `Entrega: ${formatShotDateTime(item.deliver_at)}` : 'Entrega: imediata';
+          container.appendChild(deliver);
 
-          // Actions
+          const queue = document.createElement('div');
+          queue.className = 'shots-item-moment';
+          const sent = Number(item?.sent_count ?? 0);
+          const total = Number(item?.total_in_queue ?? 0);
+          queue.textContent = `Fila: ${sent}/${total}`;
+          container.appendChild(queue);
+
           const actions = document.createElement('div');
           actions.className = 'shots-item-actions';
 
-          const sendBtn = document.createElement('button');
-          sendBtn.type = 'button';
-          sendBtn.className = 'btn-primary';
-          sendBtn.textContent = 'Disparar Agora';
-          sendBtn.addEventListener('click', async () => {
-            if (confirm(`Disparar "${item.button_text}" agora?`)) {
-              await queueShot(item.id);
+          const cancelBtn = document.createElement('button');
+          cancelBtn.type = 'button';
+          cancelBtn.className = 'btn-danger';
+          cancelBtn.textContent = 'Cancelar';
+
+          const statusValue = (item?.status || '').toString().toLowerCase();
+          const cannotCancel = ['cancelado', 'cancelled', 'canceled', 'sent', 'finalizado', 'done', 'completed'].includes(statusValue);
+          cancelBtn.disabled = cannotCancel;
+
+          cancelBtn.addEventListener('click', async () => {
+            if (!item?.id) {
+              return;
             }
-          });
-          actions.appendChild(sendBtn);
-
-          const scheduleBtn = document.createElement('button');
-          scheduleBtn.type = 'button';
-          scheduleBtn.className = 'btn-secondary';
-          scheduleBtn.textContent = 'Agendar';
-          scheduleBtn.addEventListener('click', () => {
-            showScheduleDialog(item.id);
-          });
-          actions.appendChild(scheduleBtn);
-
-          const deleteBtn = document.createElement('button');
-          deleteBtn.type = 'button';
-          deleteBtn.className = 'btn-danger';
-          deleteBtn.textContent = 'Excluir';
-          deleteBtn.addEventListener('click', async () => {
-            if (confirm(`Excluir disparo "${item.button_text}"?`)) {
-              await deleteShot(item.id);
+            if (!confirm('Cancelar este disparo?')) {
+              return;
             }
+            await cancelShot(item.id);
           });
-          actions.appendChild(deleteBtn);
 
-          div.appendChild(actions);
-          fragment.appendChild(div);
+          actions.appendChild(cancelBtn);
+          container.appendChild(actions);
+
+          fragment.appendChild(container);
         });
 
         shotsList.appendChild(fragment);
-      }
-
-      async function loadShots() {
-        if (!shotsList || !shotsEmpty) return;
-
-        const slug = (plansBotSlugInput?.value || '').trim();
-        updateShotsSlugLabel(slug);
-
-        if (!slug) {
-          renderShotsPlaceholder('Informe o slug do bot para listar disparos.');
-          return;
-        }
-
-        renderShotsPlaceholder('Carregando disparos...');
-
-        try {
-          const response = await fetchShots(slug);
-          const items = Array.isArray(response?.items) ? response.items : [];
-          renderShotItems(items);
-        } catch (error) {
-          console.error('[shots] erro ao carregar', error);
-          const message = error instanceof Error ? error.message : 'Erro ao carregar disparos.';
-          renderShotsPlaceholder(message);
-          showToast(message);
-        }
-      }
-
-      function collectShotExtraPlans() {
-        if (!shotExtraPlansList) return [];
-        
-        const rows = Array.from(shotExtraPlansList.querySelectorAll('.shot-plan-row'));
-        return rows.map((r) => {
-          const [labelEl, priceEl] = r.querySelectorAll('input');
-          const label = (labelEl?.value || '').trim();
-          const price = (priceEl?.value || '').trim();
-          return { label, price };
-        }).filter(p => p.label && p.price);
-      }
-
-      async function saveShot() {
-        const slug = (plansBotSlugInput?.value || '').trim();
-        if (!slug) {
-          alert('Informe o slug do bot.');
-          return;
-        }
-
-        if (!getAdminToken()) {
-          alert('Token de admin não configurado.');
-          return;
-        }
-
-        const buttonText = shotButtonLabelInput?.value?.trim() || '';
-        if (!buttonText) {
-          alert('Informe o texto do botão.');
-          shotButtonLabelInput?.focus();
-          return;
-        }
-
-        const priceBrl = shotPriceBrlInput?.value?.trim() || '';
-        const extraPlans = collectShotExtraPlans();
-
-        if (!priceBrl && extraPlans.length === 0) {
-          alert('Informe um preço OU adicione planos extras.');
-          shotPriceBrlInput?.focus();
-          return;
-        }
-
-        const payload = {
-          bot_slug: slug,
-          audience: shotState.audience || 'started',
-          send_mode: shotState.send || 'now',
-          button_text: buttonText,
-          price_cents: priceBrl ? priceBrl : null,
-          price: priceBrl,
-          extra_plans: extraPlans,
-          intro_text: shotIntroTextInput?.value?.trim() || null,
-          copy: shotCopyTextarea?.value?.trim() || null,
-          media_url: shotMediaUrlInput?.value?.trim() || null,
-          timezone: 'America/Sao_Paulo',
-        };
-
-        // Add schedule info if scheduled
-        if (shotState.send === 'schedule') {
-          const dateInput = document.getElementById('shot_schedule_date');
-          const timeInput = document.getElementById('shot_schedule_time');
-          const date = dateInput?.value?.trim();
-          const time = timeInput?.value?.trim();
-          
-          if (!date || !time) {
-            alert('Para agendar, informe data e horário.');
-            return;
-          }
-          
-          payload.date = date;
-          payload.time = time;
-        }
-
-        try {
-          const response = await fetch('/admin/api/shots', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${getAdminToken()}`,
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Erro ao salvar disparo');
-          }
-
-          const result = await response.json();
-          showToast('Disparo criado com sucesso!');
-          closeShotModal();
-          await loadShots();
-        } catch (error) {
-          console.error('[shots] erro ao salvar', error);
-          alert(error instanceof Error ? error.message : 'Erro ao salvar disparo');
-        }
-      }
-
-      async function queueShot(shotId) {
-        if (!getAdminToken()) {
-          alert('Token de admin não configurado.');
-          return;
-        }
-
-        try {
-          const response = await fetch(`/admin/api/shots/${shotId}/queue`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${getAdminToken()}`,
-            },
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Erro ao enfileirar disparo');
-          }
-
-          const result = await response.json();
-          showToast(`${result.queued || 0} disparos enfileirados!`);
-          await loadShots();
-        } catch (error) {
-          console.error('[shots] erro ao enfileirar', error);
-          alert(error instanceof Error ? error.message : 'Erro ao enfileirar disparo');
-        }
-      }
-
-      function showScheduleDialog(shotId) {
-        const date = prompt('Data (YYYY-MM-DD):');
-        const time = prompt('Hora (HH:MM):');
-        
-        if (date && time) {
-          void scheduleShot(shotId, date, time);
-        }
-      }
-
-      async function scheduleShot(shotId, date, time) {
-        if (!getAdminToken()) {
-          alert('Token de admin não configurado.');
-          return;
-        }
-
-        try {
-          const response = await fetch(`/admin/api/shots/${shotId}/schedule`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${getAdminToken()}`,
-            },
-            body: JSON.stringify({ date, time, timezone: 'America/Sao_Paulo' }),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Erro ao agendar disparo');
-          }
-
-          const result = await response.json();
-          showToast(`Disparo agendado para ${result.scheduled_at}! ${result.queued || 0} usuários na fila.`);
-          await loadShots();
-        } catch (error) {
-          console.error('[shots] erro ao agendar', error);
-          alert(error instanceof Error ? error.message : 'Erro ao agendar disparo');
-        }
-      }
-
-      async function deleteShot(shotId) {
-        if (!getAdminToken()) {
-          alert('Token de admin não configurado.');
-          return;
-        }
-
-        try {
-          const response = await fetch(`/admin/api/shots/${shotId}`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${getAdminToken()}`,
-            },
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Erro ao excluir disparo');
-          }
-
-          showToast('Disparo excluído!');
-          await loadShots();
-        } catch (error) {
-          console.error('[shots] erro ao excluir', error);
-          alert(error instanceof Error ? error.message : 'Erro ao excluir disparo');
-        }
       }
 
       // Initialize empty state
@@ -7128,7 +7093,7 @@
 
       // Auto-load shots when bot slug changes
       plansBotSlugInput?.addEventListener('change', () => {
-        void loadShots();
+        void refreshShotsList();
       });
 
       plansLoadBtn?.addEventListener('click', () => {
