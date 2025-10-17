@@ -141,7 +141,7 @@ export async function cancelShot(shotId: number) {
       `UPDATE public.shots SET status='canceled', updated_at=NOW() WHERE id=$1`,
       [shotId]
     );
-    // 2) Remove da fila somente itens ainda não processados, evitando depender de ENUM/CHECK 'canceled'
+    // Remover da fila apenas o que ainda não foi processado
     await client.query(
       `DELETE FROM public.shots_queue WHERE shot_id=$1 AND status='scheduled'`,
       [shotId]
