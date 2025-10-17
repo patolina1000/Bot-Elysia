@@ -10,7 +10,8 @@ import { adminBotsRouter } from './admin/bots.js';
 import { createBotRouter } from './admin/createBot.js';
 import { registerAdminDownsellsRoutes } from './admin/downsells.js';
 import { registerAdminPlansRoutes } from './admin/plans.js';
-import { registerAdminShotsRoutes } from './admin/shots.js';
+import { authAdminMiddleware } from './http/middleware/authAdmin.js';
+import { postCreateShot, getListShots, postCancelShot } from './admin/shots.js';
 
 export function createApp() {
   const app = express();
@@ -42,7 +43,9 @@ export function createApp() {
   app.use(adminBotsRouter);
   registerAdminDownsellsRoutes(app);
   registerAdminPlansRoutes(app);
-  registerAdminShotsRoutes(app);
+  app.post('/admin/api/shots', authAdminMiddleware, postCreateShot);
+  app.get('/admin/api/shots', authAdminMiddleware, getListShots);
+  app.post('/admin/api/shots/:id/cancel', authAdminMiddleware, postCancelShot);
 
   // Routes
   app.use(webhookRouter);
