@@ -28,11 +28,30 @@ CREATE TABLE IF NOT EXISTS shots_queue (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Idempotent protection: ensure scheduled_at column exists
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'scheduled_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.shots_queue ADD COLUMN scheduled_at TIMESTAMPTZ NOT NULL DEFAULT now()';
+  END IF;
+END $$;
+
+-- Drop any potentially broken indexes that might reference deliver_at or wrong column names
+DROP INDEX IF EXISTS idx_shots_queue_deliver_at;
+DROP INDEX IF EXISTS idx_shots_queue_deliver_at_pending;
+DROP INDEX IF EXISTS idx_shots_queue_status_deliver_at;
+
 -- Create indexes for optimal query performance
+-- Worker selection index (pending): idx_shots_queue_scheduled on (scheduled_at) with WHERE status='pending'
 CREATE INDEX IF NOT EXISTS idx_shots_queue_scheduled 
   ON shots_queue (status, scheduled_at)
   WHERE status IN ('pending', 'running');
 
+-- Bot filter index: idx_shots_queue_slug on (bot_slug, status, scheduled_at)
 CREATE INDEX IF NOT EXISTS idx_shots_queue_slug 
   ON shots_queue (bot_slug, status, scheduled_at DESC);
 
