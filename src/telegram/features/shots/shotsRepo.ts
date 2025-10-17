@@ -28,24 +28,29 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
     );
     const shotId = shotRows[0].id as number;
 
-    // Seleção de público (MVP via funnel_events)
-    // started => event_name='bot_start'
-    // pix     => event_name IN ('pix_created','purchase')
-    const audienceSql = input.audience === 'started'
-      ? `
-        SELECT DISTINCT fe.telegram_id
-        FROM public.funnel_events fe
-        WHERE fe.bot_slug = $1
-          AND fe.event_name = 'bot_start'
-          AND fe.telegram_id IS NOT NULL
-      `
-      : `
-        SELECT DISTINCT fe.telegram_id
-        FROM public.funnel_events fe
-        WHERE fe.bot_slug = $1
-          AND fe.event_name IN ('pix_created','purchase')
-          AND fe.telegram_id IS NOT NULL
-      `;
+    // Seleção de público (via funnel_events, compatível com schema atual)
+    // started => event = 'bot_start'
+    // pix     => event IN ('pix_created','purchase')
+    //
+    // Obs.: funnel_events não tem bot_slug; filtramos por bot_id
+    // usando a tabela bots (slug -> id). Os IDs dos usuários
+    // estão em tg_user_id.
+    const audienceSql =
+      input.audience === 'started'
+        ? `
+          SELECT DISTINCT fe.tg_user_id AS telegram_id
+            FROM public.funnel_events fe
+           WHERE fe.bot_id IN (SELECT id FROM public.bots WHERE slug = $1)
+             AND fe.event = 'bot_start'
+             AND fe.tg_user_id IS NOT NULL
+        `
+        : `
+          SELECT DISTINCT fe.tg_user_id AS telegram_id
+            FROM public.funnel_events fe
+           WHERE fe.bot_id IN (SELECT id FROM public.bots WHERE slug = $1)
+             AND fe.event IN ('pix_created','purchase')
+             AND fe.tg_user_id IS NOT NULL
+        `;
 
     const { rows: tgRows } = await client.query(audienceSql, [input.bot_slug]);
 
