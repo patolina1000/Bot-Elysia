@@ -3290,7 +3290,7 @@
                   </div>
                   <input id="shot-schedule-time" type="hidden">
                 </label>
-                <div id="shot-schedule-tz" class="tz-badge">America/São_Paulo (GMT-3)</div>
+                <div id="shot-schedule-tz" class="tz-badge">America/Recife (UTC-03:00)</div>
               </div>
               <small class="form-section__help">Enviaremos automaticamente na data e hora definidas.</small>
             </div>
@@ -6122,6 +6122,84 @@
       void loadDownsells({ silent: true });
 
       /* ===== Disparos: wire-up do modal (UI) ===== */
+      const SHOT_SCHEDULE_TIMEZONE = 'America/Recife';
+
+      function getTimezoneOffsetMinutes(timeZone = SHOT_SCHEDULE_TIMEZONE, reference = new Date()) {
+        try {
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            timeZoneName: 'shortOffset',
+          });
+          const parts = fmt.formatToParts(reference);
+          const offsetPart = parts.find((part) => part.type === 'timeZoneName');
+          if (offsetPart) {
+            const match = offsetPart.value.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+            if (match) {
+              const sign = match[1] === '+' ? 1 : -1;
+              const hours = Number(match[2]) || 0;
+              const minutes = Number(match[3]) || 0;
+              return -sign * (hours * 60 + minutes);
+            }
+          }
+        } catch (error) {
+          // Ignora e usa fallback
+        }
+
+        if (timeZone === SHOT_SCHEDULE_TIMEZONE) {
+          return 3 * 60; // Recife (UTC-03)
+        }
+
+        return new Date().getTimezoneOffset();
+      }
+
+      function formatOffsetSuffix(offsetMinutes) {
+        const total = Math.abs(offsetMinutes);
+        const hours = Math.floor(total / 60);
+        const minutes = total % 60;
+        const sign = offsetMinutes > 0 ? '-' : offsetMinutes < 0 ? '+' : '+';
+        return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      }
+
+      function getZonedDateInfo(timeZone = SHOT_SCHEDULE_TIMEZONE, reference = new Date()) {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        });
+
+        const data = {};
+        formatter.formatToParts(reference).forEach((part) => {
+          if (part.type !== 'literal') {
+            data[part.type] = part.value;
+          }
+        });
+
+        const year = Number(data.year);
+        const month = Number(data.month);
+        const day = Number(data.day);
+        const hour = Number(data.hour);
+        const minute = Number(data.minute);
+        const second = Number(data.second);
+        const offsetMinutes = getTimezoneOffsetMinutes(timeZone, reference);
+        const absoluteDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second) + offsetMinutes * 60_000);
+
+        return {
+          year,
+          month,
+          day,
+          hour,
+          minute,
+          second,
+          offsetMinutes,
+          absoluteDate,
+        };
+      }
+
       (function ShotsUI() {
         // Helpers (usa os já existentes se houver)
         const $  = (sel, ctx=document) => ctx.querySelector(sel);
@@ -6217,14 +6295,26 @@
 
           // Schedule datetime (se Programar)
           let schedule_at = null;
+          let schedule_timezone = null;
           if (shotState.send === 'schedule') {
             const dMask = elDate?.value?.trim();  // dd/mm/aaaa
             const h = elTime?.value?.trim();      // HH:MM
             if (dMask && h) {
-              // Converter dd/mm/aaaa para YYYY-MM-DD
               const [dd, mm, yyyy] = dMask.split('/');
+              const [hourStr = '00', minuteStr = '00'] = h.split(':');
               const isoDate = `${yyyy}-${mm}-${dd}`;  // YYYY-MM-DD
-              schedule_at = `${isoDate}T${h}:00`;
+              const reference = new Date(Date.UTC(
+                Number(yyyy),
+                Number(mm) - 1,
+                Number(dd),
+                Number(hourStr),
+                Number(minuteStr) || 0,
+                0,
+              ));
+              const offsetMinutes = getTimezoneOffsetMinutes(SHOT_SCHEDULE_TIMEZONE, reference);
+              const tzSuffix = formatOffsetSuffix(offsetMinutes);
+              schedule_timezone = SHOT_SCHEDULE_TIMEZONE;
+              schedule_at = `${isoDate}T${hourStr}:${minuteStr}:00${tzSuffix}`;
             }
           }
 
@@ -6232,7 +6322,8 @@
             // UI state
             audience: shotState.audience,      // 'start' | 'pix'
             send_mode: shotState.send,         // 'now' | 'schedule'
-            schedule_at,                       // string ISO local ou null
+            schedule_at,                       // string ISO com timezone ou null
+            schedule_timezone,
 
             // Form fields
             button_label: label,
@@ -6258,33 +6349,37 @@
         const elMonthYear = $('#shot-cal-month-year');
         const elPrev = $('#shot-cal-prev');
         const elNext = $('#shot-cal-next');
+        const elTimezoneBadge = $('#shot-schedule-tz');
         const elHourSelect = $('#shot-time-hour');
         const elMinuteSelect = $('#shot-time-minute');
         const elTimeHidden = $('#shot-schedule-time');
 
         if (!elDateInput || !elPopover) return {};
 
+        if (elTimezoneBadge) {
+          const offsetMinutes = getTimezoneOffsetMinutes(SHOT_SCHEDULE_TIMEZONE);
+          const suffix = formatOffsetSuffix(offsetMinutes);
+          elTimezoneBadge.textContent = `${SHOT_SCHEDULE_TIMEZONE} (UTC${suffix})`;
+        }
+
         const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
         // Estado interno
-        let currentYear = new Date().getFullYear();
-        let currentMonth = new Date().getMonth();
+        const nowRecifeInfo = getZonedDateInfo(SHOT_SCHEDULE_TIMEZONE);
+        let currentYear = nowRecifeInfo.year;
+        let currentMonth = nowRecifeInfo.month - 1;
         let selectedDate = null; // Objeto Date ou null
 
-        // Função para obter a data de hoje em São Paulo
-        function getTodaySP() {
-          const now = new Date();
-          // Converte para São Paulo (GMT-3)
-          const spOffset = -3 * 60; // minutos
-          const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-          const spTime = new Date(utc + (spOffset * 60000));
-          return new Date(spTime.getFullYear(), spTime.getMonth(), spTime.getDate());
+        // Função para obter a data de hoje considerando America/Recife
+        function getTodayRecife() {
+          const info = getZonedDateInfo(SHOT_SCHEDULE_TIMEZONE);
+          return new Date(info.year, info.month - 1, info.day);
         }
 
         // Função para renderizar o calendário
         function renderCalendar() {
-          const today = getTodaySP();
+          const today = getTodayRecife();
           const firstDay = new Date(currentYear, currentMonth, 1);
           const lastDay = new Date(currentYear, currentMonth + 1, 0);
           const prevLastDay = new Date(currentYear, currentMonth, 0);
@@ -6411,7 +6506,7 @@
           // Parsear data dd/mm/aaaa
           const [dd, mm, yyyy] = dateValue.split('/');
           const selectedDateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
-          const today = getTodaySP();
+          const today = getTodayRecife();
 
           // Verificar se é hoje
           const isToday = selectedDateObj.getTime() === today.getTime();
@@ -6430,9 +6525,9 @@
           }
 
           // Se é hoje, bloquear horas passadas
-          const now = new Date();
-          const currentHour = now.getHours();
-          const currentMinute = now.getMinutes();
+          const nowInfo = getZonedDateInfo(SHOT_SCHEDULE_TIMEZONE);
+          const currentHour = Number(nowInfo.hour);
+          const currentMinute = Number(nowInfo.minute);
           
           // Arredondar para o próximo bloco de 15 minutos
           let minMinute = Math.ceil(currentMinute / 15) * 15;
@@ -6491,6 +6586,12 @@
 
         // Inicializar com valor padrão
         updateTimeHidden();
+        updateTimeOptions();
+
+        // Atualizar bloqueios periodicamente para manter o mínimo alinhado ao horário atual
+        setInterval(() => {
+          updateTimeOptions();
+        }, 60_000);
 
         // Expor renderCalendar para uso externo
         return { renderCalendar };
@@ -6696,6 +6797,37 @@
           media_url: mediaUrl || undefined,
           parse_mode: 'HTML',
         };
+
+        const formState = typeof window.getShotFormState === 'function' ? window.getShotFormState() : null;
+
+        if (formState?.send_mode === 'schedule') {
+          const scheduleRaw = (formState.schedule_at ?? '').toString().trim();
+          if (!scheduleRaw) {
+            alert('Escolha uma data e hora para agendar o disparo.');
+            return;
+          }
+
+          const scheduledDate = new Date(scheduleRaw);
+          if (Number.isNaN(scheduledDate.getTime())) {
+            alert('Data/hora de agendamento inválida.');
+            return;
+          }
+
+          const nowRecife = getZonedDateInfo(SHOT_SCHEDULE_TIMEZONE).absoluteDate;
+          if (scheduledDate.getTime() < nowRecife.getTime() - 1_000) {
+            alert('Escolha uma data/hora futura no fuso America/Recife (UTC-03:00).');
+            return;
+          }
+
+          body.send_at = 'schedule';
+          body.scheduled_at = scheduledDate.toISOString();
+          body.schedule_at = scheduleRaw;
+          body.timezone = formState.schedule_timezone || SHOT_SCHEDULE_TIMEZONE;
+        } else {
+          body.scheduled_at = undefined;
+          body.schedule_at = undefined;
+          body.timezone = undefined;
+        }
 
         const cta = document.getElementById('shot-primary-cta');
         if (cta) {
