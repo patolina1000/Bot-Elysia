@@ -8,7 +8,7 @@
     "node": ">=20 <26"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/db/migrations dist/db/sql && cp src/db/migrations/*.sql dist/db/migrations/ && cp src/db/sql/*.sql dist/db/sql/",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/runMigrations.ts",
