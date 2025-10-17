@@ -255,3 +255,97 @@ export class TelegramContactsService {
 }
 
 export const telegramContactsService = new TelegramContactsService();
+
+/**
+ * Update telegram contact chat state (standalone function for worker usage)
+ * @param botSlug - Bot slug
+ * @param telegramId - Telegram user ID
+ * @param newState - New chat state (blocked, deactivated, active, unknown)
+ */
+export async function updateTelegramContactChatState(
+  botSlug: string,
+  telegramId: number,
+  newState: ChatState
+): Promise<void> {
+  try {
+    if (newState === 'blocked') {
+      await pool.query(
+        `INSERT INTO telegram_contacts (
+          bot_slug, 
+          telegram_id, 
+          chat_state, 
+          first_seen_at,
+          blocked_at
+        )
+        VALUES ($1, $2, 'blocked', now(), now())
+        ON CONFLICT (bot_slug, telegram_id) 
+        DO UPDATE SET
+          chat_state = 'blocked'::chat_state_enum,
+          blocked_at = now(),
+          updated_at = now()`,
+        [botSlug, telegramId]
+      );
+    } else if (newState === 'deactivated') {
+      await pool.query(
+        `INSERT INTO telegram_contacts (
+          bot_slug, 
+          telegram_id, 
+          chat_state, 
+          first_seen_at
+        )
+        VALUES ($1, $2, 'deactivated', now())
+        ON CONFLICT (bot_slug, telegram_id) 
+        DO UPDATE SET
+          chat_state = 'deactivated'::chat_state_enum,
+          updated_at = now()`,
+        [botSlug, telegramId]
+      );
+    } else if (newState === 'active') {
+      await pool.query(
+        `INSERT INTO telegram_contacts (
+          bot_slug, 
+          telegram_id, 
+          chat_state, 
+          first_seen_at,
+          last_interaction_at,
+          unblocked_at
+        )
+        VALUES ($1, $2, 'active', now(), now(), now())
+        ON CONFLICT (bot_slug, telegram_id) 
+        DO UPDATE SET
+          chat_state = 'active'::chat_state_enum,
+          last_interaction_at = now(),
+          unblocked_at = now(),
+          updated_at = now()`,
+        [botSlug, telegramId]
+      );
+    } else {
+      // unknown state
+      await pool.query(
+        `INSERT INTO telegram_contacts (
+          bot_slug, 
+          telegram_id, 
+          chat_state, 
+          first_seen_at
+        )
+        VALUES ($1, $2, 'unknown', now())
+        ON CONFLICT (bot_slug, telegram_id) 
+        DO UPDATE SET
+          chat_state = 'unknown'::chat_state_enum,
+          updated_at = now()`,
+        [botSlug, telegramId]
+      );
+    }
+
+    logger.debug(
+      { bot_slug: botSlug, telegram_id: telegramId, new_state: newState },
+      '[CONTACTS] Chat state updated'
+    );
+  } catch (err) {
+    logger.error(
+      { err, bot_slug: botSlug, telegram_id: telegramId, new_state: newState },
+      '[CONTACTS] Failed to update chat state'
+    );
+    throw err;
+  }
+}

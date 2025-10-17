@@ -11,7 +11,7 @@ import {
 } from '../../db/shotsQueue.js';
 import { recordShotSent, bulkRecordShotsSent, type RecordShotSentParams } from '../../db/shotsSent.js';
 import { selectAudience } from './audienceSelector.js';
-import { updateTelegramContactChatState } from '../../services/TelegramContactsService.js';
+import { updateTelegramContactChatState } from '../../services/TelegramContactsService';
 import type { PoolClient } from 'pg';
 
 const LOCK_KEY = 4839202; // Different from downsells worker
@@ -137,7 +137,7 @@ async function processBatch(
               job.bot_slug,
               member.telegram_id,
               'blocked'
-            ).catch((err) => {
+            ).catch((err: unknown) => {
               logger.warn(
                 { err, telegram_id: member.telegram_id },
                 '[SHOTS][WORKER] failed to update chat_state to blocked'
@@ -155,7 +155,7 @@ async function processBatch(
               job.bot_slug,
               member.telegram_id,
               'deactivated'
-            ).catch((err) => {
+            ).catch((err: unknown) => {
               logger.warn(
                 { err, telegram_id: member.telegram_id },
                 '[SHOTS][WORKER] failed to update chat_state to deactivated'
