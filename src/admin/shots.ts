@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { DateTime } from 'luxon';
 import {
   createShotAndQueue,
   cancelShot,
@@ -28,17 +29,11 @@ function normalizeMediaType(value: unknown): NewShot['media_type'] {
 
 export async function postCreateShot(req: Request, res: Response) {
   try {
-    const {
-      bot_slug,
-      audience,
-      send_at,
-      scheduled_at,
-      media_type,
-      message_text,
-      media_url,
-      parse_mode,
-      deliver_at: deliverAtBody,
-    } = req.body || {};
+    const { bot_slug, audience, send_at, media_type, message_text, media_url, parse_mode } = req.body || {};
+
+    if (!bot_slug || !audience || !media_type) {
+      return res.status(400).json({ error: 'bot_slug, audience e media_type são obrigatórios' });
+    }
 
     const botSlug = (bot_slug ?? '').toString().trim();
     const audienceValue = normalizeAudience(audience);
@@ -65,22 +60,19 @@ export async function postCreateShot(req: Request, res: Response) {
       return res.status(400).json({ error: 'media_url é obrigatório para media_type diferente de text' });
     }
 
-    const sendAtRaw = (send_at ?? '').toString();
-    const scheduledRaw = scheduled_at ?? deliverAtBody ?? null;
-
     let deliver_at: Date;
-
-    if (!sendAtRaw || sendAtRaw === 'now') {
-      deliver_at = new Date();
-    } else if (sendAtRaw === 'schedule') {
-      const scheduledDate = scheduledRaw ? new Date(scheduledRaw) : null;
-      deliver_at = scheduledDate && !Number.isNaN(scheduledDate.getTime()) ? scheduledDate : new Date();
+    if (send_at === 'now') {
+      deliver_at = new Date(Date.now() + 5000);
+    } else if (typeof send_at === 'string') {
+      const hasTZ = /[Zz]|[+-]\d{2}:\d{2}$/.test(send_at);
+      const dt = hasTZ
+        ? DateTime.fromISO(send_at)
+        : DateTime.fromISO(send_at, { zone: 'America/Recife' });
+      if (!dt.isValid) {
+        return res.status(400).json({ error: 'send_at inválido' });
+      }
+      deliver_at = dt.toUTC().toJSDate();
     } else {
-      const parsed = new Date(sendAtRaw);
-      deliver_at = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-    }
-
-    if (Number.isNaN(deliver_at.getTime())) {
       return res.status(400).json({ error: 'send_at inválido' });
     }
 
