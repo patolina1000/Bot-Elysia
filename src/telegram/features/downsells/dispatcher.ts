@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { InlineKeyboard } from 'grammy';
 import { logger } from '../../../logger.js';
 import { pool } from '../../../db/pool.js';
+import { sendSafe } from '../../../utils/telegramErrorHandler.js';
 import {
   pickDueJobs,
   markJobAsSent,
@@ -154,21 +155,24 @@ async function sendDownsellMediaIfAny(
   try {
     let msg: any;
 
+    // Import sendSafe inline to avoid circular dependency issues
+    const { sendSafe } = await import('../../../utils/telegramErrorHandler.js');
+
     if (kind === 'video') {
-      msg = await bot.api.sendVideo(chatId, mediaUrl);
+      msg = await sendSafe(() => bot.api.sendVideo(chatId, mediaUrl), 'unknown', chatId);
     } else if (kind === 'audio') {
       // Se for OGG/Opus de "voice", o Telegram ainda aceita com sendAudio; se falhar, tentamos sendVoice.
       try {
-        msg = await bot.api.sendAudio(chatId, mediaUrl);
+        msg = await sendSafe(() => bot.api.sendAudio(chatId, mediaUrl), 'unknown', chatId);
       } catch (e) {
         jobLogger.warn({ e }, '[DOWNSELL][WORKER] sendAudio failed — trying sendVoice');
-        msg = await bot.api.sendVoice(chatId, mediaUrl);
+        msg = await sendSafe(() => bot.api.sendVoice(chatId, mediaUrl), 'unknown', chatId);
       }
     } else if (kind === 'animation') {
       // GIFs ficam melhor com sendAnimation
-      msg = await bot.api.sendAnimation(chatId, mediaUrl);
+      msg = await sendSafe(() => bot.api.sendAnimation(chatId, mediaUrl), 'unknown', chatId);
     } else {
-      msg = await bot.api.sendPhoto(chatId, mediaUrl);
+      msg = await sendSafe(() => bot.api.sendPhoto(chatId, mediaUrl), 'unknown', chatId);
     }
 
     const id = typeof msg?.message_id === 'number' ? msg.message_id : null;
@@ -280,7 +284,11 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
 
     if (downsell.copy && downsell.copy.trim().length > 0) {
       try {
-        await bot.api.sendMessage(job.telegram_id, downsell.copy, { parse_mode: 'HTML' });
+        await sendSafe(
+          () => bot.api.sendMessage(job.telegram_id, downsell.copy, { parse_mode: 'HTML' }),
+          job.bot_slug,
+          job.telegram_id
+        );
       } catch (copyErr) {
         jobLogger.warn({ err: copyErr }, '[DOWNSELL][WORKER] failed to send downsell copy');
       }
@@ -297,9 +305,13 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
         (typeof primaryPriceCents === 'number' && primaryPriceCents > 0 ? 1 : 0) +
         (Array.isArray(extraPlans) ? extraPlans.length : 0);
       jobLogger.info({ downsell_id: downsell.id, totalButtons }, '[DOWNSELL][UI] sending CTA');
-      const sent = await bot.api.sendMessage(job.telegram_id, introText, {
-        reply_markup: keyboard,
-      });
+      const sent = await sendSafe(
+        () => bot.api.sendMessage(job.telegram_id, introText, {
+          reply_markup: keyboard,
+        }),
+        job.bot_slug,
+        job.telegram_id
+      );
       const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;
 
       await recordSent(
@@ -346,9 +358,13 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
         };
 
         jobLogger.info({ downsell_id: downsell.id, totalButtons: 1 }, '[DOWNSELL][UI] sending CTA');
-        const sent = await bot.api.sendMessage(job.telegram_id, introText, {
-          reply_markup: keyboard,
-        });
+        const sent = await sendSafe(
+          () => bot.api.sendMessage(job.telegram_id, introText, {
+            reply_markup: keyboard,
+          }),
+          job.bot_slug,
+          job.telegram_id
+        );
         const sentMessageId = sent?.message_id !== undefined ? String(sent.message_id) : null;
 
         await recordSent(
@@ -430,7 +446,8 @@ async function handleJob(job: DownsellQueueJob, client: PoolClient): Promise<voi
       transaction,
       settingsForThisFlow,
       bot.api,
-      baseUrl
+      baseUrl,
+      job.bot_slug
     );
     const lastMessageId = message_ids.length > 0 ? message_ids[message_ids.length - 1] ?? null : null;
 

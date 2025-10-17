@@ -6,6 +6,7 @@ import { startFeature } from './features/start/index.js';
 import { funnelsFeature } from './features/funnels/index.js';
 import { broadcastFeature } from './features/broadcast/index.js';
 import { paymentsFeature } from './features/payments/index.js';
+import { chatMemberFeature } from './features/chatMember/index.js';
 import { getEncryptionKey } from '../utils/crypto.js';
 import { getBotPaymentGatewayConfig } from '../db/botPaymentConfigs.js';
 import { listPlans } from '../db/plans.js';
@@ -106,6 +107,38 @@ function registerBotFeatures(bot: Bot<MyContext>, config: BotRow, token: string)
     ctx.bot_features = features;
     await next();
   });
+
+  // Track user interactions for contact management
+  bot.use(async (ctx, next) => {
+    const telegramId = ctx.from?.id;
+    const botSlug = ctx.bot_slug;
+
+    // Only track if we have a valid user interaction (not my_chat_member)
+    if (telegramId && botSlug && !ctx.myChatMember) {
+      const { telegramContactsService } = await import('../services/TelegramContactsService.js');
+      
+      try {
+        await telegramContactsService.upsertOnInteraction({
+          bot_slug: botSlug,
+          telegram_id: telegramId,
+          username: ctx.from?.username,
+          language_code: ctx.from?.language_code,
+          is_premium: ctx.from?.is_premium,
+        });
+      } catch (err) {
+        ctx.logger.warn(
+          { err, telegram_id: telegramId },
+          '[CONTACTS] Failed to upsert contact on interaction'
+        );
+        // Don't block the request, just log the error
+      }
+    }
+    
+    await next();
+  });
+
+  // Always enable chat member tracking for contact management
+  bot.use(chatMemberFeature);
 
   const startEnabled = features['core-start'] !== false;
   if (startEnabled) {
