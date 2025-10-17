@@ -6803,25 +6803,249 @@
         updateShotPlansCounter();
       }
 
+      // ===== API Functions for Shots =====
+      async function loadShots() {
+        if (!plansBotSlugInput) return;
+        const slug = (plansBotSlugInput.value || '').trim();
+        
+        if (shotsSlugLabel) {
+          shotsSlugLabel.textContent = slug || '—';
+        }
+
+        if (!slug) {
+          if (shotsEmpty) {
+            shotsEmpty.classList.remove('hidden');
+            shotsEmpty.textContent = 'Selecione um bot para ver os disparos.';
+          }
+          if (shotsList) shotsList.innerHTML = '';
+          return;
+        }
+
+        try {
+          const token = getAdminToken();
+          const resp = await fetch(`/admin/api/shots?bot_slug=${encodeURIComponent(slug)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (!resp.ok) {
+            throw new Error(`Erro ${resp.status}: ${await resp.text()}`);
+          }
+
+          const data = await resp.json();
+          const items = data.items || [];
+
+          if (shotsList) {
+            shotsList.innerHTML = '';
+          }
+
+          if (items.length === 0) {
+            if (shotsEmpty) {
+              shotsEmpty.classList.remove('hidden');
+              shotsEmpty.textContent = 'Nenhum disparo criado ainda.';
+            }
+          } else {
+            if (shotsEmpty) {
+              shotsEmpty.classList.add('hidden');
+            }
+            items.forEach(shot => {
+              renderShotCard(shot);
+            });
+          }
+        } catch (err) {
+          console.error('[SHOTS] Load error:', err);
+          if (shotsEmpty) {
+            shotsEmpty.classList.remove('hidden');
+            shotsEmpty.textContent = `Erro ao carregar: ${err.message}`;
+          }
+        }
+      }
+
+      function renderShotCard(shot) {
+        if (!shotsList) return;
+
+        const card = document.createElement('div');
+        card.className = 'shots-item';
+        card.dataset.shotId = shot.id;
+
+        const statusBadge = shot.status === 'pending' ? 'Pendente'
+          : shot.status === 'running' ? 'Rodando'
+          : shot.status === 'sent' ? 'Enviado'
+          : shot.status === 'error' ? 'Erro'
+          : shot.status;
+
+        const targetLabel = shot.target === 'started' ? '/start' : 'PIX';
+        const scheduledDate = new Date(shot.scheduled_at);
+        const scheduledStr = scheduledDate.toLocaleString('pt-BR');
+
+        let statsHTML = '';
+        if (shot.stats) {
+          statsHTML = `<div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
+            📊 Enviados: ${shot.stats.sent} | Pulados: ${shot.stats.skipped} | Erros: ${shot.stats.error}
+          </div>`;
+        }
+
+        card.innerHTML = `
+          <div class="shots-item-header">
+            <span class="shots-badge">${statusBadge}</span>
+            <span class="shots-item-moment">${targetLabel}</span>
+          </div>
+          <p class="shots-item-copy">${(shot.copy || '').substring(0, 100)}${shot.copy.length > 100 ? '...' : ''}</p>
+          <div style="font-size: 12px; color: #6b7280;">
+            🗓️ ${scheduledStr}
+          </div>
+          ${statsHTML}
+          <div class="shots-item-actions">
+            ${shot.status === 'pending' ? `<button type="button" class="btn-soft" onclick="deleteShotById(${shot.id})">Cancelar</button>` : ''}
+          </div>
+        `;
+
+        shotsList.appendChild(card);
+      }
+
+      async function saveShotForm() {
+        if (!plansBotSlugInput) return;
+        const slug = (plansBotSlugInput.value || '').trim();
+        if (!slug) {
+          alert('Selecione um bot antes de criar um disparo.');
+          return;
+        }
+
+        // Get audience (target)
+        const audienceStartBtn = document.getElementById('shot-audience-start');
+        const audiencePixBtn = document.getElementById('shot-audience-pix');
+        const target = audienceStartBtn?.classList.contains('selected') ? 'started' : 'pix_created';
+
+        // Get copy
+        const copyTextarea = document.getElementById('shot_copy');
+        const copy = (copyTextarea?.value || '').trim();
+        if (!copy) {
+          alert('Por favor, preencha a mensagem do disparo.');
+          copyTextarea?.focus();
+          return;
+        }
+
+        // Get media
+        const mediaUrlInput = document.getElementById('shot_media_url');
+        const mediaUrl = (mediaUrlInput?.value || '').trim() || null;
+        
+        // Detect media type from URL extension
+        let mediaType = 'none';
+        if (mediaUrl) {
+          const url = mediaUrl.toLowerCase();
+          if (url.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+            mediaType = 'photo';
+          } else if (url.match(/\.(mp4|mov|avi|mkv|webm)$/)) {
+            mediaType = 'video';
+          } else if (url.match(/\.(mp3|ogg|m4a|wav)$/)) {
+            mediaType = 'audio';
+          }
+        }
+
+        // Get schedule
+        const sendNowBtn = document.getElementById('shot-send-now');
+        const sendScheduleBtn = document.getElementById('shot-send-schedule');
+        const isScheduled = sendScheduleBtn?.classList.contains('selected');
+
+        let scheduledAt = null;
+        if (isScheduled) {
+          const dateInput = document.getElementById('shot-schedule-date');
+          const timeHour = document.getElementById('shot-time-hour');
+          const timeMinute = document.getElementById('shot-time-minute');
+          
+          const dateStr = dateInput?.value || '';
+          const hour = timeHour?.value || '00';
+          const minute = timeMinute?.value || '00';
+
+          if (!dateStr) {
+            alert('Por favor, selecione uma data para o agendamento.');
+            return;
+          }
+
+          // Parse dd/mm/yyyy
+          const [day, month, year] = dateStr.split('/').map(Number);
+          if (!day || !month || !year) {
+            alert('Data inválida. Use o formato dd/mm/aaaa.');
+            return;
+          }
+
+          scheduledAt = new Date(year, month - 1, day, parseInt(hour), parseInt(minute));
+          if (isNaN(scheduledAt.getTime())) {
+            alert('Data/hora inválida.');
+            return;
+          }
+        }
+
+        // Build payload
+        const payload = {
+          bot_slug: slug,
+          target,
+          copy,
+          media_url: mediaUrl,
+          media_type: mediaType,
+        };
+
+        if (scheduledAt) {
+          payload.scheduled_at = scheduledAt.toISOString();
+        }
+
+        try {
+          const token = getAdminToken();
+          const resp = await fetch('/admin/api/shots', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!resp.ok) {
+            const error = await resp.text();
+            throw new Error(`Erro ${resp.status}: ${error}`);
+          }
+
+          const result = await resp.json();
+          console.log('[SHOTS] Created:', result);
+
+          alert('Disparo criado com sucesso!');
+          closeShotModal();
+          await loadShots();
+        } catch (err) {
+          console.error('[SHOTS] Save error:', err);
+          alert(`Erro ao salvar disparo: ${err.message}`);
+        }
+      }
+
+      window.deleteShotById = async function(shotId) {
+        if (!confirm('Cancelar este disparo?')) return;
+
+        try {
+          const token = getAdminToken();
+          const resp = await fetch(`/admin/api/shots/${shotId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (!resp.ok) {
+            const error = await resp.text();
+            throw new Error(`Erro ${resp.status}: ${error}`);
+          }
+
+          alert('Disparo cancelado!');
+          await loadShots();
+        } catch (err) {
+          console.error('[SHOTS] Delete error:', err);
+          alert(`Erro ao cancelar: ${err.message}`);
+        }
+      };
+
       // Event listeners
       shotNewBtn?.addEventListener('click', () => {
         openShotModal();
       });
 
-      shotReloadBtn?.addEventListener('click', () => {
-        // Placeholder for reload logic
-        if (shotsEmpty) {
-          shotsEmpty.classList.remove('hidden');
-          shotsEmpty.textContent = 'Nenhum disparo criado ainda.';
-        }
-        if (shotsList) {
-          shotsList.innerHTML = '';
-        }
-        // Update slug label
-        if (shotsSlugLabel && plansBotSlugInput) {
-          const slug = (plansBotSlugInput.value || '').trim();
-          shotsSlugLabel.textContent = slug || '—';
-        }
+      shotReloadBtn?.addEventListener('click', async () => {
+        await loadShots();
       });
 
       // Close modal buttons
@@ -6834,9 +7058,8 @@
         });
       });
 
-      shotSaveBtn?.addEventListener('click', () => {
-        // Placeholder for save logic - just close modal for now (visual only)
-        closeShotModal();
+      shotSaveBtn?.addEventListener('click', async () => {
+        await saveShotForm();
       });
 
       shotAddExtraPlanBtn?.addEventListener('click', () => {
@@ -6854,6 +7077,37 @@
           console.log('[shots] File selected:', file.name);
           shotMediaUploadInput.value = '';
         }
+      });
+
+      // Audience selection (chips)
+      const shotAudienceStartBtn = document.getElementById('shot-audience-start');
+      const shotAudiencePixBtn = document.getElementById('shot-audience-pix');
+      
+      shotAudienceStartBtn?.addEventListener('click', () => {
+        shotAudienceStartBtn.classList.add('selected');
+        shotAudiencePixBtn?.classList.remove('selected');
+      });
+
+      shotAudiencePixBtn?.addEventListener('click', () => {
+        shotAudiencePixBtn.classList.add('selected');
+        shotAudienceStartBtn?.classList.remove('selected');
+      });
+
+      // Send timing (segmented control)
+      const shotSendNowBtn = document.getElementById('shot-send-now');
+      const shotSendScheduleBtn = document.getElementById('shot-send-schedule');
+      const shotScheduleBlock = document.getElementById('shot-schedule-block');
+
+      shotSendNowBtn?.addEventListener('click', () => {
+        shotSendNowBtn.classList.add('selected');
+        shotSendScheduleBtn?.classList.remove('selected');
+        shotScheduleBlock?.classList.add('hidden');
+      });
+
+      shotSendScheduleBtn?.addEventListener('click', () => {
+        shotSendScheduleBtn.classList.add('selected');
+        shotSendNowBtn?.classList.remove('selected');
+        shotScheduleBlock?.classList.remove('hidden');
       });
 
       shotMediaPreviewBtn?.addEventListener('click', () => {
@@ -6888,6 +7142,7 @@
         if (shotsSlugLabel) {
           const slug = (plansBotSlugInput.value || '').trim();
           shotsSlugLabel.textContent = slug || '—';
+          void loadShots(); // Auto-load shots when slug changes
         }
       });
 

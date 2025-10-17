@@ -10,6 +10,7 @@ import { adminBotsRouter } from './admin/bots.js';
 import { createBotRouter } from './admin/createBot.js';
 import { registerAdminDownsellsRoutes } from './admin/downsells.js';
 import { registerAdminPlansRoutes } from './admin/plans.js';
+import { registerAdminShotsRoutes } from './admin/shots.js';
 import { adminMetricsRouter } from './admin/metrics.js';
 
 export function createApp() {
@@ -43,6 +44,7 @@ export function createApp() {
   app.use(adminMetricsRouter);
   registerAdminDownsellsRoutes(app);
   registerAdminPlansRoutes(app);
+  registerAdminShotsRoutes(app);
 
   // Routes
   app.use(webhookRouter);
