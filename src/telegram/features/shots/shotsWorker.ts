@@ -2,6 +2,12 @@ import { getPool } from '../../db/pool';
 import { logger } from '../../../logger.js';
 import { deliverShot, type ShotHeader as DeliverableShotHeader } from './deliver.js';
 
+// Manter true para acompanhar em produção
+const LOG_JOBS = true;
+function ts(): string {
+  return new Date().toISOString();
+}
+
 const MAX_ATTEMPTS = 5;
 function computeBackoffMs(currentAttempt: number): number {
   // tentativa 0→30s, 1→60s, 2→120s, 3→300s, ≥4→600s
@@ -24,6 +30,25 @@ type QueueRow = {
   telegram_id: ChatId;
   attempt_count: number;
 };
+
+type JobLogInfo = {
+  id: number;
+  shot_id: number;
+  telegram_id: ChatId;
+  attempt_count: number;
+};
+
+function logJob(job: JobLogInfo, message: string, extra?: unknown): void {
+  if (!LOG_JOBS) {
+    return;
+  }
+  const base = `[${ts()}][SHOTS][JOB id=${job.id} shot=${job.shot_id} tg=${job.telegram_id} try=${job.attempt_count}]`;
+  if (extra !== undefined) {
+    console.log(base, message, extra);
+  } else {
+    console.log(base, message);
+  }
+}
 
 function normalizeChatId(raw: unknown): ChatId {
   if (typeof raw === 'bigint') {
@@ -136,6 +161,9 @@ export async function processDueShots(
 
     if (picked.length === 0) {
       await client.query('COMMIT');
+      if (LOG_JOBS) {
+        console.log(`[${ts()}][SHOTS] nenhuma tarefa vencida (batchSize=${batchSize})`);
+      }
       return { picked: 0, sent: 0 };
     }
 
@@ -170,8 +198,10 @@ export async function processDueShots(
 
   let sent = 0;
   for (const job of picked) {
+    logJob(job, 'processando');
     const header = headerById.get(job.shot_id);
     if (!header) {
+      logJob(job, 'faltando header — marcando erro');
       workerLogger.warn({ jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] missing shot header');
       await markJobAsError(job.id, `Missing shot header ${job.shot_id}`);
       continue;
@@ -179,43 +209,48 @@ export async function processDueShots(
 
     const status = typeof header.status === 'string' ? header.status.toLowerCase() : '';
     if (status === 'canceled') {
+      logJob(job, 'shot cancelado — pulando');
       workerLogger.info({ jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] shot canceled, skipping job');
-      await skipJob(job.id, 'shot-canceled');
+      await skipJob(job, 'shot-canceled');
       continue;
     }
 
     try {
+      logJob(job, `enviando media_type=${header.media_type}`);
       await deliverShot(header, job.telegram_id);
-      await markJobAsSent(job.id);
+      await markJobAsSent(job);
       sent += 1;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
+      logJob(job, 'falha no envio — reprogramando', message);
       workerLogger.error({ err, jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] failed to deliver shot');
-      await scheduleRetry(job.id, job.attempt_count, message);
+      await scheduleRetry(job, message);
     }
   }
 
   return { picked: picked.length, sent };
 }
 
-async function markJobAsSent(queueId: number): Promise<void> {
+async function markJobAsSent(job: QueueRow): Promise<void> {
   const pool = await getPool();
   await pool.query(
     `UPDATE public.shots_queue
         SET status='sent', last_error=NULL, updated_at=NOW()
       WHERE id=$1`,
-    [queueId]
+    [job.id]
   );
+  logJob(job, 'marcado como sent');
 }
 
-async function skipJob(queueId: number, _reason: string): Promise<void> {
+async function skipJob(job: QueueRow, reason: string): Promise<void> {
   const pool = await getPool();
   await pool.query(
     `UPDATE public.shots_queue
         SET status='skipped', updated_at=NOW()
       WHERE id=$1`,
-    [queueId]
+    [job.id]
   );
+  logJob(job, `skipped (${reason})`);
 }
 
 async function markJobAsError(queueId: number, errMsg: string): Promise<void> {
@@ -228,10 +263,11 @@ async function markJobAsError(queueId: number, errMsg: string): Promise<void> {
   );
 }
 
-async function scheduleRetry(queueId: number, currentAttempt: number, errMsg: string): Promise<void> {
+async function scheduleRetry(job: QueueRow, errMsg: string): Promise<void> {
   const pool = await getPool();
-  const nextAttempt = currentAttempt + 1;
+  const nextAttempt = job.attempt_count + 1;
   if (nextAttempt >= MAX_ATTEMPTS) {
+    logJob({ ...job, attempt_count: nextAttempt }, 'estourou tentativas → error:', errMsg);
     await pool.query(
       `UPDATE public.shots_queue
           SET status='error',
@@ -239,12 +275,16 @@ async function scheduleRetry(queueId: number, currentAttempt: number, errMsg: st
               last_error=$3,
               updated_at=NOW()
         WHERE id=$1`,
-      [queueId, nextAttempt, errMsg]
+      [job.id, nextAttempt, errMsg]
     );
     return;
   }
 
-  const deliverAt = new Date(Date.now() + computeBackoffMs(currentAttempt));
+  const deliverAt = new Date(Date.now() + computeBackoffMs(job.attempt_count));
+  logJob(
+    { ...job, attempt_count: nextAttempt },
+    `reagendado para ${deliverAt.toISOString()} (attempt=${nextAttempt}) motivo=${errMsg}`
+  );
   await pool.query(
     `UPDATE public.shots_queue
         SET status='scheduled',
@@ -253,7 +293,7 @@ async function scheduleRetry(queueId: number, currentAttempt: number, errMsg: st
             deliver_at=$4,
             updated_at=NOW()
       WHERE id=$1`,
-    [queueId, nextAttempt, errMsg, deliverAt]
+    [job.id, nextAttempt, errMsg, deliverAt]
   );
 }
 
