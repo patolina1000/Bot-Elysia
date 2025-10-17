@@ -6712,7 +6712,10 @@
         }
 
         if (result?.ok) {
-          alert(`Disparo #${result.id ?? '—'} criado. Fila: ${result.queued ?? 0}`);
+          const payload = result?.data || {};
+          const shotId = payload?.shotId ?? payload?.id ?? result?.id;
+          const queued = payload?.queued ?? result?.queued ?? 0;
+          alert(`Disparo #${shotId ?? '—'} criado. Fila: ${queued}`);
           closeShotModal();
         } else {
           alert(`Erro: ${result?.error || 'Não foi possível criar o disparo.'}`);
@@ -6744,7 +6747,11 @@
           return;
         }
 
-        const items = Array.isArray(response?.items) ? response.items : [];
+        const items = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.items)
+            ? response.items
+            : [];
         renderShotItems(items);
       }
 
@@ -7045,9 +7052,13 @@
 
           const queue = document.createElement('div');
           queue.className = 'shots-item-moment';
-          const sent = Number(item?.sent_count ?? 0);
-          const total = Number(item?.total_in_queue ?? 0);
-          queue.textContent = `Fila: ${sent}/${total}`;
+          const scheduled = Number(item?.scheduled ?? item?.scheduled_count ?? 0);
+          const sending = Number(item?.sending ?? 0);
+          const sent = Number(item?.sent ?? item?.sent_count ?? 0);
+          const skipped = Number(item?.skipped ?? 0);
+          const error = Number(item?.error ?? 0);
+          const total = Number(item?.total ?? item?.total_in_queue ?? scheduled + sending + sent + skipped + error);
+          queue.textContent = `Fila: total=${total} (agendados=${scheduled}, enviando=${sending}, enviados=${sent}, pulados=${skipped}, erros=${error})`;
           container.appendChild(queue);
 
           const actions = document.createElement('div');

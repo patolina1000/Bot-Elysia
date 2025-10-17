@@ -96,6 +96,7 @@ const ALLOWED_MEDIA_TYPES: DeliverableShotHeader['media_type'][] = [
   'video',
   'audio',
   'animation',
+  'document',
 ];
 
 function normalizeMediaType(raw: unknown): DeliverableShotHeader['media_type'] {
