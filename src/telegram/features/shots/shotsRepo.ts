@@ -103,8 +103,16 @@ export async function cancelShot(shotId: number) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(`UPDATE public.shots SET status='canceled', updated_at=NOW() WHERE id=$1`, [shotId]);
-    await client.query(`UPDATE public.shots_queue SET status='canceled', updated_at=NOW() WHERE shot_id=$1 AND status='scheduled'`, [shotId]);
+    // 1) Marca o shot como cancelado (mantém histórico no cabeçalho)
+    await client.query(
+      `UPDATE public.shots SET status='canceled', updated_at=NOW() WHERE id=$1`,
+      [shotId]
+    );
+    // 2) Remove da fila somente itens ainda não processados, evitando depender de ENUM/CHECK 'canceled'
+    await client.query(
+      `DELETE FROM public.shots_queue WHERE shot_id=$1 AND status='scheduled'`,
+      [shotId]
+    );
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
