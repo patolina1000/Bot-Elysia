@@ -1,5 +1,5 @@
 import { PoolClient } from 'pg';
-import { getPool } from '../../db/pool';
+import { getPool } from '../../db/pool.js';
 
 export type Audience = 'started' | 'pix';
 export type MediaType = 'text' | 'photo' | 'video' | 'audio' | 'animation';
