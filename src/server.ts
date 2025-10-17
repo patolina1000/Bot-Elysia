@@ -6,6 +6,11 @@ import { telegramMediaCache } from './services/TelegramMediaCache.js';
 import { getLastSentByBot, profileSend } from './services/TelegramSendProfiler.js';
 import { startDownsellWorker } from './telegram/features/downsells/dispatcher.js';
 import { runShotsWorkerForever } from './telegram/features/shots/shotsWorker.js';
+import {
+  getShotsQueueGlobalStats,
+  getShotsQueueBreakdownByShot,
+  getTopErrors,
+} from './services/shots/stats.js';
 import { botRegistry } from './telegram/botRegistry.js';
 
 const app = createApp();
@@ -106,6 +111,45 @@ void (async () => {
     logger.error({ err }, '[SHOTS][WORKER] falha ao iniciar');
   }
 })();
+
+// Admin stats endpoint for shots queue
+function requireAdminBearer(req: any) {
+  const header = (req.headers?.authorization ?? '').toString();
+  const m = /^Bearer\s+(.+)$/i.exec(header);
+  if (!m) return false;
+  const token = m[1];
+  const expected =
+    process.env.ADMIN_BEARER ??
+    process.env.ADMIN_API_TOKEN ??
+    process.env.ADMIN_PANEL_TOKEN ??
+    process.env.PANEL_ACCESS_TOKEN;
+  if (!expected) return false;
+  return token === expected;
+}
+
+app.get('/admin/api/shots/stats', async (req, res) => {
+  try {
+    if (!requireAdminBearer(req)) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+    const [global, byShot, topErrors] = await Promise.all([
+      getShotsQueueGlobalStats(),
+      getShotsQueueBreakdownByShot(),
+      getTopErrors(10),
+    ]);
+    res.json({
+      ok: true,
+      data: {
+        global,
+        byShot,
+        topErrors,
+      },
+      serverTime: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message ?? 'internal_error' });
+  }
+});
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'Server started');
