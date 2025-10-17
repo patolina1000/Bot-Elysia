@@ -2,6 +2,14 @@ import { getPool } from '../../db/pool';
 import { logger } from '../../../logger.js';
 import { deliverShot, type ShotHeader as DeliverableShotHeader } from './deliver.js';
 
+const MAX_ATTEMPTS = 5;
+function computeBackoffMs(currentAttempt: number): number {
+  // tentativa 0→30s, 1→60s, 2→120s, 3→300s, ≥4→600s
+  const table = [30, 60, 120, 300, 600];
+  const idx = Math.min(currentAttempt, table.length - 1);
+  return table[idx] * 1000;
+}
+
 const workerLogger = logger.child({ worker: 'shots' });
 
 type ChatId = string | number;
@@ -14,6 +22,7 @@ type QueueRow = {
   id: number;
   shot_id: number;
   telegram_id: ChatId;
+  attempt_count: number;
 };
 
 function normalizeChatId(raw: unknown): ChatId {
@@ -43,10 +52,16 @@ function mapQueueRow(row: any): QueueRow {
     throw new Error('Invalid queue row identifiers');
   }
 
+  const attemptCount = Number(row.attempt_count ?? 0);
+  if (!Number.isFinite(attemptCount) || attemptCount < 0) {
+    throw new Error('Invalid attempt count');
+  }
+
   return {
     id,
     shot_id: shotId,
     telegram_id: normalizeChatId(row.telegram_id),
+    attempt_count: attemptCount,
   };
 }
 
@@ -114,7 +129,7 @@ export async function processDueShots(
              updated_at = NOW()
         FROM due
        WHERE q.id = due.id
-      RETURNING q.id, q.shot_id, q.telegram_id
+      RETURNING q.id, q.shot_id, q.telegram_id, COALESCE(q.attempt_count, 0) AS attempt_count
     `;
     const { rows: pickedRows } = await client.query(pickSql, [batchSize]);
     picked = pickedRows.map(mapQueueRow);
@@ -176,7 +191,7 @@ export async function processDueShots(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
       workerLogger.error({ err, jobId: job.id, shotId: job.shot_id }, '[SHOTS][WORKER] failed to deliver shot');
-      await markJobAsError(job.id, message);
+      await scheduleRetry(job.id, job.attempt_count, message);
     }
   }
 
@@ -187,7 +202,7 @@ async function markJobAsSent(queueId: number): Promise<void> {
   const pool = await getPool();
   await pool.query(
     `UPDATE public.shots_queue
-        SET status='sent', updated_at=NOW()
+        SET status='sent', last_error=NULL, updated_at=NOW()
       WHERE id=$1`,
     [queueId]
   );
@@ -203,13 +218,42 @@ async function skipJob(queueId: number, _reason: string): Promise<void> {
   );
 }
 
-async function markJobAsError(queueId: number, _errMsg: string): Promise<void> {
+async function markJobAsError(queueId: number, errMsg: string): Promise<void> {
   const pool = await getPool();
   await pool.query(
     `UPDATE public.shots_queue
-        SET status='error', updated_at=NOW()
+        SET status='error', last_error=$2, updated_at=NOW()
       WHERE id=$1`,
-    [queueId]
+    [queueId, errMsg]
+  );
+}
+
+async function scheduleRetry(queueId: number, currentAttempt: number, errMsg: string): Promise<void> {
+  const pool = await getPool();
+  const nextAttempt = currentAttempt + 1;
+  if (nextAttempt >= MAX_ATTEMPTS) {
+    await pool.query(
+      `UPDATE public.shots_queue
+          SET status='error',
+              attempt_count=$2,
+              last_error=$3,
+              updated_at=NOW()
+        WHERE id=$1`,
+      [queueId, nextAttempt, errMsg]
+    );
+    return;
+  }
+
+  const deliverAt = new Date(Date.now() + computeBackoffMs(currentAttempt));
+  await pool.query(
+    `UPDATE public.shots_queue
+        SET status='scheduled',
+            attempt_count=$2,
+            last_error=$3,
+            deliver_at=$4,
+            updated_at=NOW()
+      WHERE id=$1`,
+    [queueId, nextAttempt, errMsg, deliverAt]
   );
 }
 
