@@ -86,6 +86,7 @@ export interface CreatePixForCustomPriceMeta {
   bot_id?: string | null;
   payload_id?: string | null;
   downsell_id?: number | null;
+  shot_id?: number | null;
   source?: string | null;
   metadata?: Record<string, unknown> | null;
   plan_label?: string | null;

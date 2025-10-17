@@ -533,6 +533,214 @@ paymentsFeature.on('callback_query:data', async (ctx, next) => {
     return;
   }
 
+  // Handle shot: callbacks
+  const shotMatch = data.match(/^shot:(\d+):(main|p\d+)$/);
+  const isShotAction = Boolean(shotMatch);
+  ctx.logger.info(
+    { bot_slug: ctx.bot_slug, pattern: 'shot:', matched: isShotAction },
+    '[DISPATCH] checking'
+  );
+  if (isShotAction && shotMatch) {
+    const shotId = Number.parseInt(shotMatch[1] ?? '', 10);
+    const planKey = shotMatch[2] ?? 'main';
+    
+    if (!Number.isFinite(shotId) || Number.isNaN(shotId)) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data },
+        '[PIX][GUARD] unknown_shot_action'
+      );
+      await ctx.answerCallbackQuery({ text: 'Disparo inválido.', show_alert: true });
+      return;
+    }
+
+    const paymentsEnabled = ctx.bot_features?.['payments'] !== false;
+    if (!paymentsEnabled) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data, shot_id: shotId },
+        '[PIX][GUARD] payments_disabled'
+      );
+      await ctx.answerCallbackQuery({ text: 'Pagamentos indisponíveis no momento.', show_alert: true });
+      return;
+    }
+
+    const { getShotById } = await import('../../../db/shots.js');
+    const shot = await getShotById(shotId);
+    if (!shot || !shot.active || shot.bot_slug !== ctx.bot_slug) {
+      ctx.logger.warn(
+        { bot_slug: ctx.bot_slug, callback_data: data, shot_id: shotId },
+        '[PIX][GUARD] shot_not_found_or_inactive'
+      );
+      await ctx.answerCallbackQuery({ text: 'Disparo indisponível.', show_alert: true });
+      return;
+    }
+
+    const basePriceCents =
+      typeof shot.price_cents === 'number' && Number.isFinite(shot.price_cents) && shot.price_cents > 0
+        ? shot.price_cents
+        : null;
+    const rawExtraPlans = Array.isArray(shot.extra_plans) ? shot.extra_plans : [];
+    const extraPlans = rawExtraPlans.filter(
+      (plan) =>
+        typeof plan?.label === 'string' &&
+        plan.label.trim().length > 0 &&
+        typeof plan?.price_cents === 'number' &&
+        Number.isFinite(plan.price_cents) &&
+        plan.price_cents > 0
+    );
+
+    let choiceLabel: string;
+    let choicePriceCents: number | null = null;
+
+    if (planKey === 'main') {
+      choiceLabel = shot.button_text || 'Oferta especial';
+      choicePriceCents = basePriceCents;
+    } else {
+      // Extract index from 'p0', 'p1', etc.
+      const planIndexMatch = planKey.match(/^p(\d+)$/);
+      const planIndex = planIndexMatch ? Number.parseInt(planIndexMatch[1], 10) : -1;
+      const targetPlan = extraPlans[planIndex];
+      
+      if (!targetPlan) {
+        ctx.logger.warn(
+          { bot_slug: ctx.bot_slug, callback_data: data, shot_id: shotId, plan_key: planKey },
+          '[PIX][GUARD] shot_extra_plan_missing'
+        );
+        await ctx.answerCallbackQuery({ text: 'Opção indisponível.', show_alert: true });
+        return;
+      }
+      choiceLabel = targetPlan.label.trim();
+      choicePriceCents = targetPlan.price_cents;
+    }
+
+    if (!choicePriceCents || choicePriceCents <= 0) {
+      ctx.logger.warn(
+        {
+          bot_slug: ctx.bot_slug,
+          callback_data: data,
+          shot_id: shotId,
+          plan_key: planKey,
+        },
+        '[PIX][GUARD] shot_price_missing'
+      );
+      await ctx.answerCallbackQuery({ text: 'Preço indisponível no momento.', show_alert: true });
+      return;
+    }
+
+    ctx.logger.info(
+      {
+        shot_id: shot.id,
+        plan_key: planKey,
+        plan_label: choiceLabel,
+        price_cents: choicePriceCents,
+        chat_id: ctx.chat?.id ?? ctx.from?.id ?? null,
+      },
+      '[SHOT][CLICK]'
+    );
+
+    const telegramId = ctx.from?.id ?? ctx.chat?.id ?? null;
+    let pix_trace_id = 'tx:unknown';
+
+    try {
+      ctx.logger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        bot_slug: ctx.bot_slug,
+        telegram_id: telegramId,
+        shot_id: shot.id,
+        price_cents: choicePriceCents,
+        pix_trace_id,
+        plan_key: planKey,
+        plan_label: choiceLabel,
+      }, '[PIX][CREATE] shot callback');
+
+      const { transaction } = await createPixForCustomPrice(ctx.bot_slug, telegramId ?? null, choicePriceCents, {
+        bot_id: ctx.bot_id ?? null,
+        shot_id: shot.id,
+        origin: 'shots',
+        source: 'shots_callback',
+        plan_label: choiceLabel,
+        price_cents: choicePriceCents,
+      });
+
+      ctx.logger.info(
+        {
+          shot_id: shot.id,
+          plan_label: choiceLabel,
+          price_cents: choicePriceCents,
+          tx_id: transaction?.id ?? null,
+        },
+        '[SHOT][PIX] created'
+      );
+
+      if (!transaction.qr_code) {
+        throw new Error('Código PIX indisponível.');
+      }
+
+      const { generatePixTraceId } = await import('../../../utils/pixLogging.js');
+      const finalTraceId = generatePixTraceId(transaction.external_id, transaction.id);
+      pix_trace_id = finalTraceId;
+      ctx.logger.info({
+        op: 'create',
+        provider: 'PushinPay',
+        provider_id: transaction.external_id,
+        transaction_id: transaction.id,
+        bot_slug: ctx.bot_slug,
+        telegram_id: telegramId,
+        price_cents: transaction.value_cents,
+        pix_trace_id,
+        shot_id: shot.id,
+        plan_key: planKey,
+        plan_label: choiceLabel,
+      }, '[PIX][CREATE] shot pix generated');
+
+      await sendPixMessage(ctx, transaction, { source: 'shot' });
+
+      // Record funnel event: shot_click
+      if (typeof telegramId === 'number' && !Number.isNaN(telegramId)) {
+        const eventId = `clk:${shot.id}:${telegramId}`;
+        const { funnelService } = await import('../../../services/FunnelService.js');
+        await funnelService
+          .createEvent({
+            bot_id: ctx.bot_id ?? null,
+            tg_user_id: telegramId,
+            event: 'shot_click',
+            event_id: eventId,
+            price_cents: choicePriceCents,
+            payload_id: String(shot.id),
+            meta: {
+              shot_id: shot.id,
+              plan_key: planKey,
+              plan_label: choiceLabel,
+            },
+          })
+          .catch((err) => {
+            ctx.logger.warn({ err }, '[SHOT][METRICS] failed to record funnel event');
+          });
+      }
+
+      await ctx.answerCallbackQuery();
+    } catch (err) {
+      ctx.logger.error(
+        {
+          err,
+          op: 'create',
+          provider: 'PushinPay',
+          data,
+          shot_id: shotId,
+          pix_trace_id: pix_trace_id,
+          plan_key: planKey,
+        },
+        '[PIX][ERROR] shot create failed'
+      );
+      await ctx.answerCallbackQuery({
+        text: 'Erro ao gerar PIX. Tente novamente em instantes.',
+        show_alert: true,
+      });
+    }
+
+    return;
+  }
+
   const purchaseLike = /^(buy|pix|plan|offer)/i.test(data);
   if (purchaseLike) {
     ctx.logger.warn({ bot_slug: ctx.bot_slug, callback_data: data }, '[PIX][DISPATCH] no handler matched');
