@@ -1,4 +1,5 @@
 import { PoolClient } from 'pg';
+import { logger } from '../../../logger.js';
 import { getPool } from '../../db/pool.js';
 
 export type Audience = 'started' | 'pix';
@@ -36,31 +37,29 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
     );
     const shotId = shotRows[0].id as number;
 
-    // Seleção de público (via funnel_events, compatível com schema atual)
-    // started => event = 'bot_start'
+    // Seleção de público (via funnel_events real)
+    // started => event='start'
     // pix     => event IN ('pix_created','purchase')
-    //
-    // Obs.: funnel_events não tem bot_slug; filtramos por bot_id
-    // usando a tabela bots (slug -> id). Os IDs dos usuários
-    // estão em tg_user_id.
-    const audienceSql =
-      input.audience === 'started'
-        ? `
-          SELECT DISTINCT fe.tg_user_id AS telegram_id
-            FROM public.funnel_events fe
-           WHERE fe.bot_id IN (SELECT id FROM public.bots WHERE slug = $1)
-             AND fe.event = 'bot_start'
-             AND fe.tg_user_id IS NOT NULL
-        `
-        : `
-          SELECT DISTINCT fe.tg_user_id AS telegram_id
-            FROM public.funnel_events fe
-           WHERE fe.bot_id IN (SELECT id FROM public.bots WHERE slug = $1)
-             AND fe.event IN ('pix_created','purchase')
-             AND fe.tg_user_id IS NOT NULL
-        `;
+    const audienceSql = input.audience === 'started'
+      ? `
+        SELECT DISTINCT fe.tg_user_id AS telegram_id
+          FROM public.funnel_events fe
+          JOIN public.bots b ON b.id = fe.bot_id
+         WHERE b.slug = $1
+           AND fe.event = 'start'
+           AND fe.tg_user_id IS NOT NULL
+      `
+      : `
+        SELECT DISTINCT fe.tg_user_id AS telegram_id
+          FROM public.funnel_events fe
+          JOIN public.bots b ON b.id = fe.bot_id
+         WHERE b.slug = $1
+           AND fe.event IN ('pix_created','purchase')
+           AND fe.tg_user_id IS NOT NULL
+      `;
 
     const { rows: tgRows } = await client.query(audienceSql, [input.bot_slug]);
+    logger.info({ bot_slug: input.bot_slug, audience: input.audience, total: tgRows.length }, '[SHOTS] audience expanded');
 
     // === Enfileira destinatários na shots_queue (colunas explícitas, sem bot_slug) ===
     // Usa índice único (shot_id, telegram_id) + ON CONFLICT DO NOTHING
