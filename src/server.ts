@@ -5,7 +5,7 @@ import { pool } from './db/pool.js';
 import { telegramMediaCache } from './services/TelegramMediaCache.js';
 import { getLastSentByBot, profileSend } from './services/TelegramSendProfiler.js';
 import { startDownsellWorker } from './telegram/features/downsells/dispatcher.js';
-import { startShotsWorker } from './telegram/features/shots/shotsWorker.js';
+import { runShotsWorkerForever } from './telegram/features/shots/shotsWorker.js';
 import { botRegistry } from './telegram/botRegistry.js';
 
 const app = createApp();
@@ -77,10 +77,30 @@ scheduleTelegramKeepAlive();
 
 startDownsellWorker(app);
 
+type ShotsWorkerGlobal = typeof globalThis & { __SHOTS_WORKER_STARTED__?: boolean };
+
+function startShotsWorkerOnce() {
+  const g = globalThis as ShotsWorkerGlobal;
+  if (g.__SHOTS_WORKER_STARTED__) {
+    return;
+  }
+
+  g.__SHOTS_WORKER_STARTED__ = true;
+  logger.info('[SHOTS][WORKER] iniciando (sempre ligado)');
+
+  void (async () => {
+    try {
+      await runShotsWorkerForever((slug) => botRegistry.get(slug));
+    } catch (err) {
+      logger.error({ err }, '[SHOTS][WORKER][FATAL] loop interrompido');
+    }
+  })();
+}
+
 void (async () => {
   try {
     await botRegistry.loadAllEnabledBots();
-    await startShotsWorker((slug) => botRegistry.get(slug));
+    startShotsWorkerOnce();
     logger.info('[SHOTS][WORKER] iniciado');
   } catch (err) {
     logger.error({ err }, '[SHOTS][WORKER] falha ao iniciar');
