@@ -2811,6 +2811,19 @@
       color: #fff !important;
     }
   </style>
+  <style>
+    /* ===== Metrics Card (visual only) ===== */
+    .metrics-card{margin:16px 0;padding:16px;background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    .metrics-card__header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+    .metrics-card__title{font-size:18px;font-weight:700;color:#111827;margin:0}
+    .metrics-card__note{font-size:12px;color:#6b7280}
+    .metrics-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    @media (max-width: 900px){.metrics-grid{grid-template-columns:1fr 1fr}}
+    @media (max-width: 640px){.metrics-grid{grid-template-columns:1fr}}
+    .metric-pill{padding:16px;border-radius:14px;border:1px solid #eef2f7;background:#f8fafc;display:flex;flex-direction:column;gap:6px}
+    .metric-pill__label{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}
+    .metric-pill__value{font-size:28px;font-weight:800;color:#111827;line-height:1}
+  </style>
 </head>
 <body id="admin-wizard">
   <div class="layout">
@@ -2828,6 +2841,28 @@
         <small style="color:#6b7280;">O token fica salvo apenas neste navegador.</small>
       </div>
     </header>
+
+    <!-- ===== MÉTRICAS (visual only — acima de Templates /start) ===== -->
+    <section id="metrics-card" class="metrics-card">
+      <div class="metrics-card__header">
+        <h2 class="metrics-card__title">📊 Métricas</h2>
+        <small class="metrics-card__note">visual — sem dados ainda</small>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-pill" aria-label="Chats ativos">
+          <span class="metric-pill__label">Chats ativos</span>
+          <span class="metric-pill__value" id="metric-active-count">0</span>
+        </div>
+        <div class="metric-pill" aria-label="Chats bloqueados">
+          <span class="metric-pill__label">Chats bloqueados</span>
+          <span class="metric-pill__value" id="metric-blocked-count">0</span>
+        </div>
+        <div class="metric-pill" aria-label="Chats unknown">
+          <span class="metric-pill__label">Chats unknown</span>
+          <span class="metric-pill__value" id="metric-unknown-count">0</span>
+        </div>
+      </div>
+    </section>
 
     <main class="card">
       <div class="card-header">
