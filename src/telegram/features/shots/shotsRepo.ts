@@ -54,56 +54,35 @@ export async function createShotAndExpandQueue(input: NewShot): Promise<{ shotId
 
     const { rows: tgRows } = await client.query(audienceSql, [input.bot_slug]);
 
-    // === Enfileira destinatários na shots_queue, com colunas explícitas ===
-    // - Evita depender da ordem de colunas
-    // - Usa ON CONFLICT DO NOTHING para não duplicar (mesmo sem índice alvo)
-    // - Faz chunking para audiências grandes
-
+    // === Enfileira destinatários na shots_queue (colunas explícitas, sem bot_slug) ===
+    // Usa índice único (shot_id, telegram_id) + ON CONFLICT DO NOTHING
+    // e chunking para audiências grandes.
     const telegramIds: (number | string)[] =
-      (tgRows ?? []).map(r => r.telegram_id).filter(Boolean);
+      (tgRows ?? []).map((r: any) => r.telegram_id).filter(Boolean);
 
-    // Se não houver público, encerramos cedo sem falhar:
-    if (telegramIds.length === 0) {
-      await client.query('COMMIT');
-      return { shotId, queued: 0 };
-    }
-
-    const deliverAt =
-      (input as any)?.send_at === 'now'
-        ? new Date()
-        : (input as any)?.scheduled_at
-          ? new Date((input as any).scheduled_at)
-          : input.deliver_at ?? new Date();
-
-    const CHUNK = 1000;
     let queued = 0;
-    for (let i = 0; i < telegramIds.length; i += CHUNK) {
-      const chunk = telegramIds.slice(i, i + CHUNK);
-
-      // placeholders: ($1, $2, $N, $last)
-      // $1 = shotId
-      // $2..$(chunk.length+1) = telegram_ids
-      // $(chunk.length+2) = deliverAt
-      const valuesSql = chunk
-        .map((_, idx) => `($1, $${idx + 2}, $${chunk.length + 2}, 'scheduled')`)
-        .join(', ');
-
-      const params: any[] = [shotId, ...chunk, deliverAt];
-
-      // IMPORTANTE: colunas explícitas!
-      // Se sua tabela tiver mais colunas (attempt_count, last_error etc.),
-      // confie nos defaults. Aqui só definimos o mínimo necessário.
-      await client.query(
-        `
-          INSERT INTO public.shots_queue
-            (shot_id, telegram_id, deliver_at, status)
-          VALUES
-            ${valuesSql}
-          ON CONFLICT DO NOTHING
-        `,
-        params
-      );
-      queued += chunk.length;
+    if (telegramIds.length > 0) {
+      const CHUNK = 1000;
+      // deliver_at: honra input.deliver_at (já gravado no cabeçalho do shot)
+      const deliverAt = input.deliver_at ?? new Date();
+      for (let i = 0; i < telegramIds.length; i += CHUNK) {
+        const chunk = telegramIds.slice(i, i + CHUNK);
+        const valuesSql = chunk
+          .map((_, idx) => `($1, $${idx + 2}, $${chunk.length + 2}, 'scheduled')`)
+          .join(', ');
+        const params: any[] = [shotId, ...chunk, deliverAt];
+        await client.query(
+          `
+            INSERT INTO public.shots_queue
+              (shot_id, telegram_id, deliver_at, status)
+            VALUES
+              ${valuesSql}
+            ON CONFLICT DO NOTHING
+          `,
+          params
+        );
+        queued += chunk.length;
+      }
     }
 
     await client.query('COMMIT');
