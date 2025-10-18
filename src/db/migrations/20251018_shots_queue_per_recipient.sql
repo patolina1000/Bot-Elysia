@@ -43,8 +43,7 @@ BEGIN
     PERFORM set_config('shots_queue.legacy_table', '', true);
     RAISE NOTICE '[MIG][SHOTS_QUEUE] shots_queue table not found. A fresh table will be created.';
   END IF;
-END;
-$$;
+END $$;
 
 -- [MIG][SHOTS_QUEUE] Ensure shots_queue table exists with the target per-recipient schema.
 CREATE TABLE IF NOT EXISTS public.shots_queue (
@@ -109,8 +108,7 @@ BEGIN
   ELSE
     EXECUTE format('SELECT setval(%L, COALESCE((SELECT max(id) FROM public.shots_queue),0))', seq_name);
   END IF;
-END;
-$$;
+END $$;
 
 DO $$
 BEGIN
@@ -125,8 +123,7 @@ BEGIN
       ADD PRIMARY KEY (id);
     RAISE NOTICE '[MIG][SHOTS_QUEUE] Added primary key on id.';
   END IF;
-END;
-$$;
+END $$;
 
 -- [MIG][SHOTS_QUEUE] Drop legacy columns that are incompatible with the per-recipient schema.
 DO $$
@@ -145,8 +142,7 @@ BEGIN
     EXECUTE format('ALTER TABLE public.shots_queue DROP COLUMN %I CASCADE', col.column_name);
     RAISE NOTICE '[MIG][SHOTS_QUEUE] Dropped legacy column %', col.column_name;
   END LOOP;
-END;
-$$;
+END $$;
 
 -- [MIG][SHOTS_QUEUE] Copy data from legacy table when it contains compatible columns.
 DO $$
@@ -259,8 +255,7 @@ BEGIN
 
   EXECUTE insert_sql;
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Copied legacy rows from %.', legacy_name;
-END;
-$$;
+END $$;
 
 -- [MIG][SHOTS_QUEUE] Normalize and backfill required values.
 UPDATE public.shots_queue q
@@ -312,8 +307,7 @@ BEGIN
   ALTER TABLE public.shots_queue
     ADD CONSTRAINT shots_queue_status_check
     CHECK (status IN ('pending','processing','success','error'));
-END;
-$$;
+END $$;
 
 -- [MIG][SHOTS_QUEUE] Create or update the touch trigger function.
 DO $$
@@ -334,8 +328,7 @@ BEGIN
       $$ LANGUAGE plpgsql;
     $fn$;
   END IF;
-  END;
-  $$;
+  END $$;
 
 -- [MIG][SHOTS_QUEUE] Attach the updated_at trigger in an idempotent way.
 DO $$
@@ -349,8 +342,7 @@ BEGIN
   END IF;
 
   EXECUTE 'CREATE TRIGGER trg_shots_queue_touch BEFORE UPDATE ON public.shots_queue FOR EACH ROW EXECUTE FUNCTION public.fn_touch_updated_at()';
-  END;
-  $$;
+  END $$;
 
 -- [MIG][SHOTS_QUEUE] Ensure required indexes exist for worker efficiency.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_shots_queue_shot_id_telegram_id
@@ -368,6 +360,5 @@ CREATE INDEX IF NOT EXISTS shots_queue_bot_idx
 DO $$
 BEGIN
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Per-recipient queue schema ensured.';
-END;
-$$;
+END $$;
 

@@ -38,8 +38,7 @@ BEGIN
     END;
     $body$ LANGUAGE plpgsql;
   END IF;
-END;
-$$;
+END $$;
 
 DROP TRIGGER IF EXISTS set_updated_at_on_payment_transactions ON payment_transactions;
 CREATE TRIGGER set_updated_at_on_payment_transactions
