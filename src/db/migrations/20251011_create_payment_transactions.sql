@@ -35,10 +35,11 @@ BEGIN
     BEGIN
       NEW.updated_at = now();
       RETURN NEW;
-    END
+    END;
     $body$ LANGUAGE plpgsql;
   END IF;
-END$$;
+END;
+$$;
 
 DROP TRIGGER IF EXISTS set_updated_at_on_payment_transactions ON payment_transactions;
 CREATE TRIGGER set_updated_at_on_payment_transactions

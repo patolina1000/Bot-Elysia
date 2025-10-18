@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS public.shots (
 );
 
 -- Guarantee optional columns exist (idempotent checks)
-DO $$ BEGIN
+DO $$
+BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'title'
@@ -78,7 +79,8 @@ DO $$ BEGIN
   ) THEN
     ALTER TABLE public.shots ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now();
   END IF;
-END $$;
+END;
+$$;
 
 -- Enforce NOT NULL and defaults
 ALTER TABLE public.shots
@@ -86,7 +88,8 @@ ALTER TABLE public.shots
   ALTER COLUMN created_at SET DEFAULT now();
 
 -- Media type constraint (photo, video, audio, document, none)
-DO $$ BEGIN
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'shots_media_type_check'
@@ -99,10 +102,12 @@ DO $$ BEGIN
       ADD CONSTRAINT shots_media_type_check
       CHECK (media_type IS NULL OR media_type IN ('photo', 'video', 'audio', 'document', 'none'));
   END IF;
-END $$;
+END;
+$$;
 
 -- Target constraint (all_started, pix_generated)
-DO $$ BEGIN
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'shots_target_check'
@@ -114,7 +119,8 @@ DO $$ BEGIN
       ADD CONSTRAINT shots_target_check
       CHECK (target IS NULL OR target IN ('all_started', 'pix_generated'));
   END IF;
-END $$;
+END;
+$$;
 
 -- Normalize legacy values to the supported enums
 UPDATE public.shots
@@ -161,7 +167,8 @@ ALTER TABLE public.shot_plans
   ALTER COLUMN name SET NOT NULL;
 
 -- Foreign key to shots (idempotent)
-DO $$ BEGIN
+DO $$
+BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'shot_plans_shot_id_fkey'
@@ -173,7 +180,8 @@ DO $$ BEGIN
       REFERENCES public.shots(id)
       ON DELETE CASCADE;
   END IF;
-END $$;
+END;
+$$;
 
 -- Index for ordering inside a shot
 CREATE INDEX IF NOT EXISTS shot_plans_shot_id_sort_order_idx
@@ -193,7 +201,8 @@ ALTER TABLE IF EXISTS public.shots_queue
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 
 -- Normalize types from legacy enums to TEXT
-DO $$ BEGIN
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -205,7 +214,8 @@ DO $$ BEGIN
     ALTER TABLE public.shots_queue
       ALTER COLUMN status TYPE TEXT USING status::TEXT;
   END IF;
-END $$;
+END;
+$$;
 
 -- Attempts defaults and NOT NULL
 ALTER TABLE IF EXISTS public.shots_queue
@@ -213,7 +223,8 @@ ALTER TABLE IF EXISTS public.shots_queue
   ALTER COLUMN attempts SET NOT NULL;
 
 -- Keep legacy attempt_count column aligned when present
-DO $$ BEGIN
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -231,10 +242,12 @@ DO $$ BEGIN
     ALTER TABLE public.shots_queue
       ALTER COLUMN attempt_count SET NOT NULL;
   END IF;
-END $$;
+END;
+$$;
 
 -- Legacy attempt_count alignment (keep old column if present)
-DO $$ BEGIN
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -256,7 +269,8 @@ DO $$ BEGIN
     SET attempts = COALESCE(attempts, 0)
     WHERE attempts IS NULL;
   END IF;
-END $$;
+END;
+$$;
 
 -- Guarantee defaults/not nulls for timing columns
 ALTER TABLE IF EXISTS public.shots_queue
@@ -356,7 +370,8 @@ BEGIN
       WHERE id = rec.id;
     END LOOP;
   END IF;
-END $$;
+END;
+$$;
 
 -- Backfill bot_slug using shots reference when null
 UPDATE public.shots_queue q
@@ -375,7 +390,8 @@ SET telegram_id = 0
 WHERE telegram_id IS NULL;
 
 -- Ensure attempts mirror legacy column if present
-DO $$ BEGIN
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -387,7 +403,8 @@ DO $$ BEGIN
     SET attempt_count = attempts
     WHERE attempt_count IS DISTINCT FROM attempts;
   END IF;
-END $$;
+END;
+$$;
 
 -- Remove orphan queue rows (shot_id without parent)
 DELETE FROM public.shots_queue q
@@ -406,7 +423,8 @@ ALTER TABLE IF EXISTS public.shots_queue
   ALTER COLUMN updated_at SET NOT NULL;
 
 -- Status constraint (pending|processing|success|error)
-DO $$ BEGIN
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'shots_queue_status_check'
@@ -419,7 +437,8 @@ DO $$ BEGIN
   ALTER TABLE public.shots_queue
     ADD CONSTRAINT shots_queue_status_check
     CHECK (status IN ('pending', 'processing', 'success', 'error'));
-END $$;
+END;
+$$;
 
 -- Attempts constraint sync trigger to keep attempt_count compatible
 CREATE OR REPLACE FUNCTION public.shots_queue_sync_attempts()
@@ -469,7 +488,8 @@ CREATE TRIGGER shots_queue_normalize_status_trigger
   EXECUTE FUNCTION public.shots_queue_normalize_status();
 
 -- Foreign key linking queue to shots
-DO $$ BEGIN
+DO $$
+BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'shots_queue_shot_id_fkey'
@@ -481,7 +501,8 @@ DO $$ BEGIN
       REFERENCES public.shots(id)
       ON DELETE CASCADE;
   END IF;
-END $$;
+END;
+$$;
 
 -- Essential indexes
 CREATE INDEX IF NOT EXISTS shots_queue_status_due_idx
@@ -510,6 +531,7 @@ BEGIN
   RAISE NOTICE '✅ Shots schema migration executed.';
   RAISE NOTICE '✅ Remaining shots_queue.bot_slug NULL count: %', pending_nulls;
   RAISE NOTICE '===============================================================';
-END $$;
+END;
+$$;
 
 COMMIT;
