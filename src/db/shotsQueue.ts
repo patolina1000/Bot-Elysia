@@ -2,19 +2,30 @@ import type { Pool, PoolClient, QueryResult } from 'pg';
 import { pool } from './pool.js';
 
 export type ShotTarget = 'started' | 'pix_created';
-export type ShotStatus = 'pending' | 'running' | 'sent' | 'skipped' | 'error';
+export type ShotStatus =
+  | 'pending'
+  | 'processing'
+  | 'success'
+  | 'error'
+  | 'running'
+  | 'sent'
+  | 'skipped';
 export type MediaType = 'photo' | 'video' | 'audio' | 'document' | 'none';
 
 export interface ShotQueueJob {
   id: number;
+  shot_id: number | null;
   bot_slug: string;
-  target: ShotTarget;
+  target: ShotTarget | null;
   copy: string;
   media_url: string | null;
   media_type: MediaType;
-  scheduled_at: Date;
+  telegram_id: number | null;
+  scheduled_at: Date | null;
   status: ShotStatus;
   attempt_count: number;
+  attempts: number;
+  next_retry_at: Date | null;
   last_error: string | null;
   created_at: Date;
   updated_at: Date;
@@ -42,20 +53,37 @@ function getQueryable(client?: PoolClient): Queryable {
   return client ?? pool;
 }
 
+function parseDate(value: any): Date | null {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function mapRow(row: any): ShotQueueJob {
+  const attemptsValue = Number(row.attempts ?? row.attempt_count ?? 0);
   return {
     id: Number(row.id),
+    shot_id: row.shot_id !== undefined && row.shot_id !== null ? Number(row.shot_id) : null,
     bot_slug: String(row.bot_slug),
-    target: String(row.target) as ShotTarget,
-    copy: String(row.copy),
+    target: row.target ? (String(row.target) as ShotTarget) : null,
+    copy: String(row.copy ?? ''),
     media_url: row.media_url ?? null,
     media_type: String(row.media_type ?? 'none') as MediaType,
-    scheduled_at: row.scheduled_at instanceof Date ? row.scheduled_at : new Date(row.scheduled_at),
+    telegram_id:
+      row.telegram_id !== undefined && row.telegram_id !== null ? Number(row.telegram_id) : null,
+    scheduled_at: parseDate(row.scheduled_at),
     status: String(row.status) as ShotStatus,
-    attempt_count: Number(row.attempt_count ?? 0),
+    attempt_count: attemptsValue,
+    attempts: attemptsValue,
+    next_retry_at: parseDate(row.next_retry_at),
     last_error: row.last_error ?? null,
-    created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
-    updated_at: row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at),
+    created_at: parseDate(row.created_at) ?? new Date(),
+    updated_at: parseDate(row.updated_at) ?? new Date(),
   };
 }
 
@@ -180,51 +208,56 @@ export async function deleteShot(
   return result.rowCount !== null && result.rowCount > 0;
 }
 
-export async function pickPendingShot(client?: PoolClient): Promise<{ client: PoolClient; job: ShotQueueJob } | null> {
-  const poolClient = client ?? await pool.connect();
-  
-  try {
-    await poolClient.query('BEGIN');
+export interface PickedShotQueueJobs {
+  client: PoolClient;
+  jobs: ShotQueueJob[];
+}
 
-    const { rows } = await poolClient.query(
-      `UPDATE shots_queue
-       SET status = 'running', updated_at = now()
-       WHERE id = (
-         SELECT id
-         FROM shots_queue
-         WHERE status = 'pending'
-           AND scheduled_at <= now()
-         ORDER BY scheduled_at ASC, id ASC
-         LIMIT 1
-         FOR UPDATE SKIP LOCKED
-       )
-       RETURNING *`
+export async function pickDueShotQueueJobs(limit: number): Promise<PickedShotQueueJobs | null> {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      `SELECT *
+       FROM shots_queue
+       WHERE status = 'pending'
+         AND (scheduled_at IS NULL OR scheduled_at <= now())
+         AND (next_retry_at IS NULL OR next_retry_at <= now())
+       ORDER BY scheduled_at NULLS FIRST, id ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT $1`,
+      [limit]
     );
 
     if (rows.length === 0) {
-      await poolClient.query('COMMIT');
-      if (!client) poolClient.release();
+      await client.query('COMMIT');
+      client.release();
       return null;
     }
 
-    const job = mapRow(rows[0]);
-    return { client: poolClient, job };
+    const jobs = rows.map(mapRow);
+    return { client, jobs };
   } catch (err) {
-    await poolClient.query('ROLLBACK').catch(() => undefined);
-    if (!client) poolClient.release();
+    await client.query('ROLLBACK').catch(() => undefined);
+    client.release();
     throw err;
   }
 }
 
-export async function markShotAsSent(
+export async function markShotQueueSuccess(
   id: number,
   client?: PoolClient
 ): Promise<ShotQueueJob | null> {
   const queryable = getQueryable(client);
-  
+
   const result = await queryable.query(
     `UPDATE shots_queue
-     SET status = 'sent', last_error = NULL, updated_at = now()
+     SET status = 'success',
+         last_error = NULL,
+         next_retry_at = NULL,
+         updated_at = now()
      WHERE id = $1
      RETURNING *`,
     [id]
@@ -233,36 +266,38 @@ export async function markShotAsSent(
   return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
 }
 
-export async function markShotAsError(
+export async function markShotQueueError(
   id: number,
   error: string,
   client?: PoolClient
 ): Promise<ShotQueueJob | null> {
   const queryable = getQueryable(client);
-  
+  const message = typeof error === 'string' ? error : String(error ?? 'unknown error');
+
   const result = await queryable.query(
     `UPDATE shots_queue
      SET status = 'error',
          last_error = $2,
-         attempt_count = attempt_count + 1,
+         attempts = COALESCE(attempts, 0) + 1,
          updated_at = now()
      WHERE id = $1
      RETURNING *`,
-    [id, error]
+    [id, message]
   );
 
   return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
 }
 
-export async function incrementShotAttempt(
+export async function incrementShotQueueAttempt(
   id: number,
   client?: PoolClient
 ): Promise<ShotQueueJob | null> {
   const queryable = getQueryable(client);
-  
+
   const result = await queryable.query(
     `UPDATE shots_queue
-     SET attempt_count = attempt_count + 1, updated_at = now()
+     SET attempts = COALESCE(attempts, 0) + 1,
+         updated_at = now()
      WHERE id = $1
      RETURNING *`,
     [id]
@@ -271,18 +306,36 @@ export async function incrementShotAttempt(
   return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
 }
 
-// Reset stuck jobs (running for more than 30 minutes)
-export async function resetStuckJobs(timeoutMinutes = 30): Promise<number> {
+export async function resetStuckShotQueueJobs(timeoutMinutes = 30, maxAttempts = 3): Promise<number> {
   const result = await pool.query(
     `UPDATE shots_queue
      SET status = 'pending',
-         attempt_count = attempt_count + 1,
+         attempts = COALESCE(attempts, 0) + 1,
          updated_at = now()
-     WHERE status = 'running'
+     WHERE status IN ('processing', 'running')
        AND updated_at < now() - interval '${timeoutMinutes} minutes'
-       AND attempt_count < 3
-     RETURNING id`
+       AND COALESCE(attempts, attempt_count, 0) < $1
+     RETURNING id`,
+    [maxAttempts]
   );
 
   return result.rowCount ?? 0;
 }
+
+export async function pickPendingShot(
+  client?: PoolClient
+): Promise<{ client: PoolClient; job: ShotQueueJob } | null> {
+  const picked = await pickDueShotQueueJobs(1);
+  if (!picked) {
+    return null;
+  }
+
+  const { client: pooledClient, jobs } = picked;
+  const [job] = jobs;
+  return { client: pooledClient, job };
+}
+
+export const markShotAsSent = markShotQueueSuccess;
+export const markShotAsError = markShotQueueError;
+export const incrementShotAttempt = incrementShotQueueAttempt;
+export const resetStuckJobs = resetStuckShotQueueJobs;

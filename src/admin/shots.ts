@@ -136,7 +136,7 @@ export function registerAdminShotsRoutes(app: Express): void {
         // Enrich with basic stats
         const enrichedShots = await Promise.all(
           shots.map(async (shot) => {
-            if (shot.status === 'sent') {
+            if (shot.status === 'sent' || shot.status === 'success') {
               const stats = await getShotStats(shot.id);
               return { ...shot, stats };
             }
