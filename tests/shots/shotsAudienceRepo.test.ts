@@ -11,6 +11,7 @@ function ensureEnv(): void {
 }
 
 let pool: typeof import('../../src/db/pool.ts')['pool'];
+let logger: typeof import('../../src/logger.ts')['logger'];
 let getTelegramIdsForAllStarted: typeof import('../../src/repositories/ShotsAudienceRepo.ts')['getTelegramIdsForAllStarted'];
 let getTelegramIdsForPixGenerated: typeof import('../../src/repositories/ShotsAudienceRepo.ts')['getTelegramIdsForPixGenerated'];
 
@@ -18,6 +19,8 @@ test.before(async () => {
   ensureEnv();
   const poolModule = await import('../../src/db/pool.ts');
   pool = poolModule.pool;
+  const loggerModule = await import('../../src/logger.ts');
+  logger = loggerModule.logger;
   const repoModule = await import('../../src/repositories/ShotsAudienceRepo.ts');
   getTelegramIdsForAllStarted = repoModule.getTelegramIdsForAllStarted;
   getTelegramIdsForPixGenerated = repoModule.getTelegramIdsForPixGenerated;
@@ -45,10 +48,15 @@ test('getTelegramIdsForAllStarted maps telegram ids to bigint and skips nulls', 
       { telegram_id: null },
     ],
   }) as any);
+  const debugMock = mock.method(logger, 'debug', () => undefined);
 
   const result = await getTelegramIdsForAllStarted('bot-slug');
 
   assert.deepEqual(result, [123456n, 789012n, 345678901234567890n]);
+  assert.strictEqual(
+    debugMock.mock.calls[0].arguments[0],
+    '[SHOTS][AUDIENCE] target=all_started bot=bot-slug candidates=3'
+  );
 });
 
 test('getTelegramIdsForAllStarted uses the expected SQL filter', async () => {
@@ -60,6 +68,7 @@ test('getTelegramIdsForAllStarted uses the expected SQL filter', async () => {
   const [sql, params] = queryMock.mock.calls[0].arguments;
   assert.ok(sql.includes("fe.event_name = 'bot_start'"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
+  assert.ok(sql.includes('AND (fe.payload_id IS NULL OR fe.payload_id = pt.payload_id)'));
   assert.deepEqual(params, ['shots-bot']);
 });
 
@@ -81,10 +90,15 @@ test('getTelegramIdsForPixGenerated maps telegram ids to bigint and skips nulls'
       { telegram_id: undefined },
     ],
   }) as any);
+  const debugMock = mock.method(logger, 'debug', () => undefined);
 
   const result = await getTelegramIdsForPixGenerated('bot-slug');
 
   assert.deepEqual(result, [111n, 222n, 333n]);
+  assert.strictEqual(
+    debugMock.mock.calls[0].arguments[0],
+    '[SHOTS][AUDIENCE] target=pix_generated bot=bot-slug candidates=3'
+  );
 });
 
 test('getTelegramIdsForPixGenerated uses the expected SQL filter', async () => {
@@ -96,5 +110,6 @@ test('getTelegramIdsForPixGenerated uses the expected SQL filter', async () => {
   const [sql, params] = queryMock.mock.calls[0].arguments;
   assert.ok(sql.includes("fe.event_name IN ('pix_created','purchase')"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
+  assert.ok(sql.includes('AND (fe.payload_id IS NULL OR fe.payload_id = pt.payload_id)'));
   assert.deepEqual(params, ['shots-bot']);
 });
