@@ -4,7 +4,7 @@
     "target": "ES2022",
     "moduleResolution": "node",
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "./",
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "strict": true,
@@ -15,6 +15,6 @@
       "supertest": ["tests/helpers/mockSupertest.ts"]
     }
   },
-  "include": ["src"],
-  "exclude": ["tests", "node_modules"]
+  "include": ["src", "scripts"],
+  "exclude": ["tests", "node_modules", "dist"]
 }
