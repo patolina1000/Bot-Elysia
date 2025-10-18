@@ -22,6 +22,12 @@ ALTER TABLE shots ADD COLUMN IF NOT EXISTS copy TEXT;
 ALTER TABLE shots ADD COLUMN IF NOT EXISTS media_url TEXT;
 ALTER TABLE shots ADD COLUMN IF NOT EXISTS media_type TEXT;
 ALTER TABLE shots ADD COLUMN IF NOT EXISTS target TEXT;
+
+-- Backfill existing rows that might have null targets from previous schemas.
+UPDATE shots
+SET target = 'all_started'
+WHERE target IS NULL;
+
 ALTER TABLE shots ALTER COLUMN target SET NOT NULL;
 ALTER TABLE shots ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
 ALTER TABLE shots ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
