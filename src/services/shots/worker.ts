@@ -12,6 +12,7 @@ import {
 import { recordShotSent, bulkRecordShotsSent, type RecordShotSentParams } from '../../db/shotsSent.js';
 import { selectAudience } from './audienceSelector.js';
 import { updateTelegramContactChatState } from '../../services/TelegramContactsService';
+import { buildPlansKeyboard } from '../../services/bot/plans.js';
 import type { PoolClient } from 'pg';
 
 const LOCK_KEY = 4839202; // Different from downsells worker
@@ -45,11 +46,18 @@ async function sendMessageByType(
   botSlug: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Carrega os planos ativos para montar CTA
+    const keyboard = await buildPlansKeyboard(botSlug).catch((err) => {
+      logger.warn({ err, bot_slug: botSlug }, '[SHOTS][WORKER] failed to build plans keyboard');
+      return null;
+    });
+
     if (job.media_type === 'photo' && job.media_url) {
       await sendSafe(
         () => bot.api.sendPhoto(telegramId, job.media_url, {
           caption: job.copy,
           parse_mode: 'HTML',
+          ...(keyboard ? { reply_markup: keyboard } : {}),
         }),
         botSlug,
         telegramId
@@ -59,6 +67,7 @@ async function sendMessageByType(
         () => bot.api.sendVideo(telegramId, job.media_url, {
           caption: job.copy,
           parse_mode: 'HTML',
+          ...(keyboard ? { reply_markup: keyboard } : {}),
         }),
         botSlug,
         telegramId
@@ -74,6 +83,7 @@ async function sendMessageByType(
         () => bot.api.sendMessage(telegramId, job.copy, {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
+          ...(keyboard ? { reply_markup: keyboard } : {}),
         }),
         botSlug,
         telegramId
@@ -84,6 +94,7 @@ async function sendMessageByType(
         () => bot.api.sendMessage(telegramId, job.copy, {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
+          ...(keyboard ? { reply_markup: keyboard } : {}),
         }),
         botSlug,
         telegramId
