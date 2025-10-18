@@ -51,19 +51,20 @@ function restoreSimpleTags(input: string): string {
     output = output.replace(pattern, (_, slash: string) => `<${slash ? '/' : ''}${tag}>`);
   }
 
-  output = output.replace(
-    /&lt;a\s+href=&quot;([^&]*)&quot;&gt;/gi,
-    (_match, hrefEncoded: string) => {
-      const decodedHref = hrefEncoded.replace(/&amp;/g, '&');
-      if (!/^https?:\/\//i.test(decodedHref)) {
-        return _match;
-      }
-      const safeHref = decodedHref.replace(/"/g, '%22');
-      return `<a href="${safeHref}">`;
+  const anchorPattern = /&lt;a\s+href\s*=\s*&quot;([\s\S]*?)&quot;([\s\S]*?)&gt;([\s\S]*?)&lt;\/a&gt;/gi;
+  output = output.replace(anchorPattern, (match, hrefEncoded: string, between: string, inner: string) => {
+    if (/\S/.test(between)) {
+      return match;
     }
-  );
 
-  output = output.replace(/&lt;\/a&gt;/gi, '</a>');
+    const decodedHref = hrefEncoded.replace(/&amp;/g, '&');
+    if (!/^(https?:\/\/|mailto:)/i.test(decodedHref)) {
+      return match;
+    }
+
+    const safeHref = decodedHref.replace(/"/g, '%22');
+    return `<a href="${safeHref}">${inner}</a>`;
+  });
 
   return output;
 }
