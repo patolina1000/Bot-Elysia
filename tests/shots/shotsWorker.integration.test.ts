@@ -17,6 +17,7 @@ function ensureEnv(): void {
 type ProcessShotQueueJobFn = (job: ShotQueueJob, client: any) => Promise<void>;
 
 type Dependencies = typeof import('../../src/services/shots/worker.js')['__dependencies'];
+type ComputeNextRetryFn = (attempts: number) => Date | null;
 
 type Scenario = { shot: ShotRow; plans: ShotPlanRow[] };
 
@@ -24,6 +25,7 @@ type FakeApi = BotLike;
 
 let processShotQueueJob: ProcessShotQueueJobFn;
 let dependencies: Dependencies;
+let computeNextRetry: ComputeNextRetryFn;
 
 let currentScenario: Scenario | null = null;
 let currentBotApi: { api: FakeApi } | null = null;
@@ -220,7 +222,7 @@ test.before(async () => {
   ensureEnv();
   const workerModule = await import('../../src/services/shots/worker.js');
   const exports = (workerModule as any).default ?? workerModule;
-  ({ processShotQueueJob, __dependencies: dependencies } = exports.__private__);
+  ({ processShotQueueJob, __dependencies: dependencies, computeNextRetry } = exports.__private__);
   originalDependencies = { ...dependencies };
 });
 
@@ -236,6 +238,29 @@ test.afterEach(() => {
   dependencies.insertShotError = originalDependencies.insertShotError;
   mock.restoreAll();
   resetState();
+});
+
+test('computeNextRetry grows exponentially until capped at 30 minutes', () => {
+  const originalNow = Date.now;
+  const fixedNow = 1_700_000_000_000;
+  Date.now = () => fixedNow;
+
+  try {
+    const attempts = [1, 2, 3, 4, 5, 6, 7, 8];
+    const results = attempts.map((attempt) => computeNextRetry(attempt));
+
+    results.forEach((result, index) => {
+      const attempt = attempts[index];
+      assert.ok(result, `Expected retry for attempt ${attempt}`);
+      const expectedSeconds = Math.min(30 * 2 ** (attempt - 1), 30 * 60);
+      assert.equal(result!.getTime(), fixedNow + expectedSeconds * 1000);
+    });
+
+    assert.equal(computeNextRetry(0), null);
+    assert.equal(computeNextRetry(-1), null);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('processShotQueueJob sends intro media and plans with success logs', { concurrency: false }, async () => {

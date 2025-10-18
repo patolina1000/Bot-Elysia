@@ -55,17 +55,27 @@ const MAX_JOB_ATTEMPTS = (() => {
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_ATTEMPTS;
 })();
-const DEFAULT_RETRY_DELAYS_SECONDS = [30, 300];
-const RETRY_DELAYS_SECONDS = (() => {
-  const raw = process.env.SHOTS_WORKER_RETRY_DELAYS;
+const DEFAULT_RETRY_BASE_SECONDS = 30;
+const RETRY_BASE_SECONDS = (() => {
+  const raw = process.env.SHOTS_WORKER_RETRY_BASE_SECONDS;
   if (!raw) {
-    return DEFAULT_RETRY_DELAYS_SECONDS;
+    return DEFAULT_RETRY_BASE_SECONDS;
   }
-  const parsed = raw
-    .split(',')
-    .map((value) => Number.parseInt(value.trim(), 10))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  return parsed.length > 0 ? parsed : DEFAULT_RETRY_DELAYS_SECONDS;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RETRY_BASE_SECONDS;
+})();
+
+const DEFAULT_RETRY_MAX_SECONDS = 30 * 60;
+const RETRY_MAX_SECONDS = (() => {
+  const raw = process.env.SHOTS_WORKER_RETRY_MAX_SECONDS;
+  if (!raw) {
+    return Math.max(DEFAULT_RETRY_MAX_SECONDS, RETRY_BASE_SECONDS);
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.max(DEFAULT_RETRY_MAX_SECONDS, RETRY_BASE_SECONDS);
+  }
+  return Math.max(parsed, RETRY_BASE_SECONDS);
 })();
 
 async function acquireLock(): Promise<boolean> {
@@ -92,13 +102,15 @@ function computeNextRetry(attempts: number): Date | null {
     return null;
   }
 
-  const index = attempts - 1;
-  const delaySeconds = RETRY_DELAYS_SECONDS[index];
-  if (!Number.isFinite(delaySeconds) || delaySeconds <= 0) {
+  const exponent = attempts - 1;
+  const exponentialDelaySeconds = RETRY_BASE_SECONDS * 2 ** exponent;
+  if (!Number.isFinite(exponentialDelaySeconds) || exponentialDelaySeconds <= 0) {
     return null;
   }
 
-  return new Date(Date.now() + delaySeconds * 1000);
+  const clampedSeconds = Math.min(exponentialDelaySeconds, RETRY_MAX_SECONDS);
+
+  return new Date(Date.now() + clampedSeconds * 1000);
 }
 
 function createCorrelation(job: ShotQueueJob): string {
@@ -334,7 +346,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
   }
 }
 
-export const __private__ = { processShotQueueJob, __dependencies };
+export const __private__ = { processShotQueueJob, __dependencies, computeNextRetry };
 
 export function startShotsWorker(): void {
   const workerLogger = logger.child({ worker: 'shots' });
