@@ -1,6 +1,15 @@
-import type { Pool, PoolClient, QueryResult } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { pool } from './pool.js';
 
+/**
+ * Repository helpers for the per-recipient shots queue.
+ *
+ * @remarks
+ * The queue now stores only references to recipients (`shot_id` + `telegram_id`).
+ * Always enqueue through `ShotsService.enqueueShotRecipients()` so that content is
+ * read from the `shots` and `shot_plans` tables instead of duplicating legacy
+ * payload fields such as copy or media.
+ */
 export type ShotTarget = 'started' | 'pix_created';
 export type ShotStatus =
   | 'pending'
@@ -17,9 +26,6 @@ export interface ShotQueueJob {
   shot_id: number | null;
   bot_slug: string;
   target: ShotTarget | null;
-  copy: string;
-  media_url: string | null;
-  media_type: MediaType;
   telegram_id: number | null;
   scheduled_at: Date | null;
   status: ShotStatus;
@@ -29,22 +35,6 @@ export interface ShotQueueJob {
   last_error: string | null;
   created_at: Date;
   updated_at: Date;
-}
-
-export interface CreateShotParams {
-  bot_slug: string;
-  target: ShotTarget;
-  copy: string;
-  media_url?: string | null;
-  media_type?: MediaType;
-  scheduled_at?: Date;
-}
-
-export interface UpdateShotParams {
-  copy?: string;
-  media_url?: string | null;
-  media_type?: MediaType;
-  scheduled_at?: Date;
 }
 
 type Queryable = Pool | PoolClient;
@@ -71,9 +61,6 @@ function mapRow(row: any): ShotQueueJob {
     shot_id: row.shot_id !== undefined && row.shot_id !== null ? Number(row.shot_id) : null,
     bot_slug: String(row.bot_slug),
     target: row.target ? (String(row.target) as ShotTarget) : null,
-    copy: String(row.copy ?? ''),
-    media_url: row.media_url ?? null,
-    media_type: String(row.media_type ?? 'none') as MediaType,
     telegram_id:
       row.telegram_id !== undefined && row.telegram_id !== null ? Number(row.telegram_id) : null,
     scheduled_at: parseDate(row.scheduled_at),
@@ -85,127 +72,6 @@ function mapRow(row: any): ShotQueueJob {
     created_at: parseDate(row.created_at) ?? new Date(),
     updated_at: parseDate(row.updated_at) ?? new Date(),
   };
-}
-
-export async function createShot(
-  params: CreateShotParams,
-  client?: PoolClient
-): Promise<ShotQueueJob> {
-  const queryable = getQueryable(client);
-  
-  const result = await queryable.query(
-    `INSERT INTO shots_queue (
-       bot_slug, target, copy, media_url, media_type, scheduled_at,
-       status, attempt_count
-     )
-     VALUES ($1, $2, $3, $4, $5, COALESCE($6, now()), 'pending', 0)
-     RETURNING *`,
-    [
-      params.bot_slug,
-      params.target,
-      params.copy,
-      params.media_url ?? null,
-      params.media_type ?? 'none',
-      params.scheduled_at ?? null,
-    ]
-  );
-
-  return mapRow(result.rows[0]);
-}
-
-export async function listShots(
-  bot_slug: string,
-  limit = 50,
-  client?: PoolClient
-): Promise<ShotQueueJob[]> {
-  const queryable = getQueryable(client);
-  
-  const result = await queryable.query(
-    `SELECT *
-     FROM shots_queue
-     WHERE bot_slug = $1
-     ORDER BY created_at DESC
-     LIMIT $2`,
-    [bot_slug, limit]
-  );
-
-  return result.rows.map(mapRow);
-}
-
-export async function getShotById(
-  id: number,
-  client?: PoolClient
-): Promise<ShotQueueJob | null> {
-  const queryable = getQueryable(client);
-  
-  const result = await queryable.query(
-    `SELECT * FROM shots_queue WHERE id = $1`,
-    [id]
-  );
-
-  return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
-}
-
-export async function updateShot(
-  id: number,
-  params: UpdateShotParams,
-  client?: PoolClient
-): Promise<ShotQueueJob | null> {
-  const queryable = getQueryable(client);
-  
-  // Build dynamic update query
-  const updates: string[] = [];
-  const values: any[] = [];
-  let paramIndex = 1;
-
-  if (params.copy !== undefined) {
-    updates.push(`copy = $${paramIndex++}`);
-    values.push(params.copy);
-  }
-  if (params.media_url !== undefined) {
-    updates.push(`media_url = $${paramIndex++}`);
-    values.push(params.media_url);
-  }
-  if (params.media_type !== undefined) {
-    updates.push(`media_type = $${paramIndex++}`);
-    values.push(params.media_type);
-  }
-  if (params.scheduled_at !== undefined) {
-    updates.push(`scheduled_at = $${paramIndex++}`);
-    values.push(params.scheduled_at);
-  }
-
-  if (updates.length === 0) {
-    return getShotById(id, client);
-  }
-
-  values.push(id);
-  
-  const result = await queryable.query(
-    `UPDATE shots_queue
-     SET ${updates.join(', ')}
-     WHERE id = $${paramIndex} AND status = 'pending'
-     RETURNING *`,
-    values
-  );
-
-  return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
-}
-
-export async function deleteShot(
-  id: number,
-  client?: PoolClient
-): Promise<boolean> {
-  const queryable = getQueryable(client);
-  
-  const result = await queryable.query(
-    `DELETE FROM shots_queue
-     WHERE id = $1 AND status = 'pending'
-     RETURNING id`,
-    [id]
-  );
-
-  return result.rowCount !== null && result.rowCount > 0;
 }
 
 export interface PickedShotQueueJobs {

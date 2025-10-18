@@ -2,79 +2,75 @@ import type { Express, Request, Response } from 'express';
 import { authAdminMiddleware } from '../http/middleware/authAdmin.js';
 import { logger } from '../logger.js';
 import {
-  createShot,
-  listShots,
-  getShotById,
-  updateShot,
-  deleteShot,
-  type ShotTarget,
-  type MediaType,
-  type CreateShotParams,
-} from '../db/shotsQueue.js';
-import { getShotStats } from '../db/shotsSent.js';
-import { pool } from '../db/pool.js';
+  shotsService,
+  ShotsServiceError,
+} from '../services/ShotsService.js';
 
 function sanitizeStr(value: unknown, max = 5000): string {
   const str = String(value ?? '').trim();
   return str.length > max ? str.slice(0, max) : str;
 }
 
-function normalizeShotTarget(value: unknown): ShotTarget | null {
-  const str = sanitizeStr(value, 32).toLowerCase();
-  if (str === 'started' || str === 'pix_created') {
-    return str as ShotTarget;
+function normalizeLegacyTarget(value: unknown): 'all_started' | 'pix_generated' {
+  const normalized = sanitizeStr(value, 32).toLowerCase();
+  if (normalized === 'pix_created' || normalized === 'pix_generated') {
+    return 'pix_generated';
   }
-  return null;
+  return 'all_started';
 }
 
-function normalizeMediaType(value: unknown): MediaType {
-  const str = sanitizeStr(value, 16).toLowerCase();
-  if (str === 'photo' || str === 'video' || str === 'audio' || str === 'document') {
-    return str as MediaType;
+function normalizeMediaType(value: unknown): 'none' | 'photo' | 'video' | 'audio' | 'document' {
+  const normalized = sanitizeStr(value, 16).toLowerCase();
+  if (normalized === 'photo' || normalized === 'video' || normalized === 'audio' || normalized === 'document') {
+    return normalized;
   }
   return 'none';
 }
 
-function parseScheduledAt(value: unknown): Date | undefined {
-  if (!value) return undefined;
+function parseScheduledAt(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
   const date = new Date(String(value));
-  return isNaN(date.getTime()) ? undefined : date;
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-async function validateBotSlug(botSlug: string): Promise<boolean> {
-  const { rows } = await pool.query(
-    'SELECT 1 FROM bots WHERE slug = $1 LIMIT 1',
-    [botSlug]
-  );
-  return rows.length > 0;
+function parseShotId(req: Request): number | null {
+  const shotId = Number(req.params.id);
+  if (!Number.isInteger(shotId) || shotId <= 0) {
+    return null;
+  }
+  return shotId;
+}
+
+function handleServiceError(res: Response, err: unknown, scope: string): Response {
+  if (err instanceof ShotsServiceError) {
+    logger.warn({ err, scope }, '[ADMIN][SHOTS][SERVICE_ERROR]');
+    return res.status(err.statusCode).json({
+      ok: false,
+      error: err.code,
+      message: err.message,
+      details: err.details ?? null,
+    });
+  }
+  logger.error({ err, scope }, '[ADMIN][SHOTS][UNEXPECTED_ERROR]');
+  return res.status(500).json({
+    ok: false,
+    error: 'internal_error',
+    details: err instanceof Error ? err.message : String(err),
+  });
 }
 
 export function registerAdminShotsRoutes(app: Express): void {
-  // POST /admin/shots - Create new shot
   app.post(
     '/admin/api/shots',
     authAdminMiddleware,
     async (req: Request, res: Response): Promise<Response> => {
       try {
-        const body = req.body;
+        const body = req.body ?? {};
 
         const botSlug = sanitizeStr(body.bot_slug, 200).toLowerCase();
         if (!botSlug) {
           return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
-        }
-
-        // Validate bot exists
-        const botExists = await validateBotSlug(botSlug);
-        if (!botExists) {
-          return res.status(400).json({ ok: false, error: 'bot_slug inválido' });
-        }
-
-        const target = normalizeShotTarget(body.target);
-        if (!target) {
-          return res.status(400).json({
-            ok: false,
-            error: 'target deve ser "started" ou "pix_created"',
-          });
         }
 
         const copy = sanitizeStr(body.copy, 8000);
@@ -82,108 +78,68 @@ export function registerAdminShotsRoutes(app: Express): void {
           return res.status(400).json({ ok: false, error: 'copy obrigatória' });
         }
 
-        const mediaUrl = body.media_url ? sanitizeStr(body.media_url, 2000) : null;
-        const mediaType = normalizeMediaType(body.media_type);
-        const scheduledAt = parseScheduledAt(body.scheduled_at);
-
-        const params: CreateShotParams = {
+        const shot = await shotsService.createShot({
           bot_slug: botSlug,
-          target,
+          title: body.title ? sanitizeStr(body.title, 200) : null,
           copy,
-          media_url: mediaUrl,
-          media_type: mediaType,
-          scheduled_at: scheduledAt,
-        };
+          target: normalizeLegacyTarget(body.target),
+          media_type: normalizeMediaType(body.media_type),
+          media_url: body.media_url ? sanitizeStr(body.media_url, 2000) : null,
+          scheduled_at: parseScheduledAt(body.scheduled_at),
+        });
 
-        const shot = await createShot(params);
-
-        logger.info(
-          { shot_id: shot.id, bot_slug: botSlug, target, scheduled_at: shot.scheduled_at },
-          '[ADMIN][SHOTS][POST] created'
-        );
+        logger.info({ shot_id: shot.id, bot_slug: shot.bot_slug }, '[ADMIN][SHOTS][POST] created');
 
         return res.status(201).json({ ok: true, shot });
       } catch (err) {
-        logger.error({ err }, '[ADMIN][SHOTS][POST] error');
-        return res.status(500).json({
-          ok: false,
-          error: 'internal_error',
-          details: err instanceof Error ? err.message : String(err),
-        });
+        return handleServiceError(res, err, 'create');
       }
     }
   );
 
-  // GET /admin/shots?bot_slug=... - List shots for a bot
   app.get(
     '/admin/api/shots',
     authAdminMiddleware,
     async (req: Request, res: Response): Promise<Response> => {
       try {
         const rawBotSlug = req.query?.bot_slug as string | string[] | undefined;
-        const botSlug = sanitizeStr(
-          Array.isArray(rawBotSlug) ? rawBotSlug[0] : rawBotSlug,
-          200
-        ).toLowerCase();
+        const botSlug = sanitizeStr(Array.isArray(rawBotSlug) ? rawBotSlug[0] : rawBotSlug, 200).toLowerCase();
 
         if (!botSlug) {
           return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
         }
 
-        const limit = parseInt(String(req.query?.limit ?? '50'));
-        const shots = await listShots(botSlug, limit);
+        const limit = Number.parseInt(String(req.query?.limit ?? '50'), 10);
+        const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 50;
 
-        // Enrich with basic stats
-        const enrichedShots = await Promise.all(
-          shots.map(async (shot) => {
-            if (shot.status === 'sent' || shot.status === 'success') {
-              const stats = await getShotStats(shot.id);
-              return { ...shot, stats };
-            }
-            return shot;
-          })
-        );
-
-        return res.status(200).json({ items: enrichedShots });
-      } catch (err) {
-        logger.error({ err }, '[ADMIN][SHOTS][GET] error');
-        return res.status(500).json({
-          ok: false,
-          error: 'internal_error',
-          details: err instanceof Error ? err.message : String(err),
+        const result = await shotsService.listShots({
+          botSlug,
+          search: null,
+          limit: normalizedLimit,
+          offset: 0,
         });
+
+        return res.status(200).json({ ok: true, total: result.total, items: result.items });
+      } catch (err) {
+        return handleServiceError(res, err, 'list');
       }
     }
   );
 
-  // PATCH /admin/shots/:id - Update pending shot
   app.patch(
     '/admin/api/shots/:id',
     authAdminMiddleware,
     async (req: Request, res: Response): Promise<Response> => {
       try {
-        const shotId = Number(req.params.id);
-        if (!Number.isInteger(shotId) || shotId <= 0) {
+        const shotId = parseShotId(req);
+        if (!shotId) {
           return res.status(400).json({ ok: false, error: 'invalid_id' });
         }
 
-        const shot = await getShotById(shotId);
-        if (!shot) {
-          return res.status(404).json({ ok: false, error: 'not_found' });
-        }
+        const body = req.body ?? {};
+        const updates: Parameters<typeof shotsService.updateShot>[1] = {};
 
-        if (shot.status !== 'pending') {
-          return res.status(400).json({
-            ok: false,
-            error: 'only_pending_can_be_updated',
-            message: 'Apenas disparos com status "pending" podem ser editados',
-          });
-        }
-
-        const body = req.body;
-        const updates: any = {};
-
-        if ('copy' in body) {
+        if (body.copy !== undefined) {
           const copy = sanitizeStr(body.copy, 8000);
           if (!copy) {
             return res.status(400).json({ ok: false, error: 'copy não pode ser vazia' });
@@ -191,107 +147,81 @@ export function registerAdminShotsRoutes(app: Express): void {
           updates.copy = copy;
         }
 
-        if ('media_url' in body) {
-          updates.media_url = body.media_url ? sanitizeStr(body.media_url, 2000) : null;
-        }
-
-        if ('media_type' in body) {
+        if (body.media_type !== undefined) {
           updates.media_type = normalizeMediaType(body.media_type);
         }
 
-        if ('scheduled_at' in body) {
-          const scheduledAt = parseScheduledAt(body.scheduled_at);
-          if (!scheduledAt) {
-            return res.status(400).json({ ok: false, error: 'invalid_scheduled_at' });
-          }
-          updates.scheduled_at = scheduledAt;
+        if (body.media_url !== undefined) {
+          updates.media_url = body.media_url ? sanitizeStr(body.media_url, 2000) : null;
+        }
+
+        if (body.target !== undefined) {
+          updates.target = normalizeLegacyTarget(body.target);
+        }
+
+        if (body.title !== undefined) {
+          updates.title = body.title ? sanitizeStr(body.title, 200) : null;
+        }
+
+        if (body.bot_slug !== undefined) {
+          updates.bot_slug = sanitizeStr(body.bot_slug, 200).toLowerCase();
+        }
+
+        if (body.scheduled_at !== undefined) {
+          updates.scheduled_at = parseScheduledAt(body.scheduled_at);
         }
 
         if (Object.keys(updates).length === 0) {
           return res.status(400).json({ ok: false, error: 'no_fields_to_update' });
         }
 
-        const updated = await updateShot(shotId, updates);
+        const shot = await shotsService.updateShot(shotId, updates);
 
-        logger.info({ shot_id: shotId, updates }, '[ADMIN][SHOTS][PATCH] updated');
+        logger.info({ shot_id: shotId }, '[ADMIN][SHOTS][PATCH] updated');
 
-        return res.status(200).json({ ok: true, shot: updated });
+        return res.status(200).json({ ok: true, shot });
       } catch (err) {
-        logger.error({ err }, '[ADMIN][SHOTS][PATCH] error');
-        return res.status(500).json({
-          ok: false,
-          error: 'internal_error',
-          details: err instanceof Error ? err.message : String(err),
-        });
+        return handleServiceError(res, err, 'update');
       }
     }
   );
 
-  // DELETE /admin/shots/:id - Cancel pending shot
   app.delete(
     '/admin/api/shots/:id',
     authAdminMiddleware,
     async (req: Request, res: Response): Promise<Response> => {
       try {
-        const shotId = Number(req.params.id);
-        if (!Number.isInteger(shotId) || shotId <= 0) {
+        const shotId = parseShotId(req);
+        if (!shotId) {
           return res.status(400).json({ ok: false, error: 'invalid_id' });
         }
 
-        const deleted = await deleteShot(shotId);
-        if (!deleted) {
-          return res.status(404).json({
-            ok: false,
-            error: 'not_found_or_not_pending',
-            message: 'Disparo não encontrado ou não está pendente',
-          });
-        }
+        await shotsService.deleteShot(shotId);
 
         logger.info({ shot_id: shotId }, '[ADMIN][SHOTS][DELETE] deleted');
 
         return res.status(200).json({ ok: true, deleted_id: shotId });
       } catch (err) {
-        logger.error({ err }, '[ADMIN][SHOTS][DELETE] error');
-        return res.status(500).json({
-          ok: false,
-          error: 'internal_error',
-          details: err instanceof Error ? err.message : String(err),
-        });
+        return handleServiceError(res, err, 'delete');
       }
     }
   );
 
-  // GET /admin/shots/:id/stats - Get detailed stats for a shot
   app.get(
     '/admin/api/shots/:id/stats',
     authAdminMiddleware,
     async (req: Request, res: Response): Promise<Response> => {
       try {
-        const shotId = Number(req.params.id);
-        if (!Number.isInteger(shotId) || shotId <= 0) {
+        const shotId = parseShotId(req);
+        if (!shotId) {
           return res.status(400).json({ ok: false, error: 'invalid_id' });
         }
 
-        const shot = await getShotById(shotId);
-        if (!shot) {
-          return res.status(404).json({ ok: false, error: 'not_found' });
-        }
+        const stats = await shotsService.getShotStats(shotId);
 
-        const stats = await getShotStats(shotId);
-
-        return res.status(200).json({
-          ok: true,
-          shot_id: shotId,
-          status: shot.status,
-          stats,
-        });
+        return res.status(200).json({ ok: true, shot_id: shotId, stats });
       } catch (err) {
-        logger.error({ err }, '[ADMIN][SHOTS][STATS] error');
-        return res.status(500).json({
-          ok: false,
-          error: 'internal_error',
-          details: err instanceof Error ? err.message : String(err),
-        });
+        return handleServiceError(res, err, 'stats');
       }
     }
   );
