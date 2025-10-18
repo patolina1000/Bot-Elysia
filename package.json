@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc && npm run copy-sql",
     "copy-sql": "rm -rf dist/db/migrations dist/db/sql && mkdir -p dist/db/migrations dist/db/sql && cp -r src/db/migrations/*.sql dist/db/migrations/ && cp -r src/db/sql/*.sql dist/db/sql/",
+    "check:migrations": "tsx scripts/check-migrations-no-transactions.ts",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/runMigrations.ts",
