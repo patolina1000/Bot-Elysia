@@ -73,7 +73,8 @@ async function run() {
       const full = path.join(MIGRATIONS_DIR, file);
       const sqlRaw = fs.readFileSync(full);
       const sql = sqlRaw.toString("utf8").replace(/^\uFEFF/, "");
-      const checksum = sha1(sql);
+      const checksumRaw = sha1(sql);
+      const checksumNormalized = sha1(sql.replace(/\r\n/g, "\n"));
 
       const { rows: existingRows } = await client.query(
         `SELECT checksum FROM _schema_migrations WHERE filename = $1`,
@@ -81,8 +82,18 @@ async function run() {
       );
       if (existingRows.length) {
         const existingChecksum = existingRows[0].checksum;
-        if (existingChecksum === checksum) {
+        if (existingChecksum === checksumRaw) {
           console.log(`[migrations] skip ${file} (same checksum)`);
+          continue;
+        }
+        if (existingChecksum === checksumNormalized) {
+          await client.query(
+            `UPDATE _schema_migrations SET checksum = $1 WHERE filename = $2`,
+            [checksumRaw, file]
+          );
+          console.log(
+            `[migrations] normalized checksum updated for ${file} (EOL normalized)`
+          );
           continue;
         }
         throw new Error(
@@ -97,7 +108,7 @@ async function run() {
         await client.query(sql);
         await client.query(
           `INSERT INTO _schema_migrations (filename, checksum) VALUES ($1, $2)`,
-          [file, checksum]
+          [file, checksumRaw]
         );
         await client.query("COMMIT");
       } catch (e: any) {
