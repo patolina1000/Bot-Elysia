@@ -368,5 +368,6 @@ CREATE INDEX IF NOT EXISTS shots_queue_bot_idx
 DO $$
 BEGIN
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Per-recipient queue schema ensured.';
-END $$;
+END
+$$;
 
