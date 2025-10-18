@@ -14,9 +14,12 @@ import { recordShotSent } from '../../db/shotsSent.js';
 import { ShotsMessageBuilder } from './ShotsMessageBuilder.js';
 import { getShotWithPlans } from '../../repositories/ShotsRepo.js';
 import { shotsService } from '../ShotsService.js';
+import { FunnelEventsRepo } from '../../repositories/FunnelEventsRepo.js';
+import { metrics } from '../../metrics.js';
 import type { ShotRow } from '../../repositories/ShotsRepo.js';
 import type { PoolClient } from 'pg';
 import type { MediaType } from '../../db/shotsQueue.js';
+import type { ShotEventTarget } from '../../repositories/FunnelEventsRepo.js';
 
 export const __dependencies = {
   getShotWithPlans,
@@ -26,6 +29,8 @@ export const __dependencies = {
   recordShotSent,
   markShotQueueProcessing,
   scheduleShotQueueRetry,
+  insertShotSent: FunnelEventsRepo.insertShotSent,
+  insertShotError: FunnelEventsRepo.insertShotError,
   enqueueShotRecipients: shotsService.enqueueShotRecipients.bind(shotsService),
 };
 
@@ -95,33 +100,87 @@ function computeNextRetry(attempts: number): Date | null {
   return new Date(Date.now() + delaySeconds * 1000);
 }
 
+function createCorrelation(job: ShotQueueJob): string {
+  const shotPart = job.shot_id != null ? job.shot_id : 'null';
+  const telegramPart = job.telegram_id != null ? job.telegram_id : 'null';
+  return `q:${job.id}|sh:${shotPart}|tg:${telegramPart}`;
+}
+
+function normalizeTelegramId(value: number | null): bigint {
+  if (value === null || value === undefined) {
+    throw new Error('Queue item missing telegram_id');
+  }
+
+  try {
+    return BigInt(value);
+  } catch {
+    return BigInt(Math.trunc(value));
+  }
+}
+
+function resolveShotTarget(shot: ShotRow | null, job: ShotQueueJob): ShotEventTarget {
+  const shotTarget = shot?.target;
+  if (shotTarget === 'all_started' || shotTarget === 'pix_generated') {
+    return shotTarget;
+  }
+
+  const queueTarget = job.target;
+  if (queueTarget === 'pix_created') {
+    return 'pix_generated';
+  }
+
+  return 'all_started';
+}
+
 async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
+  const corr = createCorrelation(job);
   const jobLogger = logger.child({
     scope: 'shots_worker',
     queue_id: job.id,
     shot_id: job.shot_id,
     bot_slug: job.bot_slug,
     telegram_id: job.telegram_id,
+    corr,
   });
+
+  const baseAttempt = Number.isFinite(job.attempts)
+    ? Number(job.attempts)
+    : Number.isFinite(job.attempt_count)
+    ? Number(job.attempt_count)
+    : 0;
+  const nextAttempt = baseAttempt + 1;
+
+  jobLogger.info(`[SHOTS][WORKER][DEQUEUE] id=${job.id} attempt=${nextAttempt} corr=${corr}`);
 
   if (job.shot_id == null || job.telegram_id == null) {
     await __dependencies.markShotQueueError(job.id, 'Queue item missing shot_id or telegram_id', client);
-    jobLogger.error('[SHOTS][WORKER] invalid queue item payload');
+    jobLogger.error(`[SHOTS][WORKER] invalid queue item payload corr=${corr}`);
+    metrics.count('shots.worker.error', 1);
     return;
   }
 
+  const telegramId = normalizeTelegramId(job.telegram_id);
+  const telegramIdString = telegramId.toString();
+  let eventTarget: ShotEventTarget = resolveShotTarget(null, job);
+
   const processingJob = await __dependencies.markShotQueueProcessing(job.id, client);
   if (!processingJob) {
-    jobLogger.warn('[SHOTS][WORKER] failed to mark job as processing');
+    jobLogger.warn(`[SHOTS][WORKER] failed to mark job as processing corr=${corr}`);
     return;
   }
-  const attemptNumber = processingJob.attempts ?? job.attempts ?? 1;
+  const attemptNumber =
+    (Number.isFinite(processingJob.attempts)
+      ? Number(processingJob.attempts)
+      : Number.isFinite(job.attempts)
+      ? Number(job.attempts)
+      : nextAttempt) || nextAttempt;
 
   let shotRecord: ShotRow | null = null;
 
   try {
     const { shot, plans } = await __dependencies.getShotWithPlans(job.shot_id);
     shotRecord = shot;
+    eventTarget = resolveShotTarget(shot, job);
     const bot = await __dependencies.getOrCreateBotBySlug(job.bot_slug);
     const telegram = bot.api ?? bot.telegram ?? bot;
 
@@ -130,18 +189,27 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
       media_type: normalizeMediaType(shot.media_type) as ShotRow['media_type'],
     };
 
-    const introResult = await ShotsMessageBuilder.sendShotIntro(
-      telegram,
-      job.telegram_id,
-      normalizedShot
-    );
+    let introResult: { mediaMessageId?: number; textMessageIds: number[] } = {
+      mediaMessageId: undefined,
+      textMessageIds: [],
+    };
+    let plansResult: { planMessageId?: number } = {};
+    const sendStartedAt = Date.now();
+    try {
+      introResult = await ShotsMessageBuilder.sendShotIntro(telegram, job.telegram_id, normalizedShot, {
+        corr,
+      });
 
-    const plansResult = await ShotsMessageBuilder.sendShotPlans(
-      telegram,
-      job.telegram_id,
-      normalizedShot,
-      plans
-    );
+      plansResult = await ShotsMessageBuilder.sendShotPlans(
+        telegram,
+        job.telegram_id,
+        normalizedShot,
+        plans,
+        { corr }
+      );
+    } finally {
+      metrics.timing('shots.worker.send_ms', Date.now() - sendStartedAt);
+    }
 
     const introDelivered = Boolean(introResult.mediaMessageId) || introResult.textMessageIds.length > 0;
     const plansDelivered = plansResult.planMessageId !== undefined;
@@ -159,12 +227,33 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         client
       );
     } catch (recordErr) {
-      jobLogger.warn({ err: recordErr }, '[SHOTS][WORKER] failed to record shot result');
+      jobLogger.warn({ err: recordErr }, `[SHOTS][WORKER] failed to record shot result corr=${corr}`);
+    }
+
+    const shotSentEventId = `shs:${shot.id}:${telegramIdString}`;
+    try {
+      await __dependencies.insertShotSent({
+        shotId: shot.id,
+        botSlug: shot.bot_slug,
+        telegramId,
+        target: eventTarget,
+      });
+      jobLogger.info(
+        `[SHOTS][EVENT] name=shot_sent event_id=${shotSentEventId} shot=${shot.id} tg=${telegramIdString} corr=${corr}`
+      );
+    } catch (eventErr) {
+      jobLogger.warn(
+        { err: eventErr },
+        `[SHOTS][EVENT] failed name=shot_sent event_id=${shotSentEventId} corr=${corr}`
+      );
     }
 
     await __dependencies.markShotQueueSuccess(job.id, client);
+    metrics.count('shots.worker.success', 1);
 
-    jobLogger.info(`[SHOTS][QUEUE][DONE] id=${job.id} status=success attempts=${attemptNumber}`);
+    jobLogger.info(
+      `[SHOTS][QUEUE][DONE] id=${job.id} status=success attempts=${attemptNumber} corr=${corr}`
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
 
@@ -180,7 +269,34 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         client
       );
     } catch (recordErr) {
-      logger.warn({ err: recordErr, queue_id: job.id }, '[SHOTS][WORKER] failed to record error result');
+      logger.warn(
+        { err: recordErr, queue_id: job.id, corr },
+        `[SHOTS][WORKER] failed to record error result corr=${corr}`
+      );
+    }
+
+    const shotIdForEvent = shotRecord?.id ?? job.shot_id ?? 0;
+    const botSlugForEvent = shotRecord?.bot_slug ?? job.bot_slug;
+    eventTarget = shotRecord ? resolveShotTarget(shotRecord, job) : eventTarget;
+
+    const shotErrorEventId = `she:${shotIdForEvent}:${telegramIdString}:${attemptNumber}`;
+    try {
+      await __dependencies.insertShotError({
+        shotId: shotIdForEvent,
+        botSlug: botSlugForEvent,
+        telegramId,
+        target: eventTarget,
+        attempt: attemptNumber,
+        errorMessage: message,
+      });
+      jobLogger.info(
+        `[SHOTS][EVENT] name=shot_error event_id=${shotErrorEventId} shot=${shotIdForEvent} tg=${telegramIdString} corr=${corr}`
+      );
+    } catch (eventErr) {
+      jobLogger.warn(
+        { err: eventErr },
+        `[SHOTS][EVENT] failed name=shot_error event_id=${shotErrorEventId} corr=${corr}`
+      );
     }
 
     const shouldRetry = attemptNumber < MAX_JOB_ATTEMPTS;
@@ -190,23 +306,30 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         await __dependencies.scheduleShotQueueRetry(job.id, message, nextRetryAt, client);
         jobLogger.warn(
           { err, attempt: attemptNumber, next_retry_at: nextRetryAt.toISOString() },
-          '[SHOTS][WORKER] job scheduled for retry'
+          `[SHOTS][WORKER] job scheduled for retry corr=${corr}`
         );
       } else {
         await __dependencies.markShotQueueError(job.id, message, client);
-        jobLogger.error({ err, attempt: attemptNumber }, '[SHOTS][WORKER] job failed without retry window');
+        jobLogger.error(
+          { err, attempt: attemptNumber },
+          `[SHOTS][WORKER] job failed without retry window corr=${corr}`
+        );
       }
     } else {
       await __dependencies.markShotQueueError(job.id, message, client);
-      jobLogger.error({ err, attempt: attemptNumber }, '[SHOTS][WORKER] job reached max attempts');
+      jobLogger.error({ err, attempt: attemptNumber }, `[SHOTS][WORKER] job reached max attempts corr=${corr}`);
     }
 
+    metrics.count('shots.worker.error', 1);
+
     logger.error(
-      { shot_id: job.shot_id, telegram_id: job.telegram_id, message, attempt: attemptNumber },
-      '[SHOTS][ERROR] failed to dispatch shot'
+      { shot_id: job.shot_id, telegram_id: job.telegram_id, message, attempt: attemptNumber, corr },
+      `[SHOTS][ERROR] failed to dispatch shot corr=${corr}`
     );
 
-    jobLogger.info(`[SHOTS][QUEUE][DONE] id=${job.id} status=error attempts=${attemptNumber}`);
+    jobLogger.info(
+      `[SHOTS][QUEUE][DONE] id=${job.id} status=error attempts=${attemptNumber} corr=${corr}`
+    );
   }
 }
 
@@ -238,6 +361,7 @@ export function startShotsWorker(): void {
         }
 
         const { client, jobs } = picked;
+        metrics.count('shots.worker.fetched', jobs.length);
         workerLogger.info({ picked: jobs.length }, '[SHOTS][WORKER] jobs selected');
 
         try {
