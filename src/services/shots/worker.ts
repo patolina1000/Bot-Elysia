@@ -15,6 +15,7 @@ import { updateTelegramContactChatState } from '../../services/TelegramContactsS
 import { buildPlansKeyboard } from '../../services/bot/plans.js';
 import { shotsService } from '../ShotsService.js';
 import type { PoolClient } from 'pg';
+import { ShotsMessageBuilder } from './ShotsMessageBuilder.js';
 
 const LOCK_KEY = 4839202; // Different from downsells worker
 const WORKER_INTERVAL_MS = 10000; // Check every 10 seconds
@@ -53,50 +54,26 @@ async function sendMessageByType(
       return null;
     });
 
-    if (job.media_type === 'photo' && job.media_url) {
+    const introResult = await ShotsMessageBuilder.sendShotIntro(bot, telegramId, {
+      bot_slug: job.bot_slug,
+      copy: job.copy,
+      media_type: job.media_type,
+      media_url: job.media_url,
+    });
+
+    const trimmedCopyLength = typeof job.copy === 'string' ? job.copy.trim().length : 0;
+
+    const shouldSendCta =
+      keyboard &&
+      introResult.completed &&
+      !(introResult.textMessages.length === 0 && trimmedCopyLength > 0);
+
+    if (shouldSendCta) {
       await sendSafe(
-        () => bot.api.sendPhoto(telegramId, job.media_url, {
-          caption: job.copy,
-          parse_mode: 'HTML',
-          ...(keyboard ? { reply_markup: keyboard } : {}),
-        }),
-        botSlug,
-        telegramId
-      );
-    } else if (job.media_type === 'video' && job.media_url) {
-      await sendSafe(
-        () => bot.api.sendVideo(telegramId, job.media_url, {
-          caption: job.copy,
-          parse_mode: 'HTML',
-          ...(keyboard ? { reply_markup: keyboard } : {}),
-        }),
-        botSlug,
-        telegramId
-      );
-    } else if (job.media_type === 'audio' && job.media_url) {
-      // Send audio separately, then text
-      await sendSafe(
-        () => bot.api.sendAudio(telegramId, job.media_url),
-        botSlug,
-        telegramId
-      );
-      await sendSafe(
-        () => bot.api.sendMessage(telegramId, job.copy, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          ...(keyboard ? { reply_markup: keyboard } : {}),
-        }),
-        botSlug,
-        telegramId
-      );
-    } else {
-      // Text only
-      await sendSafe(
-        () => bot.api.sendMessage(telegramId, job.copy, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          ...(keyboard ? { reply_markup: keyboard } : {}),
-        }),
+        () =>
+          bot.api.sendMessage(telegramId, 'Clique abaixo para continuar:', {
+            reply_markup: keyboard,
+          }),
         botSlug,
         telegramId
       );
