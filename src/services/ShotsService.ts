@@ -1,5 +1,6 @@
 import { pool } from '../db/pool.js';
 import { logger } from '../logger.js';
+import { metrics } from '../metrics.js';
 import {
   getTelegramIdsForAllStarted,
   getTelegramIdsForPixGenerated,
@@ -109,7 +110,11 @@ export class ShotsService {
     const audience = await fetchAudience(botSlug, target);
     const candidates = audience.length;
 
+    metrics.count('shots.enqueue.candidates', candidates);
+
     if (candidates === 0) {
+      metrics.count('shots.enqueue.inserted', 0);
+      metrics.count('shots.enqueue.duplicates', 0);
       logger.info(
         `[SHOTS][ENQUEUE] shot=${shotId} bot=${botSlug} target=${target} cand=0 ins=0 dup=0.`
       );
@@ -152,6 +157,9 @@ export class ShotsService {
     }
 
     const duplicates = Math.max(0, candidates - inserted);
+
+    metrics.count('shots.enqueue.inserted', inserted);
+    metrics.count('shots.enqueue.duplicates', duplicates);
     logger.info(
       `[SHOTS][ENQUEUE] shot=${shotId} bot=${botSlug} target=${target} cand=${candidates} ins=${inserted} dup=${duplicates}.`
     );
