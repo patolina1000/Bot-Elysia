@@ -146,7 +146,7 @@ test('enqueueShotRecipients selects PIX audience when target is pix_created', as
       } as any;
     }
 
-    if (sql.includes("fe.event IN ('pix_created', 'purchase')")) {
+    if (sql.includes("fe.event IN ('pix_created','purchase')")) {
       return {
         rows: [{ telegram_id: 999 }],
       } as any;

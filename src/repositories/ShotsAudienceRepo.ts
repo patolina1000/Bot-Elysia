@@ -58,6 +58,6 @@ export function getTelegramIdsForPixGenerated(botSlug: string): Promise<bigint[]
   return fetchTelegramIds(
     botSlug,
     'pix_generated',
-    "fe.event IN ('pix_created', 'purchase')"
+    "fe.event IN ('pix_created','purchase')"
   );
 }
