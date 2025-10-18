@@ -2,11 +2,11 @@
 CREATE UNIQUE INDEX IF NOT EXISTS idx_funnel_events_event_id
   ON funnel_events (event_id);
 
-CREATE INDEX IF NOT EXISTS idx_funnel_events_event_name
-  ON funnel_events (event_name);
+CREATE INDEX IF NOT EXISTS idx_funnel_events_event
+  ON funnel_events (event);
 
-CREATE INDEX IF NOT EXISTS idx_funnel_events_event_name_time
-  ON funnel_events (event_name, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_funnel_events_event_time
+  ON funnel_events (event, occurred_at);
 
 CREATE INDEX IF NOT EXISTS idx_funnel_events_bot_slug
   ON funnel_events ((meta->>'bot_slug'));
