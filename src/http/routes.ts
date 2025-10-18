@@ -13,6 +13,7 @@ import { plansRouter } from './plans.js';
 import { botSettingsRouter } from './botSettings.js';
 import { miniappQrRouter } from './miniapp/qr.js';
 import { uploadR2Router } from './uploadR2.js';
+import { adminShotsRouter } from '../api/admin/shots.routes.js';
 import { buildPixDiag, buildPixDiagForAll } from '../services/payments/pixDiagnostics.js';
 
 export const router = Router();
@@ -254,6 +255,7 @@ adminRouter.get('/logs', async (req: Request, res: Response) => {
 });
 
 router.use('/admin', adminRouter);
+router.use('/api', adminShotsRouter);
 router.use(plansRouter);
 router.use(botSettingsRouter);
 router.use(pushinpayRouter);
