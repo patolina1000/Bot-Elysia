@@ -1,36 +1,29 @@
-import type { Bot } from 'grammy';
-import type { MyContext } from '../../telegram/grammYContext.js';
 import { logger } from '../../logger.js';
 import { sendSafe } from '../../utils/telegramErrorHandler.js';
-import type { MediaType } from '../../db/shotsQueue.js';
-import type { ShotPlanRecord, ShotRecord } from '../../repositories/ShotsRepo.js';
-import {
-  buildDownsellKeyboard,
-  formatPriceBRL,
-} from '../../telegram/features/downsells/uiHelpers.js';
+import type { ShotPlanRow, ShotRow } from '../../repositories/ShotsRepo.js';
 
-export interface ShotIntroPayload {
-  bot_slug: string;
-  copy: string;
-  media_url: string | null;
-  media_type: MediaType;
+type MediaMethod = 'sendPhoto' | 'sendVideo' | 'sendAudio' | 'sendDocument';
+type ChatAction = 'upload_photo' | 'upload_video' | 'upload_audio' | 'upload_document';
+
+type MediaSender = {
+  chatAction: ChatAction;
+  method: MediaMethod;
+};
+
+const TELEGRAM_CAPTION_LIMIT = 1024;
+const TELEGRAM_TEXT_LIMIT = 4096;
+
+function resolveTelegramId(chatId: number | string): number {
+  if (typeof chatId === 'number' && Number.isFinite(chatId)) {
+    return chatId;
+  }
+
+  const parsed = Number.parseInt(String(chatId), 10);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-type CtxOrBot = Pick<MyContext, 'api'> | Bot<MyContext> | { api: any };
-
-type SendResult = {
-  mediaMessage: any | null;
-  textMessages: any[];
-  completed: boolean;
-};
-
-type SendPlansResult = {
-  textMessages: any[];
-  completed: boolean;
-};
-
-function escapeHtml(value: string): string {
-  return value
+function escapeHtmlEntities(input: string): string {
+  return input
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -38,252 +31,305 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function resolveApi(ctxOrBot: CtxOrBot): any {
-  if (ctxOrBot && typeof (ctxOrBot as any).api === 'object') {
-    return (ctxOrBot as any).api;
+function restoreSimpleTags(input: string): string {
+  const simpleTags = ['b', 'i', 'u', 'code', 'pre'];
+  let output = input;
+
+  for (const tag of simpleTags) {
+    const pattern = new RegExp(`&lt;(/?)${tag}&gt;`, 'gi');
+    output = output.replace(pattern, (_, slash: string) => `<${slash ? '/' : ''}${tag}>`);
   }
-  throw new Error('ShotsMessageBuilder requires a context or bot instance with api');
+
+  output = output.replace(
+    /&lt;a\s+href=&quot;([^&]*)&quot;&gt;/gi,
+    (_match, hrefEncoded: string) => {
+      const decodedHref = hrefEncoded.replace(/&amp;/g, '&');
+      if (!/^https?:\/\//i.test(decodedHref)) {
+        return _match;
+      }
+      const safeHref = decodedHref.replace(/"/g, '%22');
+      return `<a href="${safeHref}">`;
+    }
+  );
+
+  output = output.replace(/&lt;\/a&gt;/gi, '</a>');
+
+  return output;
 }
 
-function getChatAction(mediaType: MediaType):
-  | 'upload_photo'
-  | 'upload_video'
-  | 'upload_audio'
-  | 'upload_document'
-  | null {
+export function sanitizeHtml(input: string): string {
+  if (!input) {
+    return '';
+  }
+
+  const escaped = escapeHtmlEntities(input);
+  return restoreSimpleTags(escaped);
+}
+
+export function chunkText(text: string, limit: number): string[] {
+  if (!text) {
+    return [];
+  }
+
+  const normalized = text.replace(/\r\n/g, '\n');
+  const chunks: string[] = [];
+  let remaining = normalized.trim();
+
+  while (remaining.length > limit) {
+    let breakIndex = remaining.lastIndexOf('\n\n', limit);
+    if (breakIndex > -1) {
+      breakIndex += 2;
+    } else {
+      breakIndex = remaining.lastIndexOf('\n', limit);
+      if (breakIndex > -1) {
+        breakIndex += 1;
+      } else {
+        breakIndex = remaining.lastIndexOf(' ', limit);
+        if (breakIndex === -1) {
+          breakIndex = limit;
+        } else {
+          breakIndex += 1;
+        }
+      }
+    }
+
+    const chunk = remaining.slice(0, breakIndex).trimEnd();
+    if (chunk.length > 0) {
+      chunks.push(chunk);
+    }
+
+    remaining = remaining.slice(breakIndex).trimStart();
+  }
+
+  if (remaining.length > 0) {
+    chunks.push(remaining);
+  }
+
+  return chunks;
+}
+
+export function formatBRL(cents: number): string {
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+      (Number.isFinite(cents) ? cents : 0) / 100
+    );
+  } catch (err) {
+    const value = (Number.isFinite(cents) ? cents : 0) / 100;
+    return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  }
+}
+
+export function mapMediaSender(
+  mediaType: ShotRow['media_type']
+): MediaSender | null {
   switch (mediaType) {
     case 'photo':
-      return 'upload_photo';
+      return { chatAction: 'upload_photo', method: 'sendPhoto' };
     case 'video':
-      return 'upload_video';
+      return { chatAction: 'upload_video', method: 'sendVideo' };
     case 'audio':
-      return 'upload_audio';
+      return { chatAction: 'upload_audio', method: 'sendAudio' };
     case 'document':
-      return 'upload_document';
+      return { chatAction: 'upload_document', method: 'sendDocument' };
     default:
       return null;
   }
 }
 
-export function splitShotCopy(copy: string, limit = 4096): string[] {
-  if (!copy) {
-    return [];
-  }
+function isBadRequestError(err: unknown): boolean {
+  const anyErr = err as { statusCode?: number; error_code?: number; response?: { error_code?: number } };
+  const statusCode = anyErr?.statusCode ?? anyErr?.error_code ?? anyErr?.response?.error_code;
+  return statusCode === 400;
+}
 
-  const normalised = copy.replace(/\r\n/g, '\n');
-  const parts: string[] = [];
-  let remaining = normalised;
+function stripTags(html: string): string {
+  return html.replace(/<[^>]*>/g, '').trim();
+}
 
-  while (remaining.length > limit) {
-    let chunkEnd = remaining.lastIndexOf('\n', limit);
-
-    if (chunkEnd <= 0) {
-      chunkEnd = limit;
-    } else {
-      chunkEnd = Math.min(chunkEnd + 1, limit);
-    }
-
-    parts.push(remaining.slice(0, chunkEnd));
-    remaining = remaining.slice(chunkEnd);
-  }
-
-  if (remaining.length > 0) {
-    parts.push(remaining);
-  }
-
-  return parts;
+export interface BotLike {
+  sendChatAction(chatId: number | string, action: ChatAction): Promise<any>;
+  sendPhoto(chatId: number | string, media: any, extra?: any): Promise<any>;
+  sendVideo(chatId: number | string, media: any, extra?: any): Promise<any>;
+  sendAudio(chatId: number | string, media: any, extra?: any): Promise<any>;
+  sendDocument(chatId: number | string, media: any, extra?: any): Promise<any>;
+  sendMessage(chatId: number | string, text: string, extra?: any): Promise<any>;
 }
 
 export class ShotsMessageBuilder {
   static async sendShotIntro(
-    ctxOrBot: CtxOrBot,
-    chatId: number,
-    shot: ShotIntroPayload
-  ): Promise<SendResult> {
-    const api = resolveApi(ctxOrBot);
-    const copy = typeof shot.copy === 'string' ? shot.copy : '';
-    const copyParts = splitShotCopy(copy, 4096);
-    const mediaType = shot.media_url ? shot.media_type : 'none';
+    bot: BotLike,
+    chatId: number | string,
+    shot: ShotRow
+  ): Promise<{ mediaMessageId?: number; textMessageIds: number[] }> {
+    const telegramId = resolveTelegramId(chatId);
+    const sanitizedCopy = sanitizeHtml(shot.copy ?? '');
+    const mediaSender = mapMediaSender(shot.media_type ?? 'none');
+    const hasMedia = Boolean(mediaSender && shot.media_url);
+    const plainTextCopy = stripTags(sanitizedCopy).replace(/\s+/g, '');
+    const copyLength = plainTextCopy.length;
 
-    logger.info(
-      `[SHOTS][SEND][INTRO] chatId=${chatId} media=${mediaType} copyChars=${copy.length} parts=${copyParts.length}`
-    );
+    let captionUsed = false;
+    let mediaMessageId: number | undefined;
 
-    let mediaMessage: any | null = null;
-    let completed = true;
-
-    if (shot.media_url && mediaType !== 'none') {
-      const action = getChatAction(mediaType);
-      if (action) {
-        await sendSafe(() => api.sendChatAction(chatId, action), shot.bot_slug, chatId);
+    if (hasMedia && mediaSender) {
+      const chatAction = mediaSender.chatAction;
+      try {
+        await bot.sendChatAction(chatId, chatAction);
+      } catch (err) {
+        logger.warn({ err, chatId, action: chatAction }, '[SHOTS][INTRO] failed to send chat action');
       }
 
-      const caption = copy && copy.length <= 1024 ? copy : undefined;
-      const payloadOptions = caption
-        ? { caption, parse_mode: 'HTML' as const }
+      const shouldUseCaption = copyLength > 0 && copyLength <= TELEGRAM_CAPTION_LIMIT;
+      const payloadOptions = shouldUseCaption
+        ? { caption: sanitizedCopy, parse_mode: 'HTML', disable_web_page_preview: true }
         : undefined;
+      try {
+        const response = await sendSafe(
+          () => (bot as any)[mediaSender.method](chatId, shot.media_url, payloadOptions),
+          shot.bot_slug,
+          telegramId
+        );
 
-      if (mediaType === 'photo') {
-        mediaMessage = await sendSafe(
-          () => api.sendPhoto(chatId, shot.media_url, payloadOptions),
-          shot.bot_slug,
-          chatId
-        );
-      } else if (mediaType === 'video') {
-        mediaMessage = await sendSafe(
-          () => api.sendVideo(chatId, shot.media_url, payloadOptions),
-          shot.bot_slug,
-          chatId
-        );
-      } else if (mediaType === 'audio') {
-        mediaMessage = await sendSafe(
-          () => api.sendAudio(chatId, shot.media_url, payloadOptions),
-          shot.bot_slug,
-          chatId
-        );
-      } else if (mediaType === 'document') {
-        mediaMessage = await sendSafe(
-          () => api.sendDocument(chatId, shot.media_url, payloadOptions),
-          shot.bot_slug,
-          chatId
-        );
-      }
+        if (response === null) {
+          return { textMessageIds: [] };
+        }
 
-      if (mediaMessage === null) {
-        return { mediaMessage, textMessages: [], completed: false };
+        captionUsed = shouldUseCaption;
+        mediaMessageId = Number(response?.message_id);
+      } catch (err) {
+        if (
+          (mediaSender.method === 'sendPhoto' || mediaSender.method === 'sendVideo') &&
+          isBadRequestError(err)
+        ) {
+          logger.warn(
+            { err, chatId, mediaType: mediaSender.method },
+            '[SHOTS][INTRO] media send failed, falling back to document'
+          );
+
+          const fallbackResponse = await sendSafe(
+            () => bot.sendDocument(chatId, shot.media_url, payloadOptions),
+            shot.bot_slug,
+            telegramId
+          );
+
+          if (fallbackResponse === null) {
+            return { textMessageIds: [] };
+          }
+
+          captionUsed = shouldUseCaption;
+          mediaMessageId = Number(fallbackResponse?.message_id);
+        } else {
+          throw err;
+        }
       }
     }
 
-    const textMessages: any[] = [];
+    const textMessageIds: number[] = [];
+    const shouldSendText = copyLength > 0 && !captionUsed;
+    const chunks = shouldSendText ? chunkText(sanitizedCopy, TELEGRAM_TEXT_LIMIT) : [];
 
-    for (const part of copyParts) {
-      if (!part) {
-        continue;
-      }
-
-      const sent = await sendSafe(
+    for (const part of chunks) {
+      const response = await sendSafe(
         () =>
-          api.sendMessage(chatId, part, {
+          bot.sendMessage(chatId, part, {
             parse_mode: 'HTML',
             disable_web_page_preview: true,
           }),
         shot.bot_slug,
-        chatId
+        telegramId
       );
 
-      if (sent === null) {
-        completed = false;
+      if (response === null) {
         break;
       }
 
-      textMessages.push(sent);
+      textMessageIds.push(Number(response.message_id));
     }
 
-    return { mediaMessage, textMessages, completed };
+    logger.info(
+      `[SHOTS][SEND][INTRO] chatId=${chatId} media=${hasMedia ? shot.media_type ?? 'none' : 'none'} ` +
+        `captionUsed=${captionUsed ? 'yes' : 'no'} copyChars=${copyLength} parts=${chunks.length}`
+    );
+
+    return { mediaMessageId, textMessageIds };
   }
 
   static async sendShotPlans(
-    ctxOrBot: CtxOrBot,
-    chatId: number,
-    shot: Pick<ShotRecord, 'id' | 'bot_slug'> & { downsell_id?: number | null },
-    plans: ShotPlanRecord[]
-  ): Promise<SendPlansResult> {
-    const api = resolveApi(ctxOrBot);
-    const validPlans = Array.isArray(plans) ? plans : [];
+    bot: BotLike,
+    chatId: number | string,
+    shot: ShotRow,
+    plans: ShotPlanRow[]
+  ): Promise<{ planMessageId?: number }> {
+    const telegramId = resolveTelegramId(chatId);
+    const validPlans = Array.isArray(plans) ? plans.filter((plan) => plan && plan.name?.trim()) : [];
 
-    logger.info(
-      `[SHOTS][SEND][PLANS] chatId=${chatId} plans=${validPlans.length}`
-    );
+    logger.info(`[SHOTS][SEND][PLANS] chatId=${chatId} plans=${validPlans.length}`);
 
     if (validPlans.length === 0) {
-      return { textMessages: [], completed: true };
+      logger.info('[SHOTS][PLANS] none');
+      return {};
     }
 
-    const planTexts: string[] = [];
-    const buttonPlans: { label: string; price_cents: number }[] = [];
+    const blocks: string[] = [];
+    const buttonRows: { text: string; callback_data: string }[][] = [];
+    let buttonIndex = 0;
 
     for (const plan of validPlans) {
-      const name = typeof plan?.name === 'string' ? plan.name.trim() : '';
-      const description = typeof plan?.description === 'string' ? plan.description.trim() : '';
-      const priceCents = Number(plan?.price_cents);
+      const nameHtml = sanitizeHtml(plan.name.trim());
+      const descriptionHtml = plan.description ? sanitizeHtml(plan.description) : null;
+      const priceCents = Number.isFinite(plan.price_cents) ? Math.max(0, Math.round(plan.price_cents)) : 0;
+      const priceLabel = priceCents > 0 ? ` — ${formatBRL(priceCents)}` : '';
 
-      if (name.length === 0) {
-        continue;
+      let block = `• <b>${nameHtml}</b>${priceLabel}`;
+      if (descriptionHtml) {
+        block += `\n<i>${descriptionHtml}</i>`;
       }
+      blocks.push(block);
 
-      const safeName = escapeHtml(name);
-      const hasValidPrice = Number.isFinite(priceCents) && priceCents > 0;
-      const priceLabel = hasValidPrice
-        ? ` — R$ ${formatPriceBRL(Math.round(priceCents))}`
-        : '';
-
-      let block = `<b>${safeName}${priceLabel}</b>`;
-      if (description.length > 0) {
-        block += `\n${escapeHtml(description)}`;
-      }
-
-      planTexts.push(block);
-
-      if (hasValidPrice) {
-        buttonPlans.push({ label: name, price_cents: Math.round(priceCents) });
+      if (priceCents > 0) {
+        const buttonText = `${stripTags(nameHtml)} — ${formatBRL(priceCents)}`;
+        const callbackData = `downsell:${shot.id}:p${buttonIndex}`;
+        buttonRows.push([{ text: buttonText, callback_data: callbackData }]);
+        buttonIndex += 1;
       }
     }
 
-    if (planTexts.length === 0) {
-      return { textMessages: [], completed: true };
+    if (blocks.length === 0) {
+      logger.info('[SHOTS][PLANS] none');
+      return {};
     }
 
-    const combinedText = planTexts.join('\n\n');
-    const textParts = splitShotCopy(combinedText, 4096);
+    const titlePrefix = shot.title ? `<b>${sanitizeHtml(shot.title)}</b>\n\n` : '';
+    const messageBody = `${titlePrefix}${blocks.join('\n\n')}`.trim();
+    const parts = chunkText(messageBody, TELEGRAM_TEXT_LIMIT);
 
-    const downsellId =
-      typeof shot.downsell_id === 'number' && Number.isFinite(shot.downsell_id)
-        ? shot.downsell_id
-        : shot.id;
+    let planMessageId: number | undefined;
 
-    const keyboard =
-      buttonPlans.length > 0
-        ? buildDownsellKeyboard(downsellId, {
-            planLabel: buttonPlans[0]?.label ?? null,
-            mainPriceCents: buttonPlans[0]?.price_cents ?? null,
-            extraPlans: buttonPlans.slice(1),
-          })
-        : null;
-
-    const textMessages: any[] = [];
-    let completed = true;
-
-    for (let index = 0; index < textParts.length; index += 1) {
-      const part = textParts[index];
-      if (!part) {
-        continue;
-      }
-
-      const isLast = index === textParts.length - 1;
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index];
+      const isLast = index === parts.length - 1;
       const options: Record<string, unknown> = {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
       };
 
-      if (isLast && keyboard) {
-        options.reply_markup = keyboard;
+      if (isLast && buttonRows.length > 0) {
+        options.reply_markup = { inline_keyboard: buttonRows };
       }
 
-      const sent = await sendSafe(
-        () =>
-          api.sendMessage(chatId, part, options),
+      const response = await sendSafe(
+        () => bot.sendMessage(chatId, part, options),
         shot.bot_slug,
-        chatId
+        telegramId
       );
 
-      if (sent === null) {
-        completed = false;
+      if (response === null) {
         break;
       }
 
-      textMessages.push(sent);
+      planMessageId = Number(response.message_id);
     }
 
-    return { textMessages, completed };
+    return { planMessageId };
   }
 }

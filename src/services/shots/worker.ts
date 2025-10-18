@@ -14,7 +14,7 @@ import { recordShotSent } from '../../db/shotsSent.js';
 import { ShotsMessageBuilder } from './ShotsMessageBuilder.js';
 import { getShotWithPlans } from '../../repositories/ShotsRepo.js';
 import { shotsService } from '../ShotsService.js';
-import type { ShotRecord } from '../../repositories/ShotsRepo.js';
+import type { ShotRow } from '../../repositories/ShotsRepo.js';
 import type { PoolClient } from 'pg';
 import type { MediaType } from '../../db/shotsQueue.js';
 
@@ -117,25 +117,35 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
   }
   const attemptNumber = processingJob.attempts ?? job.attempts ?? 1;
 
-  let shotRecord: ShotRecord | null = null;
+  let shotRecord: ShotRow | null = null;
 
   try {
     const { shot, plans } = await __dependencies.getShotWithPlans(job.shot_id);
     shotRecord = shot;
     const bot = await __dependencies.getOrCreateBotBySlug(job.bot_slug);
+    const telegram = bot.api ?? bot.telegram ?? bot;
 
-    const introResult = await ShotsMessageBuilder.sendShotIntro(bot, job.telegram_id, {
-      bot_slug: shot.bot_slug,
-      copy: shot.copy ?? '',
-      media_type: normalizeMediaType(shot.media_type),
-      media_url: shot.media_url,
-    });
+    const normalizedShot: ShotRow = {
+      ...shot,
+      media_type: normalizeMediaType(shot.media_type) as ShotRow['media_type'],
+    };
 
-    const plansResult = await ShotsMessageBuilder.sendShotPlans(bot, job.telegram_id, shot, plans);
+    const introResult = await ShotsMessageBuilder.sendShotIntro(
+      telegram,
+      job.telegram_id,
+      normalizedShot
+    );
 
-    const introCompleted = introResult.completed !== false;
-    const plansCompleted = plansResult.completed !== false;
-    const sendStatus = introCompleted && plansCompleted ? 'sent' : 'skipped';
+    const plansResult = await ShotsMessageBuilder.sendShotPlans(
+      telegram,
+      job.telegram_id,
+      normalizedShot,
+      plans
+    );
+
+    const introDelivered = Boolean(introResult.mediaMessageId) || introResult.textMessageIds.length > 0;
+    const plansDelivered = plansResult.planMessageId !== undefined;
+    const sendStatus = introDelivered || plansDelivered ? 'sent' : 'skipped';
 
     try {
       await __dependencies.recordShotSent(
@@ -154,14 +164,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
 
     await __dependencies.markShotQueueSuccess(job.id, client);
 
-    jobLogger.info(
-      {
-        send_status: sendStatus,
-        intro_completed: introCompleted,
-        plans_completed: plansCompleted,
-      },
-      '[SHOTS][SUCCESS]'
-    );
+    jobLogger.info(`[SHOTS][QUEUE][DONE] id=${job.id} status=success attempts=${attemptNumber}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
 
@@ -202,6 +205,8 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
       { shot_id: job.shot_id, telegram_id: job.telegram_id, message, attempt: attemptNumber },
       '[SHOTS][ERROR] failed to dispatch shot'
     );
+
+    jobLogger.info(`[SHOTS][QUEUE][DONE] id=${job.id} status=error attempts=${attemptNumber}`);
   }
 }
 

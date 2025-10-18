@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import type { ShotQueueJob } from '../../src/db/shotsQueue.ts';
 import type { RecordShotSentParams } from '../../src/db/shotsSent.ts';
-import type { ShotPlanRecord, ShotRecord } from '../../src/repositories/ShotsRepo.ts';
+import type { ShotPlanRow, ShotRow } from '../../src/repositories/ShotsRepo.ts';
 
 function ensureEnv(): void {
   process.env.PORT ??= '8080';
@@ -17,7 +17,7 @@ type ProcessShotQueueJobFn = (job: ShotQueueJob, client: any) => Promise<void>;
 
 type Dependencies = typeof import('../../src/services/shots/worker.ts')['__dependencies'];
 
-type Scenario = { shot: ShotRecord; plans: ShotPlanRecord[] };
+type Scenario = { shot: ShotRow; plans: ShotPlanRow[] };
 
 type FakeApi = {
   sendChatAction?: (chatId: number, action: string) => Promise<any>;
@@ -219,7 +219,7 @@ test.afterEach(() => {
 test('processShotQueueJob sends intro media and plans with success logs', { concurrency: false }, async () => {
   await setupLoggerCapture();
 
-  const shot: ShotRecord = {
+  const shot: ShotRow = {
     id: 321,
     bot_slug: 'photo-bot',
     title: 'Oferta',
@@ -230,9 +230,9 @@ test('processShotQueueJob sends intro media and plans with success logs', { conc
     target: 'all_started',
   };
 
-  const plans: ShotPlanRecord[] = [
-    { id: 1, name: 'Plano Ouro', price_cents: 19900, description: 'Acesso completo', sort_order: 1 },
-    { id: 2, name: 'Plano Prata', price_cents: 9900, description: 'Conteúdo essencial', sort_order: 2 },
+  const plans: ShotPlanRow[] = [
+    { id: 1, shot_id: 321, name: 'Plano Ouro', price_cents: 19900, description: 'Acesso completo', sort_order: 1 },
+    { id: 2, shot_id: 321, name: 'Plano Prata', price_cents: 9900, description: 'Conteúdo essencial', sort_order: 2 },
   ];
 
   currentScenario = { shot, plans };
@@ -270,13 +270,13 @@ test('processShotQueueJob sends intro media and plans with success logs', { conc
   assert.deepEqual(sendChatActions, ['upload_photo']);
   assert.equal(photoCalls.length, 1);
   assert.equal(photoCalls[0].url, 'https://example.com/photo.jpg');
-  assert.equal(photoCalls[0].options.caption, 'Oferta imperdível');
+  assert.ok(photoCalls[0].options?.caption?.includes('Oferta'));
   assert.equal(photoCalls[0].options.parse_mode, 'HTML');
-  assert.equal(messageCalls.length, 2);
-  assert.equal(messageCalls[0].text, 'Oferta imperdível');
-  assert.match(messageCalls[1].text, /Plano Ouro — R\$ 199,00/);
-  assert.match(messageCalls[1].text, /Plano Prata — R\$ 99,00/);
-  assert.ok(messageCalls[1].options.reply_markup);
+  assert.equal(photoCalls[0].options.disable_web_page_preview, true);
+  assert.equal(messageCalls.length, 1);
+  assert.match(messageCalls[0].text, /Plano Ouro<\/b> — R\$[\s\u00A0]199,00/);
+  assert.match(messageCalls[0].text, /Plano Prata<\/b> — R\$[\s\u00A0]99,00/);
+  assert.ok(messageCalls[0].options.reply_markup);
 
   assert.deepEqual(recordShotCalls, [
     {
@@ -298,12 +298,9 @@ test('processShotQueueJob sends intro media and plans with success logs', { conc
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['photo-bot']);
 
-  assert.deepEqual(logMessages.slice(0, 4).map((msg) => msg.split(' ')[0]), [
-    '[SHOTS][LOAD]',
-    '[SHOTS][SEND][INTRO]',
-    '[SHOTS][SEND][PLANS]',
-    '[SHOTS][SUCCESS]',
-  ]);
+  assert.ok(logMessages.includes('[SHOTS][SEND][INTRO] chatId=998877 media=photo captionUsed=yes copyChars=16 parts=0'));
+  assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=998877 plans=2'));
+  assert.ok(logMessages.includes('[SHOTS][QUEUE][DONE] id=999 status=success attempts=1'));
 });
 
 test('processShotQueueJob handles long copy without media and multiple plans', { concurrency: false }, async () => {
@@ -311,7 +308,7 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
 
   const longCopy = 'A'.repeat(4200);
 
-  const shot: ShotRecord = {
+  const shot: ShotRow = {
     id: 654,
     bot_slug: 'text-bot',
     title: 'Texto longo',
@@ -322,10 +319,10 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
     target: 'all_started',
   };
 
-  const plans: ShotPlanRecord[] = [
-    { id: 10, name: 'Plano Alfa', price_cents: 4900, description: 'Primeiro plano', sort_order: 1 },
-    { id: 11, name: 'Plano Beta', price_cents: 6900, description: 'Segundo plano', sort_order: 2 },
-    { id: 12, name: 'Plano Gama', price_cents: 8900, description: 'Terceiro plano', sort_order: 3 },
+  const plans: ShotPlanRow[] = [
+    { id: 10, shot_id: 654, name: 'Plano Alfa', price_cents: 4900, description: 'Primeiro plano', sort_order: 1 },
+    { id: 11, shot_id: 654, name: 'Plano Beta', price_cents: 6900, description: 'Segundo plano', sort_order: 2 },
+    { id: 12, shot_id: 654, name: 'Plano Gama', price_cents: 8900, description: 'Terceiro plano', sort_order: 3 },
   ];
 
   currentScenario = { shot, plans };
@@ -348,7 +345,7 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
 
   await processShotQueueJob(job, {} as any);
 
-  assert.equal(messageCalls.length >= 3, true);
+  assert.ok(messageCalls.length >= 3);
   assert.ok(messageCalls[0].text.length <= 4096);
   assert.ok(messageCalls[1].text.length <= 4096);
   assert.equal(messageCalls[0].options.parse_mode, 'HTML');
@@ -373,14 +370,18 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['text-bot']);
   assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=123001 plans=3'));
-  assert.equal(logMessages[0].startsWith('[SHOTS][LOAD]'), true);
-  assert.equal(logMessages.at(-1), '[SHOTS][SUCCESS]');
+  assert.ok(
+    logMessages.some((msg) =>
+      msg.startsWith('[SHOTS][SEND][INTRO] chatId=123001 media=none captionUsed=no copyChars=4200 parts=')
+    )
+  );
+  assert.ok(logMessages.includes('[SHOTS][QUEUE][DONE] id=888 status=success attempts=1'));
 });
 
 test('processShotQueueJob sends only intro when no plans exist', { concurrency: false }, async () => {
   await setupLoggerCapture();
 
-  const shot: ShotRecord = {
+  const shot: ShotRow = {
     id: 777,
     bot_slug: 'video-bot',
     title: 'Vídeo especial',
@@ -424,8 +425,7 @@ test('processShotQueueJob sends only intro when no plans exist', { concurrency: 
     sentActions.map((entry) => (entry.type === 'action' ? entry.action : entry.type)),
     ['upload_video', 'video']
   );
-  assert.equal(messageCalls.length, 1);
-  assert.equal(messageCalls[0].text, 'Assista agora');
+  assert.equal(messageCalls.length, 0);
 
   assert.deepEqual(recordShotCalls, [
     {
@@ -444,10 +444,6 @@ test('processShotQueueJob sends only intro when no plans exist', { concurrency: 
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['video-bot']);
   assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=445566 plans=0'));
-  assert.deepEqual(logMessages.slice(0, 4).map((msg) => msg.split(' ')[0]), [
-    '[SHOTS][LOAD]',
-    '[SHOTS][SEND][INTRO]',
-    '[SHOTS][SEND][PLANS]',
-    '[SHOTS][SUCCESS]',
-  ]);
+  assert.ok(logMessages.includes('[SHOTS][PLANS] none'));
+  assert.ok(logMessages.includes('[SHOTS][QUEUE][DONE] id=555 status=success attempts=1'));
 });
