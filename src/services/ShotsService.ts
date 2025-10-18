@@ -146,7 +146,7 @@ function ensureFutureDate(date: Date): void {
     throw new ValidationError('Data de agendamento inválida');
   }
   if (date.getTime() <= Date.now()) {
-    throw new ValidationError('Agendamento deve estar no futuro');
+    throw new ShotsServiceError('Agendamento deve estar no futuro', 422, 'VALIDATION_ERROR');
   }
 }
 
