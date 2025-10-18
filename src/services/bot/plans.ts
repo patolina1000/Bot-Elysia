@@ -141,20 +141,21 @@ export async function createPixForPlan(
 
     // Log apenas se foi inserido (não duplicado)
     if (result.rows.length > 0) {
-      logger.child({
-        op: 'funnel',
-        provider: 'PushinPay',
-        provider_id: transaction.external_id,
-        bot_slug: plan.bot_slug,
-        telegram_id: params.telegramId ?? null,
-        payload_id: params.payloadId ?? null,
-        transaction_id: transaction.id,
-        pix_trace_id,
-      }).info({
-        event_name: 'pix_created',
-        event_id: eventId,
-        price_cents: transaction.value_cents,
-      }, '[PIX][FUNNEL] pix_created');
+      logger
+        .child({
+          op: 'funnel',
+          provider: 'PushinPay',
+          provider_id: transaction.external_id,
+          bot_slug: plan.bot_slug,
+          telegram_id: params.telegramId ?? null,
+          payload_id: params.payloadId ?? null,
+          transaction_id: transaction.id,
+          pix_trace_id,
+        })
+        .info(
+          { event: 'pix_created', event_id: eventId, price_cents: transaction.value_cents },
+          '[PIX][FUNNEL] pix_created'
+        );
     }
   } catch (err) {
     logger.warn({ err, pix_trace_id }, '[plans][pix] Failed to record funnel event');

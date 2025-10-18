@@ -242,8 +242,10 @@ test.afterEach(() => {
 
 test('computeNextRetry grows exponentially until capped at 30 minutes', () => {
   const originalNow = Date.now;
+  const originalRandom = Math.random;
   const fixedNow = 1_700_000_000_000;
   Date.now = () => fixedNow;
+  Math.random = () => 0.5; // neutral jitter
 
   try {
     const attempts = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -260,6 +262,36 @@ test('computeNextRetry grows exponentially until capped at 30 minutes', () => {
     assert.equal(computeNextRetry(-1), null);
   } finally {
     Date.now = originalNow;
+    Math.random = originalRandom;
+  }
+});
+
+test('computeNextRetry applies jitter within expected bounds', () => {
+  const originalNow = Date.now;
+  const originalRandom = Math.random;
+  const fixedNow = 1_700_000_000_000;
+  Date.now = () => fixedNow;
+
+  try {
+    Math.random = () => 0; // minimum jitter
+    const minResult = computeNextRetry(2);
+    Math.random = () => 1; // maximum jitter
+    const maxResult = computeNextRetry(2);
+
+    assert.ok(minResult);
+    assert.ok(maxResult);
+
+    const baseSeconds = Math.min(30 * 2 ** (2 - 1), 30 * 60);
+    const jitterRange = baseSeconds * 0.1;
+
+    const minDelay = (minResult!.getTime() - fixedNow) / 1000;
+    const maxDelay = (maxResult!.getTime() - fixedNow) / 1000;
+
+    assert.equal(minDelay, baseSeconds - jitterRange);
+    assert.equal(maxDelay, baseSeconds + jitterRange);
+  } finally {
+    Date.now = originalNow;
+    Math.random = originalRandom;
   }
 });
 

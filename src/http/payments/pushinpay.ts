@@ -71,7 +71,7 @@ async function recordFunnelEvent(params: {
       payload_id: params.payloadId ?? null,
       pix_trace_id,
     }).info({
-      event_name: params.event,
+      event: params.event,
       event_id: params.eventId,
       price_cents: params.priceCents ?? null,
     }, `[PIX][FUNNEL] ${params.event}`);

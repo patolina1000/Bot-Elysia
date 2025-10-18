@@ -25,7 +25,8 @@ BEGIN
   IF NOT v_event_exists AND v_event_name_exists THEN
     EXECUTE 'ALTER TABLE public.funnel_events RENAME COLUMN event_name TO event';
   END IF;
-END $$;
+END;
+$$;
 
 -- Remove índices antigos que ainda apontem para event_name.
 DO $$
@@ -41,7 +42,18 @@ BEGIN
   LOOP
     EXECUTE format('DROP INDEX IF EXISTS %I', rec.indexname);
   END LOOP;
-END $$;
+  FOR rec IN
+    SELECT indexname
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'funnel_events'
+      AND indexname <> 'idx_funnel_events_event_occurred_at'
+      AND indexdef ILIKE 'CREATE INDEX%ON public.funnel_events% (event, occurred_at%'
+  LOOP
+    EXECUTE format('DROP INDEX IF EXISTS %I', rec.indexname);
+  END LOOP;
+END;
+$$;
 
 -- Garante os índices atualizados para a coluna event.
 CREATE INDEX IF NOT EXISTS idx_funnel_events_event

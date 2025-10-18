@@ -8,11 +8,17 @@ create table if not exists bot_settings (
 do $$
 begin
   if not exists (select 1 from pg_proc where proname = 'trg_set_updated_at') then
-    create or replace function trg_set_updated_at() returns trigger as $body$
-    begin new.updated_at = now(); return new; end
-    $body$ language plpgsql;
+    create or replace function trg_set_updated_at()
+    returns trigger as $body$
+    begin
+      new.updated_at = now();
+      return new;
+    end;
+    $body$
+    language plpgsql;
   end if;
-end$$;
+end;
+$$;
 
 drop trigger if exists set_updated_at_on_bot_settings on bot_settings;
 create trigger set_updated_at_on_bot_settings
