@@ -46,7 +46,7 @@ BEGIN
             ADD CONSTRAINT shots_media_type_check
             CHECK (media_type IS NULL OR media_type IN ('photo', 'video', 'audio', 'document', 'none'));
     END IF;
-END
+END;
 $$;
 
 -- Restrict shot targeting modes to the approved set.
@@ -62,7 +62,7 @@ BEGIN
             ADD CONSTRAINT shots_target_check
             CHECK (target IN ('all_started', 'pix_generated'));
     END IF;
-END
+END;
 $$;
 
 -- Provide fast lookups by bot slug.
@@ -108,7 +108,7 @@ BEGIN
             REFERENCES shots (id)
             ON DELETE CASCADE;
     END IF;
-END
+END;
 $$;
 
 -- Provide a stable ordering by plan priority per shot.
@@ -118,6 +118,6 @@ CREATE INDEX IF NOT EXISTS shot_plans_shot_id_sort_idx ON shot_plans (shot_id, s
 DO $$
 BEGIN
     RAISE NOTICE '[MIG][SHOTS_CORE] shots_core migration applied successfully.';
-END
+END;
 $$;
 
