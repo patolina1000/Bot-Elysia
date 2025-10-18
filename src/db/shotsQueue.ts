@@ -3,7 +3,7 @@ import { pool } from './pool.js';
 
 export type ShotTarget = 'started' | 'pix_created';
 export type ShotStatus = 'pending' | 'running' | 'sent' | 'skipped' | 'error';
-export type MediaType = 'photo' | 'video' | 'audio' | 'none';
+export type MediaType = 'photo' | 'video' | 'audio' | 'document' | 'none';
 
 export interface ShotQueueJob {
   id: number;

@@ -29,7 +29,7 @@ function normalizeShotTarget(value: unknown): ShotTarget | null {
 
 function normalizeMediaType(value: unknown): MediaType {
   const str = sanitizeStr(value, 16).toLowerCase();
-  if (str === 'photo' || str === 'video' || str === 'audio') {
+  if (str === 'photo' || str === 'video' || str === 'audio' || str === 'document') {
     return str as MediaType;
   }
   return 'none';
