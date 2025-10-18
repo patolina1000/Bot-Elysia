@@ -20,4 +20,4 @@ BEGIN
       EXECUTE 'UPDATE funnel_events SET event = COALESCE(event, ''unknown'')';
     END IF;
   END IF;
-END $$;
+END; $$;

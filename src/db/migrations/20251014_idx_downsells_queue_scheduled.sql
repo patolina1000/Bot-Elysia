@@ -10,7 +10,7 @@ BEGIN
              ON public.downsells_queue (deliver_at)
              WHERE status = ''scheduled''';
   END IF;
-END $$;
+END; $$;
 
 -- Opcional: manter o índice antigo de 'pending' por compatibilidade/histórico.
 -- Para remover no futuro (opcional), rodar:

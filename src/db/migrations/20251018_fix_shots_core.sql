@@ -44,7 +44,7 @@ BEGIN
                   WHERE table_schema='public' AND table_name='shots' AND column_name='created_at') THEN
     EXECUTE 'ALTER TABLE public.shots ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()';
   END IF;
-END $$;
+END; $$;
 
 -- shot_plans: cria se não existir
 CREATE TABLE IF NOT EXISTS public.shot_plans (
@@ -77,7 +77,7 @@ BEGIN
                   WHERE table_schema='public' AND table_name='shot_plans' AND column_name='updated_at') THEN
     EXECUTE 'ALTER TABLE public.shot_plans ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT now()';
   END IF;
-END $$;
+END; $$;
 
 -- FK shot_plans(shot_id) -> shots(id) com ON DELETE CASCADE (idempotente)
 DO $$
@@ -96,7 +96,7 @@ BEGIN
         ON DELETE CASCADE
     ';
   END IF;
-END $$;
+END; $$;
 
 -- Índice de ordenação estável (idempotente)
 CREATE INDEX IF NOT EXISTS shot_plans_shot_id_sort_idx
@@ -106,4 +106,4 @@ CREATE INDEX IF NOT EXISTS shot_plans_shot_id_sort_idx
 DO $$
 BEGIN
   RAISE NOTICE '[MIG][SHOTS_CORE_FIX] Estrutura de shots/shot_plans garantida.';
-END $$;
+END; $$;

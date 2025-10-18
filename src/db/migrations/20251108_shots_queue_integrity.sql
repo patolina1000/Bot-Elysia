@@ -36,7 +36,7 @@ BEGIN
   ) THEN
     EXECUTE 'DROP TRIGGER shots_queue_set_updated_at ON public.shots_queue';
   END IF;
-END $$;
+END; $$;
 
 CREATE TRIGGER shots_queue_set_updated_at
   BEFORE UPDATE ON public.shots_queue
@@ -71,7 +71,7 @@ BEGIN
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Backfilled bot_slug from shots: %', backfilled_count;
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Deleted rows missing shot_id/telegram_id: %', deleted_missing_refs;
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Deleted rows still missing bot_slug: %', deleted_missing_bot;
-END $$;
+END; $$;
 
 ALTER TABLE public.shots_queue
   ALTER COLUMN shot_id SET NOT NULL,
@@ -115,7 +115,7 @@ BEGIN
   LOOP
     EXECUTE format('DROP INDEX IF EXISTS public.%I', idx.indexname);
   END LOOP;
-END $$;
+END; $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_shots_queue_shot_id_telegram_id
   ON public.shots_queue (shot_id, telegram_id);
@@ -132,4 +132,4 @@ CREATE INDEX IF NOT EXISTS shots_queue_bot_idx
 DO $$
 BEGIN
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Integrity hardening completed.';
-END $$;
+END; $$;

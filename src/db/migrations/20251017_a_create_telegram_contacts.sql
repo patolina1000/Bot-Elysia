@@ -3,7 +3,7 @@ DO $$ BEGIN
   CREATE TYPE chat_state_enum AS ENUM ('active', 'blocked', 'deactivated', 'unknown');
 EXCEPTION
   WHEN duplicate_object THEN NULL;
-END $$;
+END; $$;
 
 -- Create telegram_contacts table
 CREATE TABLE IF NOT EXISTS telegram_contacts (
