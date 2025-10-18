@@ -1,34 +1,23 @@
 import { logger } from '../../logger.js';
 import { pool } from '../../db/pool.js';
 import { getOrCreateBotBySlug } from '../../telegram/botFactory.js';
-import { sendSafe } from '../../utils/telegramErrorHandler.js';
 import {
-  pickPendingShot,
-  markShotAsSent,
-  markShotAsError,
-  resetStuckJobs,
+  pickDueShotQueueJobs,
+  markShotQueueSuccess,
+  markShotQueueError,
+  resetStuckShotQueueJobs,
   type ShotQueueJob,
 } from '../../db/shotsQueue.js';
-import { recordShotSent, bulkRecordShotsSent, type RecordShotSentParams } from '../../db/shotsSent.js';
-import { selectAudience } from './audienceSelector.js';
-import { updateTelegramContactChatState } from '../../services/TelegramContactsService';
-import { shotsService } from '../ShotsService.js';
-import type { PoolClient } from 'pg';
+import { recordShotSent } from '../../db/shotsSent.js';
 import { ShotsMessageBuilder } from './ShotsMessageBuilder.js';
-import { getShotWithPlans, type ShotWithPlansResult } from '../../repositories/ShotsRepo.js';
+import { getShotWithPlans } from '../../repositories/ShotsRepo.js';
+import type { ShotRecord } from '../../repositories/ShotsRepo.js';
+import type { PoolClient } from 'pg';
+import type { MediaType } from '../../db/shotsQueue.js';
 
-const LOCK_KEY = 4839202; // Different from downsells worker
-const WORKER_INTERVAL_MS = 10000; // Check every 10 seconds
-const BATCH_SIZE = 50; // Send to 50 users at a time
-const RATE_LIMIT_PER_SECOND = 25; // Max 25 requests/second to Telegram
-const CONCURRENT_SENDS = 10; // Send to 10 users concurrently
-const RETRY_AFTER_429_MS = 30000; // Wait 30s after 429
-
-interface SendResult {
-  telegram_id: number;
-  status: 'sent' | 'skipped' | 'error';
-  error?: string;
-}
+const LOCK_KEY = 4839202; // Keep separate from downsells worker
+const WORKER_INTERVAL_MS = 7000;
+const MAX_JOBS_PER_TICK = 25;
 
 async function acquireLock(): Promise<boolean> {
   const { rows } = await pool.query('SELECT pg_try_advisory_lock($1) AS locked', [LOCK_KEY]);
@@ -41,284 +30,98 @@ async function releaseLock(): Promise<void> {
   });
 }
 
-type ShotPlansContext = ShotWithPlansResult | null;
-
-async function sendMessageByType(
-  bot: any,
-  telegramId: number,
-  job: ShotQueueJob,
-  botSlug: string,
-  plansContext: ShotPlansContext
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const introResult = await ShotsMessageBuilder.sendShotIntro(bot, telegramId, {
-      bot_slug: job.bot_slug,
-      copy: job.copy,
-      media_type: job.media_type,
-      media_url: job.media_url,
-    });
-
-    const hasPlans = plansContext && plansContext.plans.length > 0;
-
-    if (hasPlans) {
-      const planResult = await ShotsMessageBuilder.sendShotPlans(
-        bot,
-        telegramId,
-        plansContext.shot,
-        plansContext.plans
-      );
-
-      if (!planResult.completed) {
-        logger.warn(
-          { bot_slug: botSlug, telegram_id: telegramId },
-          '[SHOTS][WORKER] failed to send some plan messages'
-        );
-      }
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    const errorMsg = err?.message || String(err);
-    
-    // Check for specific Telegram errors
-    if (errorMsg.includes('403') || errorMsg.includes('blocked')) {
-      return { success: false, error: 'blocked' };
-    }
-    if (errorMsg.includes('deactivated')) {
-      return { success: false, error: 'deactivated' };
-    }
-    if (errorMsg.includes('429')) {
-      return { success: false, error: 'rate_limit' };
-    }
-
-    return { success: false, error: errorMsg };
+function normalizeMediaType(value: string | null | undefined): MediaType {
+  const normalized = typeof value === 'string' ? value.toLowerCase() : '';
+  if (normalized === 'photo' || normalized === 'video' || normalized === 'audio' || normalized === 'document') {
+    return normalized as MediaType;
   }
+  return 'none';
 }
 
-async function processBatch(
-  bot: any,
-  job: ShotQueueJob,
-  audienceSlice: { telegram_id: number }[],
-  plansContext: ShotPlansContext
-): Promise<SendResult[]> {
-  const results: SendResult[] = [];
+async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
   const jobLogger = logger.child({
-    shot_id: job.id,
+    scope: 'shots_worker',
+    queue_id: job.id,
+    shot_id: job.shot_id,
     bot_slug: job.bot_slug,
-    batch_size: audienceSlice.length,
+    telegram_id: job.telegram_id,
   });
 
-  // Process in smaller chunks with concurrency control
-  for (let i = 0; i < audienceSlice.length; i += CONCURRENT_SENDS) {
-    const chunk = audienceSlice.slice(i, i + CONCURRENT_SENDS);
-    
-    // Send concurrently within chunk
-    const chunkResults = await Promise.all(
-      chunk.map(async (member) => {
-        const result = await sendMessageByType(
-          bot,
-          member.telegram_id,
-          job,
-          job.bot_slug,
-          plansContext
-        );
-        
-        if (!result.success) {
-          if (result.error === 'blocked') {
-            // Update telegram_contacts to mark as blocked
-            await updateTelegramContactChatState(
-              job.bot_slug,
-              member.telegram_id,
-              'blocked'
-            ).catch((err: unknown) => {
-              logger.warn(
-                { err, telegram_id: member.telegram_id },
-                '[SHOTS][WORKER] failed to update chat_state to blocked'
-              );
-            });
-            
-            return {
-              telegram_id: member.telegram_id,
-              status: 'skipped' as const,
-              error: 'User blocked the bot',
-            };
-          } else if (result.error === 'deactivated') {
-            // Update telegram_contacts to mark as deactivated
-            await updateTelegramContactChatState(
-              job.bot_slug,
-              member.telegram_id,
-              'deactivated'
-            ).catch((err: unknown) => {
-              logger.warn(
-                { err, telegram_id: member.telegram_id },
-                '[SHOTS][WORKER] failed to update chat_state to deactivated'
-              );
-            });
-            
-            return {
-              telegram_id: member.telegram_id,
-              status: 'skipped' as const,
-              error: 'User deactivated',
-            };
-          } else if (result.error === 'rate_limit') {
-            jobLogger.warn('[SHOTS][WORKER] rate limit hit, waiting...');
-            await new Promise((resolve) => setTimeout(resolve, RETRY_AFTER_429_MS));
-            
-            // Retry once after waiting
-            const retryResult = await sendMessageByType(bot, member.telegram_id, job, job.bot_slug);
-            if (retryResult.success) {
-              return {
-                telegram_id: member.telegram_id,
-                status: 'sent' as const,
-              };
-            }
-            
-            return {
-              telegram_id: member.telegram_id,
-              status: 'error' as const,
-              error: 'Rate limit exceeded',
-            };
-          }
-          
-          return {
-            telegram_id: member.telegram_id,
-            status: 'error' as const,
-            error: result.error,
-          };
-        }
-
-        return {
-          telegram_id: member.telegram_id,
-          status: 'sent' as const,
-        };
-      })
-    );
-
-    results.push(...chunkResults);
-
-    // Rate limiting: wait between chunks to respect ~25 req/s
-    if (i + CONCURRENT_SENDS < audienceSlice.length) {
-      const delayMs = (CONCURRENT_SENDS / RATE_LIMIT_PER_SECOND) * 1000;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
+  if (job.shot_id == null || job.telegram_id == null) {
+    await markShotQueueError(job.id, 'Queue item missing shot_id or telegram_id', client);
+    jobLogger.error('[SHOTS][WORKER] invalid queue item payload');
+    return;
   }
 
-  return results;
-}
-
-async function handleJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
-  const jobLogger = logger.child({
-    shot_id: job.id,
-    bot_slug: job.bot_slug,
-    target: job.target,
-  });
-
-  jobLogger.info('[SHOTS][WORKER] processing job');
+  let shotRecord: ShotRecord | null = null;
 
   try {
-    // Get bot instance
+    const { shot, plans } = await getShotWithPlans(job.shot_id);
+    shotRecord = shot;
     const bot = await getOrCreateBotBySlug(job.bot_slug);
 
-    let plansContext: ShotPlansContext = null;
-    try {
-      plansContext = await getShotWithPlans(job.id);
-    } catch (plansErr) {
-      jobLogger.warn({ err: plansErr }, '[SHOTS][PLANS] failed to load plans');
-    }
-
-    if (!plansContext || plansContext.plans.length === 0) {
-      jobLogger.info('[SHOTS][PLANS] none');
-    }
-
-    const enqueueResult = await shotsService.enqueueShotRecipients(job.id);
-    jobLogger.info(
-      {
-        candidates: enqueueResult.candidates,
-        inserted: enqueueResult.inserted,
-        duplicates: enqueueResult.duplicates,
-      },
-      '[SHOTS][ENQUEUE] recipients enqueued'
-    );
-
-    // Select audience
-    const audience = await selectAudience({
-      bot_slug: job.bot_slug,
-      target: job.target,
+    const introResult = await ShotsMessageBuilder.sendShotIntro(bot, job.telegram_id, {
+      bot_slug: shot.bot_slug,
+      copy: shot.copy ?? '',
+      media_type: normalizeMediaType(shot.media_type),
+      media_url: shot.media_url,
     });
 
-    jobLogger.info(
-      { audience_size: audience.length },
-      '[SHOTS][WORKER] audience selected'
-    );
+    const plansResult = await ShotsMessageBuilder.sendShotPlans(bot, job.telegram_id, shot, plans);
 
-    if (audience.length === 0) {
-      await markShotAsSent(job.id, client);
-      jobLogger.info('[SHOTS][WORKER] no audience, marking as sent');
-      return;
-    }
+    const introCompleted = introResult.completed !== false;
+    const plansCompleted = plansResult.completed !== false;
+    const sendStatus = introCompleted && plansCompleted ? 'sent' : 'skipped';
 
-    // Process audience in batches
-    let totalSent = 0;
-    let totalSkipped = 0;
-    let totalErrors = 0;
-
-    for (let i = 0; i < audience.length; i += BATCH_SIZE) {
-      const batch = audience.slice(i, i + BATCH_SIZE);
-      
-      jobLogger.info(
+    try {
+      await recordShotSent(
         {
-          batch_index: Math.floor(i / BATCH_SIZE) + 1,
-          batch_size: batch.length,
-          progress: `${i + batch.length}/${audience.length}`,
+          shot_id: shot.id,
+          bot_slug: shot.bot_slug,
+          telegram_id: job.telegram_id,
+          status: sendStatus,
+          error: null,
         },
-        '[SHOTS][WORKER] processing batch'
+        client
       );
-
-      const results = await processBatch(bot, job, batch, plansContext);
-
-      // Aggregate results
-      const sent = results.filter((r) => r.status === 'sent').length;
-      const skipped = results.filter((r) => r.status === 'skipped').length;
-      const errors = results.filter((r) => r.status === 'error').length;
-
-      totalSent += sent;
-      totalSkipped += skipped;
-      totalErrors += errors;
-
-      // Record to shots_sent table
-      const records: RecordShotSentParams[] = results.map((r) => ({
-        shot_id: job.id,
-        bot_slug: job.bot_slug,
-        telegram_id: r.telegram_id,
-        status: r.status,
-        error: r.error,
-      }));
-
-      await bulkRecordShotsSent(records, client);
-
-      jobLogger.info(
-        { sent, skipped, errors, total_sent: totalSent, total_skipped: totalSkipped, total_errors: totalErrors },
-        '[SHOTS][WORKER] batch completed'
-      );
+    } catch (recordErr) {
+      jobLogger.warn({ err: recordErr }, '[SHOTS][WORKER] failed to record shot result');
     }
 
-    // Mark job as sent
-    await markShotAsSent(job.id, client);
+    await markShotQueueSuccess(job.id, client);
 
     jobLogger.info(
       {
-        total_sent: totalSent,
-        total_skipped: totalSkipped,
-        total_errors: totalErrors,
-        total_audience: audience.length,
+        send_status: sendStatus,
+        intro_completed: introCompleted,
+        plans_completed: plansCompleted,
       },
-      '[SHOTS][WORKER] job completed successfully'
+      '[SHOTS][WORKER] job completed'
     );
   } catch (err) {
-    // DO NOT call markShotAsError here with the aborted transaction client
-    // It will be handled in the outer catch block after ROLLBACK
+    const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
+
+    try {
+      await recordShotSent(
+        {
+          shot_id: shotRecord?.id ?? job.shot_id,
+          bot_slug: shotRecord?.bot_slug ?? job.bot_slug,
+          telegram_id: job.telegram_id,
+          status: 'error',
+          error: message,
+        },
+        client
+      );
+    } catch (recordErr) {
+      logger.warn({ err: recordErr, queue_id: job.id }, '[SHOTS][WORKER] failed to record error result');
+    }
+
+    await markShotQueueError(job.id, message, client);
+    logger.error(
+      { shot_id: job.shot_id, telegram_id: job.telegram_id, message },
+      '[SHOTS][ERROR] failed to dispatch shot'
+    );
     jobLogger.error({ err }, '[SHOTS][WORKER] job failed');
-    throw err; // Re-throw to trigger ROLLBACK in outer handler
   }
 }
 
@@ -327,11 +130,10 @@ export function startShotsWorker(): void {
 
   const tick = async () => {
     workerLogger.info('[SHOTS][WORKER][TICK]');
-    
-    // Reset stuck jobs first
-    const resetCount = await resetStuckJobs(30); // 30 minutes timeout
+
+    const resetCount = await resetStuckShotQueueJobs(30);
     if (resetCount > 0) {
-      workerLogger.info({ count: resetCount }, '[SHOTS][WORKER] reset stuck jobs');
+      workerLogger.info({ reset: resetCount }, '[SHOTS][WORKER] reset stuck jobs');
     }
 
     const locked = await acquireLock();
@@ -341,38 +143,32 @@ export function startShotsWorker(): void {
     }
 
     try {
-      // Process one job at a time (since each job processes entire audience)
-      const picked = await pickPendingShot();
-      if (!picked) {
-        workerLogger.info('[SHOTS][WORKER] no pending jobs');
-        return;
-      }
-
-      const { client, job } = picked;
-      
-      try {
-        await handleJob(job, client);
-        await client.query('COMMIT');
-      } catch (batchErr) {
-        // Rollback the aborted transaction
-        await client.query('ROLLBACK').catch(() => undefined);
-        client.release();
-        
-        // Now mark the shot as error using a separate connection (NOT the aborted transaction)
-        const errorMessage = batchErr instanceof Error ? batchErr.message : String(batchErr ?? 'unknown error');
-        try {
-          await markShotAsError(job.id, errorMessage); // No client param = uses pool directly
-          workerLogger.error({ err: batchErr, shot_id: job.id }, '[SHOTS][WORKER] batch failed, marked as error');
-        } catch (markErr) {
-          workerLogger.error(
-            { err: markErr, original_error: batchErr, shot_id: job.id },
-            '[SHOTS][WORKER] failed to mark shot as error after batch failure'
-          );
+      while (true) {
+        const picked = await pickDueShotQueueJobs(MAX_JOBS_PER_TICK);
+        if (!picked) {
+          workerLogger.debug('[SHOTS][WORKER] no pending jobs');
+          break;
         }
-        return; // Don't re-release client in finally block
+
+        const { client, jobs } = picked;
+        workerLogger.info({ picked: jobs.length }, '[SHOTS][WORKER] jobs selected');
+
+        try {
+          for (const job of jobs) {
+            await processShotQueueJob(job, client);
+          }
+          await client.query('COMMIT');
+        } catch (batchErr) {
+          await client.query('ROLLBACK').catch(() => undefined);
+          workerLogger.error({ err: batchErr }, '[SHOTS][WORKER] batch failed, rolled back');
+        } finally {
+          client.release();
+        }
+
+        if (jobs.length < MAX_JOBS_PER_TICK) {
+          break;
+        }
       }
-      
-      client.release();
     } catch (err) {
       workerLogger.error({ err }, '[SHOTS][WORKER] tick failed');
     } finally {
@@ -380,10 +176,7 @@ export function startShotsWorker(): void {
     }
   };
 
-  // Run immediately
   void tick();
-
-  // Run periodically
   setInterval(() => {
     void tick();
   }, WORKER_INTERVAL_MS);
