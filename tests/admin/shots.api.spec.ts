@@ -383,6 +383,56 @@ test('creates shot and lists with aggregated stats', async () => {
   }
 });
 
+test('rejects past schedule on create and update', async () => {
+  const { app, database, restore } = setupTest();
+  try {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const future = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+    const createPast = await supertest(app)
+      .post('/api/shots')
+      .set(AUTH_HEADER)
+      .send({
+        bot_slug: 'bot-alpha',
+        title: 'Past schedule',
+        copy: 'Mensagem',
+        target: 'all_started',
+        media_type: 'none',
+        scheduled_at: past,
+      });
+
+    assert.equal(createPast.status, 422);
+    assert.equal(database.shots.length, 0);
+
+    const createFuture = await supertest(app)
+      .post('/api/shots')
+      .set(AUTH_HEADER)
+      .send({
+        bot_slug: 'bot-alpha',
+        title: 'Future schedule',
+        copy: 'Mensagem',
+        target: 'all_started',
+        media_type: 'none',
+        scheduled_at: future,
+      });
+
+    assert.equal(createFuture.status, 201);
+    assert.equal(database.shots.length, 1);
+
+    const shotId = database.shots[0].id;
+    const updatePast = await supertest(app)
+      .put(`/api/shots/${shotId}`)
+      .set(AUTH_HEADER)
+      .send({ scheduled_at: past });
+
+    assert.equal(updatePast.status, 422);
+    assert.ok(database.shots[0].scheduled_at instanceof Date);
+    assert.ok(database.shots[0].scheduled_at?.getTime() > Date.now());
+  } finally {
+    restore();
+  }
+});
+
 test('fetches shot details and updates copy and media', async () => {
   const { app, database, restore } = setupTest();
   try {

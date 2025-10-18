@@ -71,7 +71,8 @@ body {
 .field label {
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: #1f2937;
+  line-height: 1.4;
 }
 
 .field input,
@@ -538,14 +539,16 @@ body {
 .datepicker-panel {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
+  left: auto;
   background: #ffffff;
   border: 1px solid #d1d5db;
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18);
   z-index: 10;
-  width: min(320px, calc(100% + 40px));
+  width: min(320px, 100%);
+  max-width: 100%;
 }
 
 .datepicker__footer {

@@ -270,7 +270,15 @@ export class ShotsService {
       throw new ValidationError('media_url obrigatório para o tipo selecionado');
     }
 
-    const scheduledAt = payload.scheduled_at ?? null;
+    let scheduledAt: Date | null = null;
+    if (payload.scheduled_at) {
+      const parsed = new Date(payload.scheduled_at);
+      if (Number.isNaN(parsed.getTime())) {
+        throw new ValidationError('Data de agendamento inválida');
+      }
+      ensureFutureDate(parsed);
+      scheduledAt = parsed;
+    }
 
     const shot = await repoCreateShot({
       bot_slug: botSlug,
@@ -339,8 +347,19 @@ export class ShotsService {
     }
 
     if (payload.scheduled_at !== undefined) {
-      const scheduledAt = payload.scheduled_at ? new Date(payload.scheduled_at) : null;
-      updates.scheduled_at = scheduledAt;
+      if (payload.scheduled_at === null) {
+        updates.scheduled_at = null;
+      } else {
+        const scheduledAt = new Date(payload.scheduled_at);
+        if (Number.isNaN(scheduledAt.getTime())) {
+          throw new ValidationError('Data de agendamento inválida');
+        }
+        const currentScheduledAt = shot.scheduled_at ? new Date(shot.scheduled_at) : null;
+        if (!currentScheduledAt || currentScheduledAt.getTime() !== scheduledAt.getTime()) {
+          ensureFutureDate(scheduledAt);
+        }
+        updates.scheduled_at = scheduledAt;
+      }
     }
 
     if (payload.bot_slug !== undefined) {
@@ -562,7 +581,7 @@ export class ShotsService {
         sort_order: index,
       }));
     } else {
-      previewPlans = plans;
+      previewPlans = plans.map((plan) => ({ ...plan }));
     }
 
     const sanitizedCopy = sanitizeHtml(previewCopy ?? '');
