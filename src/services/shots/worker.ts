@@ -15,6 +15,14 @@ import type { ShotRecord } from '../../repositories/ShotsRepo.js';
 import type { PoolClient } from 'pg';
 import type { MediaType } from '../../db/shotsQueue.js';
 
+export const __dependencies = {
+  getShotWithPlans,
+  getOrCreateBotBySlug,
+  markShotQueueSuccess,
+  markShotQueueError,
+  recordShotSent,
+};
+
 const LOCK_KEY = 4839202; // Keep separate from downsells worker
 const WORKER_INTERVAL_MS = 7000;
 const MAX_JOBS_PER_TICK = 25;
@@ -48,7 +56,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
   });
 
   if (job.shot_id == null || job.telegram_id == null) {
-    await markShotQueueError(job.id, 'Queue item missing shot_id or telegram_id', client);
+    await __dependencies.markShotQueueError(job.id, 'Queue item missing shot_id or telegram_id', client);
     jobLogger.error('[SHOTS][WORKER] invalid queue item payload');
     return;
   }
@@ -56,9 +64,9 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
   let shotRecord: ShotRecord | null = null;
 
   try {
-    const { shot, plans } = await getShotWithPlans(job.shot_id);
+    const { shot, plans } = await __dependencies.getShotWithPlans(job.shot_id);
     shotRecord = shot;
-    const bot = await getOrCreateBotBySlug(job.bot_slug);
+    const bot = await __dependencies.getOrCreateBotBySlug(job.bot_slug);
 
     const introResult = await ShotsMessageBuilder.sendShotIntro(bot, job.telegram_id, {
       bot_slug: shot.bot_slug,
@@ -74,7 +82,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
     const sendStatus = introCompleted && plansCompleted ? 'sent' : 'skipped';
 
     try {
-      await recordShotSent(
+      await __dependencies.recordShotSent(
         {
           shot_id: shot.id,
           bot_slug: shot.bot_slug,
@@ -88,7 +96,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
       jobLogger.warn({ err: recordErr }, '[SHOTS][WORKER] failed to record shot result');
     }
 
-    await markShotQueueSuccess(job.id, client);
+    await __dependencies.markShotQueueSuccess(job.id, client);
 
     jobLogger.info(
       {
@@ -96,13 +104,13 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         intro_completed: introCompleted,
         plans_completed: plansCompleted,
       },
-      '[SHOTS][WORKER] job completed'
+      '[SHOTS][SUCCESS]'
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
 
     try {
-      await recordShotSent(
+      await __dependencies.recordShotSent(
         {
           shot_id: shotRecord?.id ?? job.shot_id,
           bot_slug: shotRecord?.bot_slug ?? job.bot_slug,
@@ -116,7 +124,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
       logger.warn({ err: recordErr, queue_id: job.id }, '[SHOTS][WORKER] failed to record error result');
     }
 
-    await markShotQueueError(job.id, message, client);
+    await __dependencies.markShotQueueError(job.id, message, client);
     logger.error(
       { shot_id: job.shot_id, telegram_id: job.telegram_id, message },
       '[SHOTS][ERROR] failed to dispatch shot'
@@ -124,6 +132,8 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
     jobLogger.error({ err }, '[SHOTS][WORKER] job failed');
   }
 }
+
+export const __private__ = { processShotQueueJob, __dependencies };
 
 export function startShotsWorker(): void {
   const workerLogger = logger.child({ worker: 'shots' });
