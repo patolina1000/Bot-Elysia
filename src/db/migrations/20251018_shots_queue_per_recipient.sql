@@ -1,5 +1,3 @@
-BEGIN;
-
 -- [MIG][SHOTS_QUEUE] Detect existing shots_queue schema and archive incompatible layouts.
 DO $$
 DECLARE
@@ -372,4 +370,3 @@ BEGIN
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Per-recipient queue schema ensured.';
 END $$;
 
-COMMIT;
