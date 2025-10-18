@@ -78,6 +78,22 @@ const RETRY_MAX_SECONDS = (() => {
   return Math.max(parsed, RETRY_BASE_SECONDS);
 })();
 
+const DEFAULT_RETRY_JITTER_PCT = 0.1;
+const RETRY_JITTER_PCT = (() => {
+  const raw = process.env.SHOTS_WORKER_RETRY_JITTER_PCT;
+  if (!raw) {
+    return DEFAULT_RETRY_JITTER_PCT;
+  }
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_RETRY_JITTER_PCT;
+  }
+  if (parsed > 1) {
+    return 1;
+  }
+  return parsed;
+})();
+
 async function acquireLock(): Promise<boolean> {
   const { rows } = await pool.query('SELECT pg_try_advisory_lock($1) AS locked', [LOCK_KEY]);
   return Boolean(rows[0]?.locked);
@@ -102,7 +118,7 @@ function computeNextRetry(attempts: number): Date | null {
     return null;
   }
 
-  const exponent = attempts - 1;
+  const exponent = Math.max(0, Math.trunc(attempts) - 1);
   const exponentialDelaySeconds = RETRY_BASE_SECONDS * 2 ** exponent;
   if (!Number.isFinite(exponentialDelaySeconds) || exponentialDelaySeconds <= 0) {
     return null;
@@ -110,7 +126,15 @@ function computeNextRetry(attempts: number): Date | null {
 
   const clampedSeconds = Math.min(exponentialDelaySeconds, RETRY_MAX_SECONDS);
 
-  return new Date(Date.now() + clampedSeconds * 1000);
+  const jitterRange = Math.max(0, clampedSeconds * RETRY_JITTER_PCT);
+  let jitteredSeconds = clampedSeconds;
+  if (jitterRange > 0) {
+    jitteredSeconds = clampedSeconds - jitterRange + Math.random() * jitterRange * 2;
+  }
+
+  const boundedSeconds = Math.min(RETRY_MAX_SECONDS, Math.max(0, jitteredSeconds));
+
+  return new Date(Date.now() + boundedSeconds * 1000);
 }
 
 function createCorrelation(job: ShotQueueJob): string {

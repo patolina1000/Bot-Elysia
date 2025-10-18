@@ -28,7 +28,8 @@ begin
     $body$
     language plpgsql;
   end if;
-end$$;
+end;
+$$;
 
 drop trigger if exists set_updated_at_on_bot_plans on bot_plans;
 create trigger set_updated_at_on_bot_plans

@@ -9,6 +9,12 @@ import { pool } from './pool.js';
  * Always enqueue through `ShotsService.enqueueShotRecipients()` so that content is
  * read from the `shots` and `shot_plans` tables instead of duplicating legacy
  * payload fields such as copy or media.
+ *
+ * Canonical operations exposed by this module:
+ * - `pickDueShotQueueJobs` / `pickPendingShot` to atomically claim pending jobs.
+ * - `markShotQueueProcessing`, `markShotQueueSuccess`, `markShotQueueError`, and
+ *   `scheduleShotQueueRetry` to drive the worker state machine.
+ * - `resetStuckShotQueueJobs` for periodic safety sweeps.
  */
 export type ShotTarget = 'started' | 'pix_created';
 export type ShotStatus =

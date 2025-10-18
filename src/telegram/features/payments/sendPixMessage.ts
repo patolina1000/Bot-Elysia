@@ -214,7 +214,10 @@ export async function createPixForCustomPrice(
           transaction_id: transaction.id,
           pix_trace_id,
         })
-        .info({ event_name: 'pix_created', event_id: eventId, price_cents: transaction.value_cents }, '[PIX][FUNNEL] pix_created');
+        .info(
+          { event: 'pix_created', event_id: eventId, price_cents: transaction.value_cents },
+          '[PIX][FUNNEL] pix_created'
+        );
     }
   } catch (err) {
     logger.warn({ err, pix_trace_id }, '[payments][downsell] Failed to record funnel event');
