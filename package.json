@@ -16,7 +16,7 @@
     "jobs:campaigns": "tsx src/jobs/runCampaigns.ts",
     "jobs:housekeeping": "tsx src/jobs/housekeeping.ts",
     "check:core-start": "tsx scripts/check-core-start.ts",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "tsx --test \"tests/**/*.{test,spec}.ts\""
   },
   "keywords": [
     "telegram",
