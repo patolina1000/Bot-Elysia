@@ -144,15 +144,15 @@ function ensureEnv(): void {
   process.env.NODE_ENV ??= 'development';
 }
 
-let pool: typeof import('../../src/db/pool.ts')['pool'];
-let ShotsServiceClass: typeof import('../../src/services/ShotsService.ts')['ShotsService'];
-let metrics: typeof import('../../src/metrics.ts')['metrics'];
+let pool: typeof import('../../src/db/pool.js')['pool'];
+let ShotsServiceClass: typeof import('../../src/services/ShotsService.js')['ShotsService'];
+let metrics: typeof import('../../src/metrics.js')['metrics'];
 
 test.before(async () => {
   ensureEnv();
-  ({ pool } = await import('../../src/db/pool.ts'));
-  ({ ShotsService: ShotsServiceClass } = await import('../../src/services/ShotsService.ts'));
-  ({ metrics } = await import('../../src/metrics.ts'));
+  ({ pool } = await import('../../src/db/pool.js'));
+  ({ ShotsService: ShotsServiceClass } = await import('../../src/services/ShotsService.js'));
+  ({ metrics } = await import('../../src/metrics.js'));
 });
 
 test.afterEach(() => {

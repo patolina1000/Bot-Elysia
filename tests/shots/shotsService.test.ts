@@ -10,14 +10,14 @@ function ensureEnv(): void {
   process.env.NODE_ENV ??= 'development';
 }
 
-let pool: typeof import('../../src/db/pool.ts')['pool'];
-let shotsService: typeof import('../../src/services/ShotsService.ts')['shotsService'];
+let pool: typeof import('../../src/db/pool.js')['pool'];
+let shotsService: typeof import('../../src/services/ShotsService.js')['shotsService'];
 
 test.before(async () => {
   ensureEnv();
-  const poolModule = await import('../../src/db/pool.ts');
+  const poolModule = await import('../../src/db/pool.js');
   pool = poolModule.pool;
-  ({ shotsService } = await import('../../src/services/ShotsService.ts'));
+  ({ shotsService } = await import('../../src/services/ShotsService.js'));
 });
 
 test.afterEach(() => {

@@ -12,6 +12,7 @@ import {
 } from '../../db/shotsQueue.js';
 import { recordShotSent } from '../../db/shotsSent.js';
 import { ShotsMessageBuilder } from './ShotsMessageBuilder.js';
+import type { BotLike } from './ShotsMessageBuilder.js';
 import { getShotWithPlans } from '../../repositories/ShotsRepo.js';
 import { shotsService } from '../ShotsService.js';
 import { FunnelEventsRepo } from '../../repositories/FunnelEventsRepo.js';
@@ -182,7 +183,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
     shotRecord = shot;
     eventTarget = resolveShotTarget(shot, job);
     const bot = await __dependencies.getOrCreateBotBySlug(job.bot_slug);
-    const telegram = bot.api ?? bot.telegram ?? bot;
+    const telegram: BotLike = bot.api;
 
     const normalizedShot: ShotRow = {
       ...shot,
@@ -369,7 +370,10 @@ export function startShotsWorker(): void {
             new Set(
               jobs
                 .map((job) => job.shot_id)
-                .filter((value): value is number => Number.isInteger(value) && value > 0)
+                .filter(
+                  (value): value is number =>
+                    value !== null && value !== undefined && Number.isInteger(value) && value > 0
+                )
             )
           );
 

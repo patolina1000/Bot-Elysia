@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
-import type { ShotQueueJob } from '../../src/db/shotsQueue.ts';
-import type { ShotPlanRow, ShotRow } from '../../src/repositories/ShotsRepo.ts';
+import type { ShotQueueJob } from '../../src/db/shotsQueue.js';
+import type { ShotPlanRow, ShotRow } from '../../src/repositories/ShotsRepo.js';
+import type { BotLike } from '../../src/services/shots/ShotsMessageBuilder.js';
 
 function ensureEnv(): void {
   process.env.PORT ??= '8080';
@@ -12,14 +13,14 @@ function ensureEnv(): void {
   process.env.NODE_ENV ??= 'development';
 }
 
-type WorkerModule = typeof import('../../src/services/shots/worker.ts');
+type WorkerModule = typeof import('../../src/services/shots/worker.js');
 type Dependencies = WorkerModule['__dependencies'];
 type ProcessShotQueueJobFn = WorkerModule['__private__']['processShotQueueJob'];
 
 let processShotQueueJob: ProcessShotQueueJobFn;
 let dependencies: Dependencies;
 let originalDependencies: Dependencies;
-let pool: typeof import('../../src/db/pool.ts')['pool'];
+let pool: typeof import('../../src/db/pool.js')['pool'];
 
 let logMessages: string[] = [];
 let recordShotCalls: any[] = [];
@@ -67,8 +68,7 @@ function createJob(overrides: Partial<ShotQueueJob> = {}): ShotQueueJob {
 }
 
 async function setupLoggerCapture(): Promise<void> {
-  const loggerModule = await import('../../src/logger.ts');
-  const logger = loggerModule.default?.logger ?? (loggerModule as any).logger;
+  const { logger } = await import('../../src/logger.js');
 
   const capture = (args: any[]): void => {
     const maybeMessage = args.at(-1);
@@ -121,7 +121,20 @@ function mockFunnelEvents(): void {
   });
 }
 
-type Scenario = { shot: ShotRow; plans: ShotPlanRow[]; bot: { api: { sendMessage: (...args: any[]) => Promise<any> } } };
+type Scenario = { shot: ShotRow; plans: ShotPlanRow[]; bot: { api: BotLike } };
+
+function createBotLike(overrides: Partial<BotLike> = {}): BotLike {
+  const noop = async (..._args: any[]) => ({ message_id: 0 });
+  return {
+    sendChatAction: async (..._args: any[]) => undefined,
+    sendPhoto: noop,
+    sendVideo: noop,
+    sendAudio: noop,
+    sendDocument: noop,
+    sendMessage: async (..._args: any[]) => ({ message_id: 0 }),
+    ...overrides,
+  };
+}
 
 async function configureDependencies(job: ShotQueueJob, scenario: Scenario): Promise<void> {
   let attempts = job.attempts ?? job.attempt_count ?? 0;
@@ -133,7 +146,7 @@ async function configureDependencies(job: ShotQueueJob, scenario: Scenario): Pro
 
   dependencies.getOrCreateBotBySlug = async (slug: string) => {
     assert.equal(slug, scenario.shot.bot_slug);
-    return scenario.bot;
+    return scenario.bot as unknown as any;
   };
 
   dependencies.recordShotSent = async (params: any) => {
@@ -172,7 +185,7 @@ async function configureDependencies(job: ShotQueueJob, scenario: Scenario): Pro
     return { ...job, id, status: 'pending', next_retry_at, last_error: error };
   };
 
-  const funnelModule = await import('../../src/repositories/FunnelEventsRepo.ts');
+  const funnelModule = await import('../../src/repositories/FunnelEventsRepo.js');
 
   dependencies.insertShotSent = async (params: any) => {
     insertShotSentCalls.push(params);
@@ -187,11 +200,11 @@ async function configureDependencies(job: ShotQueueJob, scenario: Scenario): Pro
 
 test.before(async () => {
   ensureEnv();
-  const workerModule: WorkerModule = await import('../../src/services/shots/worker.ts');
+  const workerModule: WorkerModule = await import('../../src/services/shots/worker.js');
   const exports = (workerModule as any).default ?? workerModule;
   ({ processShotQueueJob, __dependencies: dependencies } = exports.__private__);
   originalDependencies = { ...dependencies };
-  ({ pool } = await import('../../src/db/pool.ts'));
+  ({ pool } = await import('../../src/db/pool.js'));
 });
 
 test.afterEach(() => {
@@ -223,14 +236,15 @@ test('shot_sent event is recorded with correlation logs', async () => {
       media_type: 'none',
       scheduled_at: new Date('2025-02-01T10:00:00Z'),
       target: 'all_started',
+      created_at: new Date('2025-01-20T10:00:00Z'),
     },
     plans: [
       { id: 1, shot_id: 77, name: 'Plano Único', price_cents: 1990, description: null, sort_order: 1 },
     ],
     bot: {
-      api: {
-        sendMessage: async () => ({ message_id: 501 }),
-      },
+      api: createBotLike({
+        sendMessage: async (...args: any[]) => ({ message_id: 501, args }),
+      }),
     },
   };
 
@@ -315,18 +329,19 @@ test('shot_error event stores attempt and sanitized error', async () => {
       media_type: 'none',
       scheduled_at: new Date('2025-03-02T12:00:00Z'),
       target: 'all_started',
+      created_at: new Date('2025-02-20T12:00:00Z'),
     },
     plans: [],
     bot: {
-      api: {
-        sendMessage: async () => ({ message_id: 601 }),
-      },
+      api: createBotLike({
+        sendMessage: async (...args: any[]) => ({ message_id: 601, args }),
+      }),
     },
   };
 
   await configureDependencies(job, scenario);
 
-  const builderModule = await import('../../src/services/shots/ShotsMessageBuilder.ts');
+  const builderModule = await import('../../src/services/shots/ShotsMessageBuilder.js');
   mock.method(builderModule.ShotsMessageBuilder, 'sendShotIntro', async () => {
     throw new Error('Falha muito longa '.repeat(50));
   });
@@ -397,12 +412,13 @@ test('shot_sent deduplicates while shot_error keeps attempts', async () => {
       media_type: 'none',
       scheduled_at: new Date('2025-04-10T09:00:00Z'),
       target: 'all_started',
+      created_at: new Date('2025-03-30T09:00:00Z'),
     },
     plans: [],
     bot: {
-      api: {
-        sendMessage: async () => ({ message_id: 701 }),
-      },
+      api: createBotLike({
+        sendMessage: async (...args: any[]) => ({ message_id: 701, args }),
+      }),
     },
   };
 
@@ -416,7 +432,7 @@ test('shot_sent deduplicates while shot_error keeps attempts', async () => {
   await processShotQueueJob(successJob, {} as any);
   assert.equal(funnelEvents.size, sizeAfterFirst);
 
-  const builderModule = await import('../../src/services/shots/ShotsMessageBuilder.ts');
+  const builderModule = await import('../../src/services/shots/ShotsMessageBuilder.js');
   let failureCount = 0;
   mock.method(builderModule.ShotsMessageBuilder, 'sendShotIntro', async () => {
     failureCount += 1;
