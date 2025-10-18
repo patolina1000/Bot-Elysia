@@ -1,5 +1,4 @@
 -- Establishes the core tables for shots and shot plans while remaining idempotent.
-BEGIN;
 
 -- Ensure the shots table exists with the desired schema for campaign metadata.
 CREATE TABLE IF NOT EXISTS shots (
@@ -122,4 +121,3 @@ BEGIN
 END
 $$;
 
-COMMIT;
