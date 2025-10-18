@@ -55,7 +55,7 @@ test('getTelegramIdsForAllStarted maps telegram ids to bigint and skips nulls', 
   assert.deepEqual(result, [123456n, 789012n, 345678901234567890n]);
   assert.strictEqual(
     debugMock.mock.calls[0].arguments[0],
-    '[SHOTS][AUDIENCE] target=all_started bot=bot-slug candidates=3'
+    '[SHOTS][AUDIENCE] target=all_started bot=bot-slug candidates=3 join="OR"'
   );
 });
 
@@ -68,8 +68,49 @@ test('getTelegramIdsForAllStarted uses the expected SQL filter', async () => {
   const [sql, params] = queryMock.mock.calls[0].arguments;
   assert.ok(sql.includes("fe.event_name = 'bot_start'"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
-  assert.ok(sql.includes('AND (fe.payload_id IS NULL OR fe.payload_id = pt.payload_id)'));
+  assert.ok(
+    sql.includes('OR (fe.payload_id IS NOT NULL AND pt.payload_id = fe.payload_id)')
+  );
+  assert.ok(sql.includes('SELECT DISTINCT fe.telegram_id'));
   assert.deepEqual(params, ['shots-bot']);
+});
+
+test('getTelegramIdsForAllStarted returns ids when linked by telegram_id only', async () => {
+  const queryMock = mock.method(pool, 'query', async (sql: string) => {
+    assert.ok(sql.includes('LEFT JOIN payload_tracking pt'));
+    return { rows: [{ telegram_id: '1001' }] } as any;
+  });
+
+  const result = await getTelegramIdsForAllStarted('shots-bot');
+
+  assert.deepEqual(result, [1001n]);
+  assert.strictEqual(queryMock.mock.calls.length, 1);
+});
+
+test('getTelegramIdsForAllStarted returns ids when linked by payload_id only', async () => {
+  const queryMock = mock.method(pool, 'query', async (sql: string) => {
+    if (sql.includes('OR (fe.payload_id IS NOT NULL AND pt.payload_id = fe.payload_id)')) {
+      return { rows: [{ telegram_id: '2002' }] } as any;
+    }
+    return { rows: [] } as any;
+  });
+
+  const result = await getTelegramIdsForAllStarted('shots-bot');
+
+  assert.deepEqual(result, [2002n]);
+  assert.strictEqual(queryMock.mock.calls.length, 1);
+});
+
+test('getTelegramIdsForAllStarted keeps telegram ids distinct when both keys match', async () => {
+  const queryMock = mock.method(pool, 'query', async (sql: string) => {
+    assert.ok(sql.includes('SELECT DISTINCT fe.telegram_id'));
+    return { rows: [{ telegram_id: '3003' }] } as any;
+  });
+
+  const result = await getTelegramIdsForAllStarted('shots-bot');
+
+  assert.deepEqual(result, [3003n]);
+  assert.strictEqual(queryMock.mock.calls.length, 1);
 });
 
 test('getTelegramIdsForPixGenerated returns an empty array when no rows are found', async () => {
@@ -97,7 +138,7 @@ test('getTelegramIdsForPixGenerated maps telegram ids to bigint and skips nulls'
   assert.deepEqual(result, [111n, 222n, 333n]);
   assert.strictEqual(
     debugMock.mock.calls[0].arguments[0],
-    '[SHOTS][AUDIENCE] target=pix_generated bot=bot-slug candidates=3'
+    '[SHOTS][AUDIENCE] target=pix_generated bot=bot-slug candidates=3 join="OR"'
   );
 });
 
@@ -108,8 +149,49 @@ test('getTelegramIdsForPixGenerated uses the expected SQL filter', async () => {
 
   assert.strictEqual(queryMock.mock.calls.length, 1);
   const [sql, params] = queryMock.mock.calls[0].arguments;
-  assert.ok(sql.includes("fe.event_name IN ('pix_created','purchase')"));
+  assert.ok(sql.includes("fe.event_name IN ('pix_created', 'purchase')"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
-  assert.ok(sql.includes('AND (fe.payload_id IS NULL OR fe.payload_id = pt.payload_id)'));
+  assert.ok(
+    sql.includes('OR (fe.payload_id IS NOT NULL AND pt.payload_id = fe.payload_id)')
+  );
+  assert.ok(sql.includes('SELECT DISTINCT fe.telegram_id'));
   assert.deepEqual(params, ['shots-bot']);
+});
+
+test('getTelegramIdsForPixGenerated returns ids when linked by telegram_id only', async () => {
+  const queryMock = mock.method(pool, 'query', async (sql: string) => {
+    assert.ok(sql.includes('LEFT JOIN payload_tracking pt'));
+    return { rows: [{ telegram_id: '4004' }] } as any;
+  });
+
+  const result = await getTelegramIdsForPixGenerated('shots-bot');
+
+  assert.deepEqual(result, [4004n]);
+  assert.strictEqual(queryMock.mock.calls.length, 1);
+});
+
+test('getTelegramIdsForPixGenerated returns ids when linked by payload_id only', async () => {
+  const queryMock = mock.method(pool, 'query', async (sql: string) => {
+    if (sql.includes('OR (fe.payload_id IS NOT NULL AND pt.payload_id = fe.payload_id)')) {
+      return { rows: [{ telegram_id: '5005' }] } as any;
+    }
+    return { rows: [] } as any;
+  });
+
+  const result = await getTelegramIdsForPixGenerated('shots-bot');
+
+  assert.deepEqual(result, [5005n]);
+  assert.strictEqual(queryMock.mock.calls.length, 1);
+});
+
+test('getTelegramIdsForPixGenerated keeps telegram ids distinct when both keys match', async () => {
+  const queryMock = mock.method(pool, 'query', async (sql: string) => {
+    assert.ok(sql.includes('SELECT DISTINCT fe.telegram_id'));
+    return { rows: [{ telegram_id: '6006' }] } as any;
+  });
+
+  const result = await getTelegramIdsForPixGenerated('shots-bot');
+
+  assert.deepEqual(result, [6006n]);
+  assert.strictEqual(queryMock.mock.calls.length, 1);
 });

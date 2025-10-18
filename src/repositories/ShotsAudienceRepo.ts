@@ -33,8 +33,8 @@ async function fetchTelegramIds(
     `SELECT DISTINCT fe.telegram_id
      FROM funnel_events fe
      LEFT JOIN payload_tracking pt
-       ON fe.telegram_id = pt.telegram_id
-      AND (fe.payload_id IS NULL OR fe.payload_id = pt.payload_id)
+       ON pt.telegram_id = fe.telegram_id
+       OR (fe.payload_id IS NOT NULL AND pt.payload_id = fe.payload_id)
      WHERE fe.telegram_id IS NOT NULL
        AND COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1
        AND ${eventCondition}`,
@@ -44,7 +44,7 @@ async function fetchTelegramIds(
   const telegramIds = mapTelegramIds(result.rows as TelegramRow[]);
 
   logger.debug(
-    `[SHOTS][AUDIENCE] target=${target} bot=${botSlug} candidates=${telegramIds.length}`
+    `[SHOTS][AUDIENCE] target=${target} bot=${botSlug} candidates=${telegramIds.length} join="OR"`
   );
 
   return telegramIds;
@@ -58,6 +58,6 @@ export function getTelegramIdsForPixGenerated(botSlug: string): Promise<bigint[]
   return fetchTelegramIds(
     botSlug,
     'pix_generated',
-    "fe.event_name IN ('pix_created','purchase')"
+    "fe.event_name IN ('pix_created', 'purchase')"
   );
 }
