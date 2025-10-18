@@ -320,7 +320,7 @@ BEGIN
     WHERE proname = 'fn_touch_updated_at'
       AND pg_function_is_visible(oid)
   ) THEN
-    EXECUTE $$
+    EXECUTE $fn$
       CREATE FUNCTION public.fn_touch_updated_at()
       RETURNS TRIGGER AS $$
       BEGIN
@@ -328,7 +328,7 @@ BEGIN
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql;
-    $$;
+    $fn$;
   END IF;
 END $$;
 
@@ -359,6 +359,9 @@ CREATE INDEX IF NOT EXISTS shots_queue_sched_idx
 CREATE INDEX IF NOT EXISTS shots_queue_bot_idx
   ON public.shots_queue (bot_slug);
 
-RAISE NOTICE '[MIG][SHOTS_QUEUE] Per-recipient queue schema ensured.';
+DO $$
+BEGIN
+  RAISE NOTICE '[MIG][SHOTS_QUEUE] Per-recipient queue schema ensured.';
+END $$;
 
 COMMIT;
