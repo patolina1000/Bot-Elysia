@@ -64,7 +64,7 @@ BEGIN
   ) THEN
     EXECUTE 'ALTER TABLE public.downsells_queue ADD COLUMN sent_message_id TEXT';
   END IF;
-END $$;
+END; $$;
 
 ALTER TABLE IF EXISTS public.downsells_queue
   ALTER COLUMN attempt_count SET DEFAULT 0;

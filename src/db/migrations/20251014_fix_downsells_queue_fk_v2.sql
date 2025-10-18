@@ -26,7 +26,7 @@ BEGIN
   ) THEN
     EXECUTE 'ALTER TABLE public.downsells_queue DROP CONSTRAINT downsells_queue_downsell_id_fkey';
   END IF;
-END $$;
+END; $$;
 
 -- Cria a nova FK como NOT VALID para não falhar por linhas antigas
 ALTER TABLE public.downsells_queue
@@ -56,4 +56,4 @@ BEGIN
   ) THEN
     EXECUTE 'CREATE INDEX idx_downsells_queue_status_deliver_at ON public.downsells_queue(status, deliver_at)';
   END IF;
-END $$;
+END; $$;

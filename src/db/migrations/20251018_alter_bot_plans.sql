@@ -20,4 +20,4 @@ BEGIN
   EXECUTE 'CREATE TRIGGER set_updated_at_on_bot_plans '
        || 'BEFORE UPDATE ON public.bot_plans '
        || 'FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at()';
-END $$;
+END; $$;

@@ -19,7 +19,7 @@ DO $$ BEGIN
   ) THEN
     EXECUTE 'ALTER TABLE public.shots_sent ADD COLUMN status TEXT NOT NULL DEFAULT ''sent'' CHECK (status IN (''sent'', ''skipped'', ''error''))';
   END IF;
-END $$;
+END; $$;
 
 -- Drop any potentially broken indexes that might reference wrong column names
 DROP INDEX IF EXISTS idx_shots_sent_deliver_status;

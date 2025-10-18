@@ -28,7 +28,7 @@ BEGIN
       NULL;
     END;
   END IF;
-END $$;
+END; $$;
 
 -- Higiene opcional (garante defaults de outras colunas já existentes)
 ALTER TABLE IF EXISTS public.downsells_queue

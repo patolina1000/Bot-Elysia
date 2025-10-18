@@ -34,7 +34,7 @@ BEGIN
   ) THEN
     EXECUTE 'ALTER TABLE public.bot_downsells ALTER COLUMN price_cents DROP NOT NULL';
   END IF;
-END $$;
+END; $$;
 
 -- Índice para consultas por bot/plan
 CREATE INDEX IF NOT EXISTS idx_bot_downsells_bot_slug_plan_id

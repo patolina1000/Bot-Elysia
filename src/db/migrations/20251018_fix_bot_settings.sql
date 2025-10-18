@@ -22,7 +22,7 @@ BEGIN
     END;
     $body$ LANGUAGE plpgsql;
   END IF;
-END $$;
+END; $$;
 
 DROP TRIGGER IF EXISTS set_updated_at_on_bot_settings ON public.bot_settings;
 CREATE TRIGGER set_updated_at_on_bot_settings

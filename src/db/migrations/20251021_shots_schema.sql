@@ -77,7 +77,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.shots ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now();
   END IF;
-END $$;
+END; $$;
 
 -- Enforce NOT NULL and defaults
 ALTER TABLE public.shots
@@ -99,7 +99,7 @@ BEGIN
       ADD CONSTRAINT shots_media_type_check
       CHECK (media_type IS NULL OR media_type IN ('photo', 'video', 'audio', 'document', 'none'));
   END IF;
-END $$;
+END; $$;
 
 -- Target constraint (all_started, pix_generated)
 DO $$
@@ -115,7 +115,7 @@ BEGIN
       ADD CONSTRAINT shots_target_check
       CHECK (target IS NULL OR target IN ('all_started', 'pix_generated'));
   END IF;
-END $$;
+END; $$;
 
 -- Normalize legacy values to the supported enums
 UPDATE public.shots
@@ -175,7 +175,7 @@ BEGIN
       REFERENCES public.shots(id)
       ON DELETE CASCADE;
   END IF;
-END $$;
+END; $$;
 
 -- Index for ordering inside a shot
 CREATE INDEX IF NOT EXISTS shot_plans_shot_id_sort_order_idx
@@ -208,7 +208,7 @@ BEGIN
     ALTER TABLE public.shots_queue
       ALTER COLUMN status TYPE TEXT USING status::TEXT;
   END IF;
-END $$;
+END; $$;
 
 -- Attempts defaults and NOT NULL
 ALTER TABLE IF EXISTS public.shots_queue
@@ -235,7 +235,7 @@ BEGIN
     ALTER TABLE public.shots_queue
       ALTER COLUMN attempt_count SET NOT NULL;
   END IF;
-END $$;
+END; $$;
 
 -- Legacy attempt_count alignment (keep old column if present)
 DO $$
@@ -261,7 +261,7 @@ BEGIN
     SET attempts = COALESCE(attempts, 0)
     WHERE attempts IS NULL;
   END IF;
-END $$;
+END; $$;
 
 -- Guarantee defaults/not nulls for timing columns
 ALTER TABLE IF EXISTS public.shots_queue
@@ -361,7 +361,7 @@ BEGIN
       WHERE id = rec.id;
     END LOOP;
   END IF;
-END $$;
+END; $$;
 
 -- Backfill bot_slug using shots reference when null
 UPDATE public.shots_queue q
@@ -393,7 +393,7 @@ BEGIN
     SET attempt_count = attempts
     WHERE attempt_count IS DISTINCT FROM attempts;
   END IF;
-END $$;
+END; $$;
 
 -- Remove orphan queue rows (shot_id without parent)
 DELETE FROM public.shots_queue q
@@ -426,7 +426,7 @@ BEGIN
   ALTER TABLE public.shots_queue
     ADD CONSTRAINT shots_queue_status_check
     CHECK (status IN ('pending', 'processing', 'success', 'error'));
-END $$;
+END; $$;
 
 -- Attempts constraint sync trigger to keep attempt_count compatible
 CREATE OR REPLACE FUNCTION public.shots_queue_sync_attempts()
@@ -489,7 +489,7 @@ BEGIN
       REFERENCES public.shots(id)
       ON DELETE CASCADE;
   END IF;
-END $$;
+END; $$;
 
 -- Essential indexes
 CREATE INDEX IF NOT EXISTS shots_queue_status_due_idx
@@ -518,4 +518,4 @@ BEGIN
   RAISE NOTICE '✅ Shots schema migration executed.';
   RAISE NOTICE '✅ Remaining shots_queue.bot_slug NULL count: %', pending_nulls;
   RAISE NOTICE '===============================================================';
-END $$;
+END; $$;

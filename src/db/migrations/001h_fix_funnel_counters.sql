@@ -17,7 +17,7 @@ BEGIN
   ) THEN
     EXECUTE 'ALTER TABLE public.funnel_counters RENAME COLUMN event TO event_name';
   END IF;
-END $$;
+END; $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_funnel_counters_event ON public.funnel_counters(event_name);
 
@@ -43,7 +43,7 @@ BEGIN
         updated_at = NOW();
 
   RETURN NEW;
-END $$;
+END; $$;
 
 -- 2) Garante o trigger apontando para a função nova
 DROP TRIGGER IF EXISTS trg_update_funnel_counters ON public.funnel_events;

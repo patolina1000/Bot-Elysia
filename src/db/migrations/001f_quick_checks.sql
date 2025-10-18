@@ -12,7 +12,7 @@ BEGIN
   ) THEN
     EXECUTE 'ALTER TABLE public.funnel_events RENAME COLUMN event_name TO event';
   END IF;
-END $$;
+END; $$;
 
 -- 2) Garantir colunas de data/compat
 ALTER TABLE public.funnel_events
@@ -39,5 +39,5 @@ BEGIN
   ) THEN
     EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS ux_users_bot_tg ON public.users(bot_id, tg_user_id)';
   END IF;
-END $$;
+END; $$;
 
