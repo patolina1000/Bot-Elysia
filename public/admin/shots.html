@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin · Disparos</title>
+    <link rel="stylesheet" href="/admin/css/shots.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="page__header">
+        <div class="header__main">
+          <h1>Disparos</h1>
+          <p class="header__subtitle">Gerencie os disparos manuais do bot.</p>
+        </div>
+        <div class="header__actions">
+          <button id="btn-new-shot" class="btn btn--primary">Novo disparo</button>
+          <button id="btn-reload-shots" class="btn" title="Recarregar lista">Recarregar</button>
+        </div>
+      </header>
+
+      <section class="page__filters">
+        <div class="field">
+          <label for="admin-token">Token Admin</label>
+          <input type="password" id="admin-token" placeholder="Bearer token" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="shots-bot-slug">Slug do bot</label>
+          <div class="field--with-button">
+            <input type="text" id="shots-bot-slug" placeholder="ex: meu_bot" autocomplete="off" />
+            <button id="btn-load-shots" class="btn btn--primary">Carregar</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="page__content" id="shots-section">
+        <div id="shots-placeholder" class="placeholder">Informe o slug do bot para carregar os disparos.</div>
+        <div id="shots-grid" class="shots-grid" aria-live="polite"></div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <dialog id="shot-modal" class="modal">
+      <form method="dialog" class="modal__content" id="shot-form">
+        <header class="modal__header">
+          <h2 id="shot-modal-title">Novo disparo</h2>
+          <button type="button" class="modal__close" data-action="close">×</button>
+        </header>
+        <div class="modal__body">
+          <div class="form-grid">
+            <div class="field">
+              <label for="shot-target">Target</label>
+              <input type="text" id="shot-target" name="target" placeholder="Segmento do disparo" required />
+            </div>
+            <div class="field">
+              <label for="shot-title">Título</label>
+              <input type="text" id="shot-title" name="title" placeholder="Título interno" required />
+            </div>
+            <div class="field field--full">
+              <div class="field__label">
+                <label for="shot-copy">Copy</label>
+                <span id="shot-copy-count" class="badge">0</span>
+                <span id="shot-copy-warning" class="badge badge--warning" hidden>caption separada</span>
+              </div>
+              <textarea id="shot-copy" name="copy" rows="5" placeholder="Mensagem para os usuários" required></textarea>
+            </div>
+            <div class="field">
+              <label for="shot-media-type">Tipo de mídia</label>
+              <select id="shot-media-type" name="media_type">
+                <option value="">Nenhum</option>
+                <option value="photo">Foto</option>
+                <option value="video">Vídeo</option>
+                <option value="audio">Áudio</option>
+                <option value="document">Documento</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="shot-media-url">URL da mídia</label>
+              <input type="url" id="shot-media-url" name="media_url" placeholder="https://" />
+            </div>
+            <div class="field field--full">
+              <div class="field__label">
+                <label for="shot-scheduled-at">Agendar para</label>
+                <button type="button" class="btn btn--ghost" data-action="open-datepicker">Selecionar</button>
+              </div>
+              <input type="text" id="shot-scheduled-at" name="scheduled_at" placeholder="Sem agendamento" readonly />
+              <div id="shot-datepicker" class="datepicker-panel hidden">
+                <div class="datepicker" data-datepicker="shot"></div>
+                <div class="datepicker__footer">
+                  <div class="field">
+                    <label for="shot-time">Horário</label>
+                    <input type="time" id="shot-time" />
+                  </div>
+                  <div class="datepicker__actions">
+                    <button type="button" class="btn" data-action="clear-date">Limpar</button>
+                    <button type="button" class="btn btn--primary" data-action="apply-date">Aplicar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="modal__footer">
+          <button type="button" class="btn" data-action="close">Cancelar</button>
+          <button type="submit" class="btn btn--primary" id="shot-save">Salvar</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="schedule-modal" class="modal">
+      <form method="dialog" class="modal__content" id="schedule-form">
+        <header class="modal__header">
+          <h2>Agendar disparo</h2>
+          <button type="button" class="modal__close" data-action="close">×</button>
+        </header>
+        <div class="modal__body">
+          <div class="datepicker" id="schedule-datepicker"></div>
+          <div class="field">
+            <label for="schedule-time">Horário</label>
+            <input type="time" id="schedule-time" required />
+          </div>
+          <p class="helper">Dias anteriores estão desabilitados e destacados em vermelho.</p>
+        </div>
+        <footer class="modal__footer">
+          <button type="button" class="btn" data-action="close">Cancelar</button>
+          <button type="submit" class="btn btn--primary" id="schedule-confirm">Confirmar</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script src="/admin/js/shots.js" type="module"></script>
+  </body>
+</html>
