@@ -1088,7 +1088,13 @@ function openShotModal(shot = null, plans = null) {
   clearPreview();
   openDialog(shotModal);
   queueMicrotask(() => {
-    shotTargetInput?.focus();
+    if (shotTargetInput && typeof shotTargetInput.focus === 'function') {
+      try {
+        shotTargetInput.focus({ preventScroll: true });
+      } catch (error) {
+        shotTargetInput.focus();
+      }
+    }
   });
 }
 
@@ -1551,7 +1557,18 @@ function handleDocumentClick(event) {
 }
 
 function handleShotFormKeydown(event) {
-  if (event.key !== 'Enter' || event.isComposing) {
+  if (event.isComposing) {
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    hideShotDatepicker();
+    closeDialog(shotModal);
+    return;
+  }
+
+  if (event.key !== 'Enter') {
     return;
   }
   if (event.defaultPrevented) {
@@ -1569,6 +1586,16 @@ function handleShotFormKeydown(event) {
   }
   event.preventDefault();
   shotForm?.requestSubmit();
+}
+
+function handleScheduleFormKeydown(event) {
+  if (event.isComposing) {
+    return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeDialog(scheduleModal);
+  }
 }
 
 if (tokenInput) {
@@ -1657,6 +1684,7 @@ if (scheduleForm) {
       closeDialog(scheduleModal);
     }
   });
+  scheduleForm.addEventListener('keydown', handleScheduleFormKeydown);
 }
 
 if (shotCopyTextarea) {
