@@ -246,6 +246,27 @@ export async function pickDueShotQueueJobs(limit: number): Promise<PickedShotQue
   }
 }
 
+export async function markShotQueueProcessing(
+  id: number,
+  client?: PoolClient
+): Promise<ShotQueueJob | null> {
+  const queryable = getQueryable(client);
+
+  const result = await queryable.query(
+    `UPDATE shots_queue
+     SET status = 'processing',
+         attempts = COALESCE(attempts, 0) + 1,
+         last_error = NULL,
+         next_retry_at = NULL,
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id]
+  );
+
+  return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
+}
+
 export async function markShotQueueSuccess(
   id: number,
   client?: PoolClient
@@ -278,11 +299,34 @@ export async function markShotQueueError(
     `UPDATE shots_queue
      SET status = 'error',
          last_error = $2,
-         attempts = COALESCE(attempts, 0) + 1,
+         next_retry_at = NULL,
          updated_at = now()
      WHERE id = $1
      RETURNING *`,
     [id, message]
+  );
+
+  return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
+}
+
+export async function scheduleShotQueueRetry(
+  id: number,
+  error: string,
+  nextRetryAt: Date,
+  client?: PoolClient
+): Promise<ShotQueueJob | null> {
+  const queryable = getQueryable(client);
+  const message = typeof error === 'string' ? error : String(error ?? 'unknown error');
+
+  const result = await queryable.query(
+    `UPDATE shots_queue
+     SET status = 'pending',
+         last_error = $2,
+         next_retry_at = $3,
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id, message, nextRetryAt]
   );
 
   return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
