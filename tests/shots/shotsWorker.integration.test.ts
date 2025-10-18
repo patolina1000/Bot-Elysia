@@ -36,6 +36,8 @@ let logMessages: string[] = [];
 let recordShotCalls: RecordShotSentParams[] = [];
 let markSuccessCalls: { id: number; client: any }[] = [];
 let markErrorCalls: { id: number; error: string; client: any }[] = [];
+let markProcessingCalls: { id: number; client: any }[] = [];
+let scheduleRetryCalls: { id: number; error: string; next_retry_at: Date; client: any }[] = [];
 let requestedBotSlugs: string[] = [];
 
 let originalDependencies: Dependencies;
@@ -71,6 +73,8 @@ function resetState(): void {
   recordShotCalls = [];
   markSuccessCalls = [];
   markErrorCalls = [];
+  markProcessingCalls = [];
+  scheduleRetryCalls = [];
   requestedBotSlugs = [];
 }
 
@@ -161,6 +165,35 @@ function configureDependencies(fakeClientResult: { telegram_id: number }): void 
     markErrorCalls.push({ id, error, client });
     return null;
   };
+
+  dependencies.markShotQueueProcessing = async (id: number, client: any) => {
+    markProcessingCalls.push({ id, client });
+    const baseJob = lastJob ?? createJob({ id });
+    const attempts = (baseJob.attempts ?? 0) + 1;
+    return {
+      ...baseJob,
+      id,
+      attempts,
+      attempt_count: attempts,
+      status: 'processing',
+    };
+  };
+
+  dependencies.scheduleShotQueueRetry = async (
+    id: number,
+    error: string,
+    next_retry_at: Date,
+    client: any
+  ) => {
+    scheduleRetryCalls.push({ id, error, next_retry_at, client });
+    return {
+      ...(lastJob ?? createJob({ id })),
+      id,
+      status: 'pending',
+      last_error: error,
+      next_retry_at,
+    };
+  };
 }
 
 test.before(async () => {
@@ -176,6 +209,8 @@ test.afterEach(() => {
   dependencies.getOrCreateBotBySlug = originalDependencies.getOrCreateBotBySlug;
   dependencies.markShotQueueSuccess = originalDependencies.markShotQueueSuccess;
   dependencies.markShotQueueError = originalDependencies.markShotQueueError;
+  dependencies.markShotQueueProcessing = originalDependencies.markShotQueueProcessing;
+  dependencies.scheduleShotQueueRetry = originalDependencies.scheduleShotQueueRetry;
   dependencies.recordShotSent = originalDependencies.recordShotSent;
   mock.restoreAll();
   resetState();
@@ -256,6 +291,10 @@ test('processShotQueueJob sends intro media and plans with success logs', { conc
   assert.equal(markSuccessCalls.length, 1);
   assert.equal(markSuccessCalls[0].id, 999);
   assert.equal(markSuccessCalls[0].client, fakeClient);
+  assert.equal(markProcessingCalls.length, 1);
+  assert.equal(markProcessingCalls[0].id, job.id);
+  assert.equal(markProcessingCalls[0].client, fakeClient);
+  assert.equal(scheduleRetryCalls.length, 0);
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['photo-bot']);
 
@@ -328,6 +367,9 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
   ]);
 
   assert.equal(markSuccessCalls.length, 1);
+  assert.equal(markProcessingCalls.length, 1);
+  assert.equal(markProcessingCalls[0].id, job.id);
+  assert.equal(scheduleRetryCalls.length, 0);
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['text-bot']);
   assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=123001 plans=3'));
@@ -396,6 +438,9 @@ test('processShotQueueJob sends only intro when no plans exist', { concurrency: 
   ]);
 
   assert.equal(markSuccessCalls.length, 1);
+  assert.equal(markProcessingCalls.length, 1);
+  assert.equal(markProcessingCalls[0].id, job.id);
+  assert.equal(scheduleRetryCalls.length, 0);
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['video-bot']);
   assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=445566 plans=0'));

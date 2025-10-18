@@ -5,12 +5,15 @@ import {
   pickDueShotQueueJobs,
   markShotQueueSuccess,
   markShotQueueError,
+  markShotQueueProcessing,
+  scheduleShotQueueRetry,
   resetStuckShotQueueJobs,
   type ShotQueueJob,
 } from '../../db/shotsQueue.js';
 import { recordShotSent } from '../../db/shotsSent.js';
 import { ShotsMessageBuilder } from './ShotsMessageBuilder.js';
 import { getShotWithPlans } from '../../repositories/ShotsRepo.js';
+import { shotsService } from '../ShotsService.js';
 import type { ShotRecord } from '../../repositories/ShotsRepo.js';
 import type { PoolClient } from 'pg';
 import type { MediaType } from '../../db/shotsQueue.js';
@@ -21,11 +24,43 @@ export const __dependencies = {
   markShotQueueSuccess,
   markShotQueueError,
   recordShotSent,
+  markShotQueueProcessing,
+  scheduleShotQueueRetry,
+  enqueueShotRecipients: shotsService.enqueueShotRecipients.bind(shotsService),
 };
 
 const LOCK_KEY = 4839202; // Keep separate from downsells worker
 const WORKER_INTERVAL_MS = 7000;
-const MAX_JOBS_PER_TICK = 25;
+const DEFAULT_MAX_JOBS_PER_TICK = 25;
+const MAX_JOBS_PER_TICK = (() => {
+  const raw = process.env.SHOTS_WORKER_BATCH_SIZE;
+  if (!raw) {
+    return DEFAULT_MAX_JOBS_PER_TICK;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_JOBS_PER_TICK;
+})();
+const DEFAULT_MAX_ATTEMPTS = 3;
+const MAX_JOB_ATTEMPTS = (() => {
+  const raw = process.env.SHOTS_WORKER_MAX_ATTEMPTS;
+  if (!raw) {
+    return DEFAULT_MAX_ATTEMPTS;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_ATTEMPTS;
+})();
+const DEFAULT_RETRY_DELAYS_SECONDS = [30, 300];
+const RETRY_DELAYS_SECONDS = (() => {
+  const raw = process.env.SHOTS_WORKER_RETRY_DELAYS;
+  if (!raw) {
+    return DEFAULT_RETRY_DELAYS_SECONDS;
+  }
+  const parsed = raw
+    .split(',')
+    .map((value) => Number.parseInt(value.trim(), 10))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return parsed.length > 0 ? parsed : DEFAULT_RETRY_DELAYS_SECONDS;
+})();
 
 async function acquireLock(): Promise<boolean> {
   const { rows } = await pool.query('SELECT pg_try_advisory_lock($1) AS locked', [LOCK_KEY]);
@@ -46,6 +81,20 @@ function normalizeMediaType(value: string | null | undefined): MediaType {
   return 'none';
 }
 
+function computeNextRetry(attempts: number): Date | null {
+  if (!Number.isFinite(attempts) || attempts <= 0) {
+    return null;
+  }
+
+  const index = attempts - 1;
+  const delaySeconds = RETRY_DELAYS_SECONDS[index];
+  if (!Number.isFinite(delaySeconds) || delaySeconds <= 0) {
+    return null;
+  }
+
+  return new Date(Date.now() + delaySeconds * 1000);
+}
+
 async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
   const jobLogger = logger.child({
     scope: 'shots_worker',
@@ -60,6 +109,13 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
     jobLogger.error('[SHOTS][WORKER] invalid queue item payload');
     return;
   }
+
+  const processingJob = await __dependencies.markShotQueueProcessing(job.id, client);
+  if (!processingJob) {
+    jobLogger.warn('[SHOTS][WORKER] failed to mark job as processing');
+    return;
+  }
+  const attemptNumber = processingJob.attempts ?? job.attempts ?? 1;
 
   let shotRecord: ShotRecord | null = null;
 
@@ -124,12 +180,28 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
       logger.warn({ err: recordErr, queue_id: job.id }, '[SHOTS][WORKER] failed to record error result');
     }
 
-    await __dependencies.markShotQueueError(job.id, message, client);
+    const shouldRetry = attemptNumber < MAX_JOB_ATTEMPTS;
+    if (shouldRetry) {
+      const nextRetryAt = computeNextRetry(attemptNumber);
+      if (nextRetryAt) {
+        await __dependencies.scheduleShotQueueRetry(job.id, message, nextRetryAt, client);
+        jobLogger.warn(
+          { err, attempt: attemptNumber, next_retry_at: nextRetryAt.toISOString() },
+          '[SHOTS][WORKER] job scheduled for retry'
+        );
+      } else {
+        await __dependencies.markShotQueueError(job.id, message, client);
+        jobLogger.error({ err, attempt: attemptNumber }, '[SHOTS][WORKER] job failed without retry window');
+      }
+    } else {
+      await __dependencies.markShotQueueError(job.id, message, client);
+      jobLogger.error({ err, attempt: attemptNumber }, '[SHOTS][WORKER] job reached max attempts');
+    }
+
     logger.error(
-      { shot_id: job.shot_id, telegram_id: job.telegram_id, message },
+      { shot_id: job.shot_id, telegram_id: job.telegram_id, message, attempt: attemptNumber },
       '[SHOTS][ERROR] failed to dispatch shot'
     );
-    jobLogger.error({ err }, '[SHOTS][WORKER] job failed');
   }
 }
 
@@ -141,7 +213,7 @@ export function startShotsWorker(): void {
   const tick = async () => {
     workerLogger.info('[SHOTS][WORKER][TICK]');
 
-    const resetCount = await resetStuckShotQueueJobs(30);
+    const resetCount = await resetStuckShotQueueJobs(30, MAX_JOB_ATTEMPTS);
     if (resetCount > 0) {
       workerLogger.info({ reset: resetCount }, '[SHOTS][WORKER] reset stuck jobs');
     }
@@ -164,6 +236,29 @@ export function startShotsWorker(): void {
         workerLogger.info({ picked: jobs.length }, '[SHOTS][WORKER] jobs selected');
 
         try {
+          const uniqueShotIds = Array.from(
+            new Set(
+              jobs
+                .map((job) => job.shot_id)
+                .filter((value): value is number => Number.isInteger(value) && value > 0)
+            )
+          );
+
+          for (const shotId of uniqueShotIds) {
+            try {
+              const stats = await __dependencies.enqueueShotRecipients(shotId);
+              workerLogger.info(
+                { shot_id: shotId, ...stats },
+                '[SHOTS][WORKER][QUEUE]'
+              );
+            } catch (enqueueErr) {
+              workerLogger.error(
+                { err: enqueueErr, shot_id: shotId },
+                '[SHOTS][WORKER][QUEUE] failed to enqueue recipients'
+              );
+            }
+          }
+
           for (const job of jobs) {
             await processShotQueueJob(job, client);
           }
