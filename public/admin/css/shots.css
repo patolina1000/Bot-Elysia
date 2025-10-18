@@ -613,8 +613,8 @@ body {
 .datepicker__day[disabled] {
   cursor: not-allowed;
   background: #fef2f2;
-  color: #b91c1c;
-  border-color: #fecaca;
+  color: #dc2626;
+  border-color: #fca5a5;
 }
 
 .datepicker__day--selected {
