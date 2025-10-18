@@ -247,7 +247,7 @@ export class ShotsMessageBuilder {
       textMessageIds.push(Number(response.message_id));
     }
 
-    const corrSuffix = options?.corr ? ` corr=${options.corr}` : '';
+    const corrSuffix = options?.corr ? ` corr="${options.corr}"` : '';
     logger.info(
       `[SHOTS][SEND][INTRO] chatId=${chatId} media=${hasMedia ? shot.media_type ?? 'none' : 'none'} ` +
         `captionUsed=${captionUsed ? 'yes' : 'no'} copyChars=${copyLength} parts=${chunks.length}${corrSuffix}`
@@ -266,7 +266,7 @@ export class ShotsMessageBuilder {
     const telegramId = resolveTelegramId(chatId);
     const validPlans = Array.isArray(plans) ? plans.filter((plan) => plan && plan.name?.trim()) : [];
 
-    const corrSuffix = options?.corr ? ` corr=${options.corr}` : '';
+    const corrSuffix = options?.corr ? ` corr="${options.corr}"` : '';
     logger.info(`[SHOTS][SEND][PLANS] chatId=${chatId} plans=${validPlans.length}${corrSuffix}`);
 
     if (validPlans.length === 0) {

@@ -150,11 +150,11 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
     : 0;
   const nextAttempt = baseAttempt + 1;
 
-  jobLogger.info(`[SHOTS][WORKER][DEQUEUE] id=${job.id} attempt=${nextAttempt} corr=${corr}`);
+  jobLogger.info(`[SHOTS][WORKER][DEQUEUE] id=${job.id} attempt=${nextAttempt} corr="${corr}"`);
 
   if (job.shot_id == null || job.telegram_id == null) {
     await __dependencies.markShotQueueError(job.id, 'Queue item missing shot_id or telegram_id', client);
-    jobLogger.error(`[SHOTS][WORKER] invalid queue item payload corr=${corr}`);
+    jobLogger.error(`[SHOTS][WORKER] invalid queue item payload corr="${corr}"`);
     metrics.count('shots.worker.error', 1);
     return;
   }
@@ -165,7 +165,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
 
   const processingJob = await __dependencies.markShotQueueProcessing(job.id, client);
   if (!processingJob) {
-    jobLogger.warn(`[SHOTS][WORKER] failed to mark job as processing corr=${corr}`);
+    jobLogger.warn(`[SHOTS][WORKER] failed to mark job as processing corr="${corr}"`);
     return;
   }
   const attemptNumber =
@@ -227,7 +227,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         client
       );
     } catch (recordErr) {
-      jobLogger.warn({ err: recordErr }, `[SHOTS][WORKER] failed to record shot result corr=${corr}`);
+      jobLogger.warn({ err: recordErr }, `[SHOTS][WORKER] failed to record shot result corr="${corr}"`);
     }
 
     const shotSentEventId = `shs:${shot.id}:${telegramIdString}`;
@@ -239,12 +239,12 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         target: eventTarget,
       });
       jobLogger.info(
-        `[SHOTS][EVENT] name=shot_sent event_id=${shotSentEventId} shot=${shot.id} tg=${telegramIdString} corr=${corr}`
+        `[SHOTS][EVENT] name=shot_sent event_id=${shotSentEventId} shot=${shot.id} tg=${telegramIdString} corr="${corr}"`
       );
     } catch (eventErr) {
       jobLogger.warn(
         { err: eventErr },
-        `[SHOTS][EVENT] failed name=shot_sent event_id=${shotSentEventId} corr=${corr}`
+        `[SHOTS][EVENT] failed name=shot_sent event_id=${shotSentEventId} corr="${corr}"`
       );
     }
 
@@ -252,7 +252,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
     metrics.count('shots.worker.success', 1);
 
     jobLogger.info(
-      `[SHOTS][QUEUE][DONE] id=${job.id} status=success attempts=${attemptNumber} corr=${corr}`
+      `[SHOTS][QUEUE][DONE] id=${job.id} status=success attempts=${attemptNumber} corr="${corr}"`
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err ?? 'unknown error');
@@ -271,7 +271,7 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
     } catch (recordErr) {
       logger.warn(
         { err: recordErr, queue_id: job.id, corr },
-        `[SHOTS][WORKER] failed to record error result corr=${corr}`
+        `[SHOTS][WORKER] failed to record error result corr="${corr}"`
       );
     }
 
@@ -290,12 +290,12 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         errorMessage: message,
       });
       jobLogger.info(
-        `[SHOTS][EVENT] name=shot_error event_id=${shotErrorEventId} shot=${shotIdForEvent} tg=${telegramIdString} corr=${corr}`
+        `[SHOTS][EVENT] name=shot_error event_id=${shotErrorEventId} shot=${shotIdForEvent} tg=${telegramIdString} corr="${corr}"`
       );
     } catch (eventErr) {
       jobLogger.warn(
         { err: eventErr },
-        `[SHOTS][EVENT] failed name=shot_error event_id=${shotErrorEventId} corr=${corr}`
+        `[SHOTS][EVENT] failed name=shot_error event_id=${shotErrorEventId} corr="${corr}"`
       );
     }
 
@@ -306,29 +306,29 @@ async function processShotQueueJob(job: ShotQueueJob, client: PoolClient): Promi
         await __dependencies.scheduleShotQueueRetry(job.id, message, nextRetryAt, client);
         jobLogger.warn(
           { err, attempt: attemptNumber, next_retry_at: nextRetryAt.toISOString() },
-          `[SHOTS][WORKER] job scheduled for retry corr=${corr}`
+          `[SHOTS][WORKER] job scheduled for retry corr="${corr}"`
         );
       } else {
         await __dependencies.markShotQueueError(job.id, message, client);
         jobLogger.error(
           { err, attempt: attemptNumber },
-          `[SHOTS][WORKER] job failed without retry window corr=${corr}`
+          `[SHOTS][WORKER] job failed without retry window corr="${corr}"`
         );
       }
     } else {
       await __dependencies.markShotQueueError(job.id, message, client);
-      jobLogger.error({ err, attempt: attemptNumber }, `[SHOTS][WORKER] job reached max attempts corr=${corr}`);
+      jobLogger.error({ err, attempt: attemptNumber }, `[SHOTS][WORKER] job reached max attempts corr="${corr}"`);
     }
 
     metrics.count('shots.worker.error', 1);
 
     logger.error(
       { shot_id: job.shot_id, telegram_id: job.telegram_id, message, attempt: attemptNumber, corr },
-      `[SHOTS][ERROR] failed to dispatch shot corr=${corr}`
+      `[SHOTS][ERROR] failed to dispatch shot corr="${corr}"`
     );
 
     jobLogger.info(
-      `[SHOTS][QUEUE][DONE] id=${job.id} status=error attempts=${attemptNumber} corr=${corr}`
+      `[SHOTS][QUEUE][DONE] id=${job.id} status=error attempts=${attemptNumber} corr="${corr}"`
     );
   }
 }

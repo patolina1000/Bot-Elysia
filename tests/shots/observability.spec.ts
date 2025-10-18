@@ -259,34 +259,36 @@ test('shot_sent event is recorded with correlation logs', async () => {
   assert.equal(markErrorCalls.length, 0);
 
   const corr = 'q:42|sh:77|tg:998877';
-  assert.ok(logMessages.some((msg) => msg.startsWith('[SHOTS][WORKER][DEQUEUE]') && msg.includes(`corr=${corr}`)));
+  assert.ok(
+    logMessages.some((msg) => msg.startsWith('[SHOTS][WORKER][DEQUEUE]') && msg.includes(`corr="${corr}"`))
+  );
   assert.ok(
     logMessages.some(
       (msg) =>
         msg.startsWith('[SHOTS][SEND][INTRO]') &&
         msg.includes('chatId=998877') &&
-        msg.includes(`corr=${corr}`)
+        msg.includes(`corr="${corr}"`)
     )
   );
   assert.ok(
     logMessages.some(
       (msg) =>
         msg.startsWith('[SHOTS][SEND][PLANS] chatId=998877 plans=1') &&
-        msg.includes(`corr=${corr}`)
+        msg.includes(`corr="${corr}"`)
     )
   );
   assert.ok(
     logMessages.some(
       (msg) =>
         msg.startsWith('[SHOTS][EVENT] name=shot_sent event_id=shs:77:998877') &&
-        msg.includes(`corr=${corr}`)
+        msg.includes(`corr="${corr}"`)
     )
   );
   assert.ok(
     logMessages.some(
       (msg) =>
         msg.startsWith('[SHOTS][QUEUE][DONE] id=42 status=success attempts=1') &&
-        msg.includes(`corr=${corr}`)
+        msg.includes(`corr="${corr}"`)
     )
   );
 });
@@ -363,21 +365,21 @@ test('shot_error event stores attempt and sanitized error', async () => {
     logMessages.some(
       (msg) =>
         msg.startsWith('[SHOTS][WORKER][DEQUEUE] id=55') &&
-        msg.includes(`corr=${corr}`)
+        msg.includes(`corr="${corr}"`)
     )
   );
   assert.ok(
     logMessages.some(
       (msg) =>
         msg.startsWith('[SHOTS][EVENT] name=shot_error event_id=she:88:112233:1') &&
-        msg.includes(`corr=${corr}`)
+        msg.includes(`corr="${corr}"`)
     )
   );
   assert.ok(
     logMessages.some(
       (msg) =>
         msg.startsWith('[SHOTS][QUEUE][DONE] id=55 status=error attempts=1') &&
-        msg.includes(`corr=${corr}`)
+        msg.includes(`corr="${corr}"`)
     )
   );
 });
