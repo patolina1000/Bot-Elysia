@@ -30,7 +30,7 @@ let markProcessingCalls: any[] = [];
 let scheduleRetryCalls: any[] = [];
 let insertShotSentCalls: any[] = [];
 let insertShotErrorCalls: any[] = [];
-let funnelEvents: Map<string, { eventName: string; telegramId: string; meta: any }> = new Map();
+let funnelEvents: Map<string, { event: string; telegramId: string; meta: any }> = new Map();
 
 function resetState(): void {
   logMessages = [];
@@ -108,10 +108,10 @@ async function setupLoggerCapture(): Promise<void> {
 function mockFunnelEvents(): void {
   mock.method(pool, 'query', async (sql: string, params: any[]) => {
     if (typeof sql === 'string' && sql.includes('INSERT INTO funnel_events')) {
-      const [eventId, eventName, telegramId, metaJson] = params ?? [];
+      const [eventId, event, telegramId, metaJson] = params ?? [];
       const meta = typeof metaJson === 'string' ? JSON.parse(metaJson) : metaJson;
       if (!funnelEvents.has(eventId)) {
-        funnelEvents.set(eventId, { eventName, telegramId, meta });
+        funnelEvents.set(eventId, { event, telegramId, meta });
         return { rowCount: 1 } as any;
       }
       return { rowCount: 0 } as any;
@@ -264,7 +264,7 @@ test('shot_sent event is recorded with correlation logs', async () => {
   const eventId = 'shs:77:998877';
   assert.ok(funnelEvents.has(eventId));
   assert.deepEqual(funnelEvents.get(eventId), {
-    eventName: 'shot_sent',
+    event: 'shot_sent',
     telegramId: '998877',
     meta: { shot_id: 77, bot_slug: 'promo-bot', target: 'all_started' },
   });
@@ -362,7 +362,7 @@ test('shot_error event stores attempt and sanitized error', async () => {
   const eventId = 'she:88:112233:1';
   assert.ok(funnelEvents.has(eventId));
   const stored = funnelEvents.get(eventId);
-  assert.equal(stored?.eventName, 'shot_error');
+  assert.equal(stored?.event, 'shot_error');
   assert.equal(stored?.telegramId, '112233');
   assert.equal(stored?.meta.shot_id, 88);
   assert.equal(stored?.meta.bot_slug, 'error-bot');
