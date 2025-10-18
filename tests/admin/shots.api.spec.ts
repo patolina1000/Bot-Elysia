@@ -591,7 +591,8 @@ test('trigger now enqueues and schedule validates future date', async () => {
       .post(`/api/shots/${shot.id}/trigger`)
       .set(AUTH_HEADER)
       .send({ mode: 'schedule', scheduled_at: new Date(Date.now() - 60_000).toISOString() });
-    assert.equal(pastResponse.status, 400);
+    assert.equal(pastResponse.status, 422);
+    assert.equal(pastResponse.body.error, 'VALIDATION_ERROR');
   } finally {
     restore();
   }
@@ -665,6 +666,57 @@ test('preview builds media, caption and keyboard summary', async () => {
     assert.equal(response.body.preview.media.caption, 'Short caption');
     assert.ok(Array.isArray(response.body.preview.keyboard));
     assert.ok(response.body.preview.textParts.length >= 1);
+  } finally {
+    restore();
+  }
+});
+
+test('preview overrides do not persist changes', async () => {
+  const { app, database, restore } = setupTest();
+  try {
+    const shot: ShotRecord = {
+      id: database.nextShotId++,
+      bot_slug: 'bot-alpha',
+      title: 'Original',
+      copy: 'Mensagem base',
+      media_url: null,
+      media_type: 'none',
+      target: 'all_started',
+      scheduled_at: null,
+      created_at: new Date(),
+    };
+    database.shots.push(shot);
+    const plan: PlanRecord = {
+      id: database.nextPlanId++,
+      shot_id: shot.id,
+      name: 'Starter',
+      price_cents: 1500,
+      description: 'Plano inicial',
+      sort_order: 0,
+    };
+    database.shotPlans.push(plan);
+
+    const response = await supertest(app)
+      .post(`/api/shots/${shot.id}/preview`)
+      .set(AUTH_HEADER)
+      .send({
+        copy: 'Nova mensagem',
+        media_type: 'video',
+        media_url: 'https://example.com/video.mp4',
+        plans: [
+          {
+            name: 'Override',
+            price_cents: 9999,
+            description: 'Alterado',
+          },
+        ],
+      });
+
+    assert.equal(response.status, 200);
+    assert.equal(database.shots[0].copy, 'Mensagem base');
+    assert.equal(database.shots[0].media_type, 'none');
+    assert.equal(database.shotPlans[0].name, 'Starter');
+    assert.equal(database.shotPlans[0].price_cents, 1500);
   } finally {
     restore();
   }

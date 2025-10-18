@@ -100,6 +100,27 @@
               </div>
             </div>
           </div>
+          <section class="plans-section" id="shot-plans-section">
+            <div class="plans-section__header">
+              <div class="plans-section__title">
+                <h3>Planos do disparo</h3>
+                <p class="helper" id="shot-plans-helper">Salve o disparo antes de adicionar planos.</p>
+              </div>
+              <div class="plans-section__actions">
+                <button type="button" class="btn" id="shot-plan-add">Adicionar plano</button>
+                <button type="button" class="btn" id="shot-plan-reorder" disabled>Salvar ordenação</button>
+              </div>
+            </div>
+            <div class="plans-list" id="shot-plans-list" aria-live="polite"></div>
+          </section>
+          <section class="preview-section" id="shot-preview-section">
+            <div class="preview-section__header">
+              <h3>Pré-visualização</h3>
+              <button type="button" class="btn" id="shot-preview" disabled>Pré-visualizar</button>
+            </div>
+            <p class="helper" id="shot-preview-empty">Clique em “Pré-visualizar” para gerar a mensagem.</p>
+            <div class="preview" id="shot-preview-result" aria-live="polite"></div>
+          </section>
         </div>
         <footer class="modal__footer">
           <button type="button" class="btn" data-action="close">Cancelar</button>

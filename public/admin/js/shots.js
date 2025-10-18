@@ -1,3 +1,5 @@
+import { maskBRL, toCents, fromCents, parseDateTimeLocal } from './utils.js';
+
 const tokenInput = document.getElementById('admin-token');
 const slugInput = document.getElementById('shots-bot-slug');
 const loadBtn = document.getElementById('btn-load-shots');
@@ -24,16 +26,27 @@ const scheduleModal = document.getElementById('schedule-modal');
 const scheduleForm = document.getElementById('schedule-form');
 const scheduleDatepickerContainer = document.getElementById('schedule-datepicker');
 const scheduleTimeInput = document.getElementById('schedule-time');
+const plansSection = document.getElementById('shot-plans-section');
+const plansList = document.getElementById('shot-plans-list');
+const planAddButton = document.getElementById('shot-plan-add');
+const planReorderButton = document.getElementById('shot-plan-reorder');
+const plansHelper = document.getElementById('shot-plans-helper');
+const previewButton = document.getElementById('shot-preview');
+const previewContainer = document.getElementById('shot-preview-result');
+const previewEmpty = document.getElementById('shot-preview-empty');
 
 const state = {
   botSlug: '',
   shots: [],
   loading: false,
   editingShot: null,
+  plans: [],
+  planOrderDirty: false,
   scheduleContext: null,
   shotPicker: null,
   schedulePicker: null,
   shotScheduledDate: null,
+  previewLoading: false,
 };
 
 let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
@@ -299,7 +312,13 @@ async function loadShots(options = {}) {
   }
   try {
     const data = await fetchJSON(`/api/shots?bot_slug=${encodeURIComponent(state.botSlug)}`);
-    const list = Array.isArray(data) ? data : Array.isArray(data?.shots) ? data.shots : [];
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.shots)
+      ? data.shots
+      : Array.isArray(data?.items)
+      ? data.items
+      : [];
     state.shots = list;
     renderShots(list);
   } catch (error) {
@@ -326,10 +345,14 @@ function resetShotForm() {
   if (!shotForm) {
     return;
   }
+  state.editingShot = null;
   shotForm.reset();
   shotForm.dataset.shotId = '';
   shotForm.dataset.scheduledAt = '';
   state.shotScheduledDate = null;
+  state.plans = [];
+  state.planOrderDirty = false;
+  state.previewLoading = false;
   if (shotScheduledInput) {
     shotScheduledInput.value = '';
     shotScheduledInput.placeholder = 'Sem agendamento';
@@ -343,6 +366,11 @@ function resetShotForm() {
   if (shotCopyWarning) {
     shotCopyWarning.hidden = true;
   }
+  if (plansList) {
+    plansList.innerHTML = '';
+  }
+  clearPreview();
+  updatePlanControls();
   hideShotDatepicker();
 }
 
@@ -360,10 +388,635 @@ function combineDateAndTime(date, timeString) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return null;
   }
-  const [hours, minutes] = (timeString || '').split(':');
-  const combined = new Date(date);
-  combined.setHours(Number.parseInt(hours ?? '0', 10) || 0, Number.parseInt(minutes ?? '0', 10) || 0, 0, 0);
-  return combined;
+  const [hours = '00', minutes = '00'] = (timeString || '').split(':');
+  const localValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(
+    2,
+    '0'
+  )}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return parseDateTimeLocal(localValue);
+}
+
+function generateTempId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizePlan(plan, index) {
+  const priceCents = Number.isFinite(plan?.price_cents) ? Math.max(0, Number(plan.price_cents)) : 0;
+  return {
+    id: plan?.id ?? null,
+    tempId: plan?.id ? `plan-${plan.id}` : generateTempId(),
+    name: plan?.name ?? '',
+    price_cents: priceCents,
+    description: plan?.description ?? '',
+    sort_order: Number.isFinite(plan?.sort_order) ? Number(plan.sort_order) : index ?? 0,
+    isNew: !(plan?.id > 0),
+  };
+}
+
+function setPlans(plans = []) {
+  const normalized = Array.isArray(plans) ? plans.map((plan, index) => normalizePlan(plan, index)) : [];
+  normalized.sort((a, b) => {
+    if (a.sort_order !== b.sort_order) {
+      return a.sort_order - b.sort_order;
+    }
+    return (a.id ?? 0) - (b.id ?? 0);
+  });
+  state.plans = normalized;
+  state.planOrderDirty = false;
+  renderPlanList();
+  updatePlanControls();
+}
+
+function renderPlanList(options = {}) {
+  if (!plansList) {
+    return;
+  }
+  const hasShot = Boolean(state.editingShot?.id);
+  plansList.innerHTML = '';
+  if (!hasShot) {
+    const helper = document.createElement('p');
+    helper.className = 'helper';
+    helper.textContent = 'Salve o disparo antes de adicionar planos.';
+    plansList.appendChild(helper);
+    return;
+  }
+  if (!Array.isArray(state.plans) || state.plans.length === 0) {
+    const helper = document.createElement('p');
+    helper.className = 'helper';
+    helper.textContent = 'Nenhum plano cadastrado para este disparo.';
+    plansList.appendChild(helper);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  state.plans.forEach((plan, index) => {
+    plan.sort_order = index;
+    const item = document.createElement('article');
+    item.className = 'plan-item';
+    item.dataset.planId = plan.tempId;
+    if (!plan.id) {
+      item.dataset.planNew = 'true';
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'plan-item__grid';
+
+    const nameField = document.createElement('div');
+    nameField.className = 'field';
+    const nameLabel = document.createElement('label');
+    const nameInputId = `plan-name-${plan.tempId}`;
+    nameLabel.htmlFor = nameInputId;
+    nameLabel.textContent = 'Nome';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.name = 'plan-name';
+    nameInput.id = nameInputId;
+    nameInput.placeholder = 'Plano premium';
+    nameInput.value = plan.name;
+    nameField.appendChild(nameLabel);
+    nameField.appendChild(nameInput);
+
+    const priceField = document.createElement('div');
+    priceField.className = 'field';
+    const priceLabel = document.createElement('label');
+    const priceInputId = `plan-price-${plan.tempId}`;
+    priceLabel.htmlFor = priceInputId;
+    priceLabel.textContent = 'Preço (R$)';
+    const priceInput = document.createElement('input');
+    priceInput.type = 'text';
+    priceInput.name = 'plan-price';
+    priceInput.id = priceInputId;
+    priceInput.inputMode = 'numeric';
+    priceInput.placeholder = 'R$ 0,00';
+    priceInput.value = plan.price_cents > 0 ? fromCents(plan.price_cents) : plan.id ? fromCents(0) : '';
+    priceField.appendChild(priceLabel);
+    priceField.appendChild(priceInput);
+
+    const descriptionField = document.createElement('div');
+    descriptionField.className = 'field field--full';
+    const descriptionLabel = document.createElement('label');
+    const descriptionId = `plan-description-${plan.tempId}`;
+    descriptionLabel.htmlFor = descriptionId;
+    descriptionLabel.textContent = 'Descrição';
+    const descriptionInput = document.createElement('textarea');
+    descriptionInput.name = 'plan-description';
+    descriptionInput.id = descriptionId;
+    descriptionInput.rows = 2;
+    descriptionInput.placeholder = 'Destaques do plano';
+    descriptionInput.value = plan.description ?? '';
+    descriptionField.appendChild(descriptionLabel);
+    descriptionField.appendChild(descriptionInput);
+
+    grid.appendChild(nameField);
+    grid.appendChild(priceField);
+    grid.appendChild(descriptionField);
+
+    const footer = document.createElement('div');
+    footer.className = 'plan-item__footer';
+
+    const reorderGroup = document.createElement('div');
+    reorderGroup.className = 'plan-item__reorder';
+    const upButton = document.createElement('button');
+    upButton.type = 'button';
+    upButton.className = 'btn btn--ghost';
+    upButton.dataset.action = 'plan-up';
+    upButton.title = 'Mover para cima';
+    upButton.textContent = '↑';
+    upButton.disabled = index === 0;
+    const downButton = document.createElement('button');
+    downButton.type = 'button';
+    downButton.className = 'btn btn--ghost';
+    downButton.dataset.action = 'plan-down';
+    downButton.title = 'Mover para baixo';
+    downButton.textContent = '↓';
+    downButton.disabled = index === state.plans.length - 1;
+    reorderGroup.appendChild(upButton);
+    reorderGroup.appendChild(downButton);
+
+    const actions = document.createElement('div');
+    actions.className = 'plan-item__actions';
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.className = 'btn btn--primary';
+    saveButton.dataset.action = 'plan-save';
+    saveButton.textContent = plan.id ? 'Salvar' : 'Criar';
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'btn';
+    removeButton.dataset.action = 'plan-remove';
+    removeButton.textContent = 'Remover';
+    actions.appendChild(saveButton);
+    actions.appendChild(removeButton);
+
+    footer.appendChild(reorderGroup);
+    footer.appendChild(actions);
+
+    item.appendChild(grid);
+    item.appendChild(footer);
+
+    fragment.appendChild(item);
+  });
+
+  plansList.appendChild(fragment);
+
+  if (options.focusPlanId) {
+    const targetPlan = plansList.querySelector(`[data-plan-id="${options.focusPlanId}"]`);
+    if (targetPlan) {
+      const focusSelector = options.focusField ? `[name="${options.focusField}"]` : 'input[name="plan-name"]';
+      const focusElement = targetPlan.querySelector(focusSelector);
+      if (focusElement instanceof HTMLElement) {
+        focusElement.focus();
+        if (focusElement instanceof HTMLInputElement || focusElement instanceof HTMLTextAreaElement) {
+          const length = focusElement.value.length;
+          focusElement.setSelectionRange?.(length, length);
+        }
+      }
+    }
+  }
+}
+
+function updatePlanControls() {
+  const hasShot = Boolean(state.editingShot?.id);
+  const hasUnsaved = state.plans.some((plan) => !plan.id);
+  if (planAddButton) {
+    planAddButton.disabled = !hasShot;
+  }
+  if (planReorderButton) {
+    const shouldDisable = !hasShot || !state.planOrderDirty || state.plans.length < 2 || hasUnsaved;
+    planReorderButton.disabled = shouldDisable;
+    planReorderButton.title = hasShot
+      ? hasUnsaved
+        ? 'Salve todos os planos antes de reordenar.'
+        : 'Aplicar nova ordem dos planos.'
+      : 'Disponível após salvar o disparo.';
+  }
+  if (plansSection) {
+    plansSection.classList.toggle('plans-section--disabled', !hasShot);
+  }
+  if (plansHelper) {
+    plansHelper.hidden = hasShot;
+  }
+  if (previewButton) {
+    previewButton.disabled = !hasShot || state.previewLoading;
+  }
+}
+
+function clearPreview() {
+  if (previewContainer) {
+    previewContainer.innerHTML = '';
+  }
+  if (previewEmpty) {
+    previewEmpty.hidden = false;
+  }
+}
+
+function renderPreview(preview) {
+  if (!previewContainer) {
+    return;
+  }
+  previewContainer.innerHTML = '';
+  let hasContent = false;
+  if (previewEmpty) {
+    previewEmpty.hidden = true;
+  }
+
+  if (Array.isArray(preview?.textParts) && preview.textParts.length > 0) {
+    const messagesWrapper = document.createElement('div');
+    messagesWrapper.className = 'preview__messages';
+    preview.textParts.forEach((part, index) => {
+      const message = document.createElement('article');
+      message.className = 'preview__message';
+      message.innerHTML = part;
+      message.setAttribute('data-preview-index', String(index));
+      messagesWrapper.appendChild(message);
+    });
+    previewContainer.appendChild(messagesWrapper);
+    hasContent = true;
+  }
+
+  if (Array.isArray(preview?.keyboard) && preview.keyboard.length > 0) {
+    const table = document.createElement('table');
+    table.className = 'preview__keyboard';
+    preview.keyboard.forEach((row) => {
+      const tr = document.createElement('tr');
+      row.forEach((button) => {
+        const td = document.createElement('td');
+        td.textContent = button?.text ?? '';
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+    previewContainer.appendChild(table);
+    hasContent = true;
+  }
+
+  if (preview?.media) {
+    const mediaWrapper = document.createElement('div');
+    mediaWrapper.className = 'preview__media';
+    const iconMap = {
+      photo: '🖼️',
+      video: '🎬',
+      audio: '🎧',
+      document: '📄',
+    };
+    const icon = iconMap[preview.media.type] ?? '📎';
+    const title = document.createElement('strong');
+    title.textContent = `${icon} ${preview.media.type}`;
+    const link = document.createElement('a');
+    link.href = preview.media.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Abrir mídia';
+    mediaWrapper.appendChild(title);
+    mediaWrapper.appendChild(link);
+    if (preview.media.caption) {
+      const caption = document.createElement('p');
+      caption.className = 'preview__caption';
+      caption.innerHTML = preview.media.caption;
+      mediaWrapper.appendChild(caption);
+    }
+    previewContainer.appendChild(mediaWrapper);
+    hasContent = true;
+  }
+
+  if (!hasContent) {
+    const helper = document.createElement('p');
+    helper.className = 'helper';
+    helper.textContent = 'Nenhum conteúdo para pré-visualizar.';
+    previewContainer.appendChild(helper);
+  }
+}
+
+function collectPlanDrafts() {
+  return state.plans.map((plan) => ({
+    name: plan.name?.trim() ?? '',
+    price_cents: Math.max(0, Math.trunc(plan.price_cents ?? 0)),
+    description: plan.description?.trim() ? plan.description.trim() : null,
+  }));
+}
+
+function handleAddPlan() {
+  if (!state.editingShot?.id) {
+    alert('Salve o disparo antes de adicionar planos.');
+    return;
+  }
+  const plan = normalizePlan({ id: null, name: '', price_cents: 0, description: '', sort_order: state.plans.length }, state.plans.length);
+  state.plans.push(plan);
+  renderPlanList({ focusPlanId: plan.tempId });
+  updatePlanControls();
+}
+
+function handlePlanInputChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const container = target.closest('[data-plan-id]');
+  if (!container) {
+    return;
+  }
+  const planId = container.getAttribute('data-plan-id');
+  if (!planId) {
+    return;
+  }
+  const plan = state.plans.find((item) => item.tempId === planId);
+  if (!plan) {
+    return;
+  }
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    switch (target.name) {
+      case 'plan-name':
+        plan.name = target.value;
+        break;
+      case 'plan-price': {
+        const masked = maskBRL(target.value);
+        target.value = masked;
+        plan.price_cents = toCents(masked);
+        break;
+      }
+      case 'plan-description':
+        plan.description = target.value;
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+async function handlePlanSave(plan) {
+  if (!state.editingShot?.id) {
+    alert('Salve o disparo antes de gerenciar planos.');
+    return;
+  }
+  const payload = {
+    name: plan.name?.trim() || '',
+    price_cents: Math.max(0, Math.trunc(plan.price_cents ?? 0)),
+    description: plan.description?.trim() ? plan.description.trim() : null,
+  };
+  if (!payload.name) {
+    alert('Informe o nome do plano.');
+    return;
+  }
+  try {
+    if (plan.id) {
+      const response = await fetchJSON(`/api/shots/${encodeURIComponent(state.editingShot.id)}/plans/${plan.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      const updated = response?.plan ?? null;
+      if (updated) {
+        Object.assign(plan, normalizePlan(updated, plan.sort_order));
+      }
+      showToast('Plano atualizado!');
+    } else {
+      const response = await fetchJSON(`/api/shots/${encodeURIComponent(state.editingShot.id)}/plans`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const created = response?.plan ?? null;
+      if (created) {
+        Object.assign(plan, normalizePlan(created, plan.sort_order));
+      }
+      showToast('Plano criado!');
+    }
+    renderPlanList({ focusPlanId: plan.tempId });
+    updatePlanControls();
+  } catch (error) {
+    console.error('[shots] erro ao salvar plano', error);
+    alert(error instanceof Error ? error.message : 'Erro ao salvar plano.');
+  }
+}
+
+async function handlePlanRemove(plan) {
+  if (!state.editingShot?.id) {
+    alert('Salve o disparo antes de gerenciar planos.');
+    return;
+  }
+  if (!plan.id) {
+    state.plans = state.plans.filter((item) => item.tempId !== plan.tempId);
+    renderPlanList();
+    updatePlanControls();
+    return;
+  }
+  const confirmed = window.confirm('Deseja realmente remover este plano?');
+  if (!confirmed) {
+    return;
+  }
+  try {
+    await fetchJSON(`/api/shots/${encodeURIComponent(state.editingShot.id)}/plans/${plan.id}`, {
+      method: 'DELETE',
+    });
+    state.plans = state.plans.filter((item) => item.tempId !== plan.tempId);
+    showToast('Plano removido.');
+    renderPlanList();
+    updatePlanControls();
+  } catch (error) {
+    console.error('[shots] erro ao remover plano', error);
+    alert(error instanceof Error ? error.message : 'Erro ao remover plano.');
+  }
+}
+
+function movePlan(planId, direction) {
+  const index = state.plans.findIndex((plan) => plan.tempId === planId);
+  if (index < 0) {
+    return;
+  }
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= state.plans.length) {
+    return;
+  }
+  const [plan] = state.plans.splice(index, 1);
+  state.plans.splice(newIndex, 0, plan);
+  state.planOrderDirty = true;
+  const activeElement = document.activeElement;
+  let focusField = null;
+  if (activeElement instanceof HTMLElement) {
+    const parentPlan = activeElement.closest('[data-plan-id]');
+    if (parentPlan && parentPlan.getAttribute('data-plan-id') === planId) {
+      focusField = activeElement.getAttribute('name');
+    }
+  }
+  renderPlanList({ focusPlanId: plan.tempId, focusField: focusField || undefined });
+  updatePlanControls();
+}
+
+function handlePlanListClick(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const action = target.dataset.action;
+  if (!action) {
+    return;
+  }
+  const container = target.closest('[data-plan-id]');
+  if (!container) {
+    return;
+  }
+  const planId = container.getAttribute('data-plan-id');
+  const plan = state.plans.find((item) => item.tempId === planId);
+  if (!plan) {
+    return;
+  }
+  switch (action) {
+    case 'plan-save':
+      void handlePlanSave(plan);
+      break;
+    case 'plan-remove':
+      void handlePlanRemove(plan);
+      break;
+    case 'plan-up':
+      movePlan(plan.tempId, -1);
+      break;
+    case 'plan-down':
+      movePlan(plan.tempId, 1);
+      break;
+    default:
+      break;
+  }
+}
+
+async function handlePlanReorder() {
+  if (!state.editingShot?.id) {
+    alert('Salve o disparo antes de reordenar planos.');
+    return;
+  }
+  if (state.plans.some((plan) => !plan.id)) {
+    alert('Salve todos os planos antes de atualizar a ordenação.');
+    return;
+  }
+  try {
+    const order = state.plans.map((plan) => plan.id);
+    const response = await fetchJSON(`/api/shots/${encodeURIComponent(state.editingShot.id)}/plans/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ order }),
+    });
+    const plans = Array.isArray(response?.plans) ? response.plans : state.plans;
+    setPlans(plans);
+    showToast('Ordenação salva!');
+  } catch (error) {
+    console.error('[shots] erro ao reordenar planos', error);
+    alert(error instanceof Error ? error.message : 'Erro ao reordenar planos.');
+  }
+}
+
+async function loadPlansForShot(shotId) {
+  if (!shotId) {
+    setPlans([]);
+    return;
+  }
+  if (plansList) {
+    plansList.innerHTML = '';
+    const helper = document.createElement('p');
+    helper.className = 'helper';
+    helper.textContent = 'Carregando planos...';
+    plansList.appendChild(helper);
+  }
+  try {
+    const response = await fetchJSON(`/api/shots/${encodeURIComponent(shotId)}/plans`);
+    const plans = Array.isArray(response?.plans) ? response.plans : [];
+    setPlans(plans);
+  } catch (error) {
+    console.error('[shots] erro ao carregar planos', error);
+    if (plansList) {
+      plansList.innerHTML = '';
+      const helper = document.createElement('p');
+      helper.className = 'helper helper--error';
+      helper.textContent = error instanceof Error ? error.message : 'Erro ao carregar planos.';
+      plansList.appendChild(helper);
+    }
+    updatePlanControls();
+  }
+}
+
+async function handlePreviewClick() {
+  if (!state.editingShot?.id) {
+    alert('Salve o disparo antes de gerar a pré-visualização.');
+    return;
+  }
+  if (state.previewLoading) {
+    return;
+  }
+  const payload = {};
+  if (shotTitleInput) {
+    payload.title = shotTitleInput.value.trim();
+  }
+  if (shotCopyTextarea) {
+    payload.copy = shotCopyTextarea.value;
+  }
+  if (shotMediaTypeSelect) {
+    payload.media_type = shotMediaTypeSelect.value || 'none';
+  }
+  if (shotMediaUrlInput) {
+    const mediaUrl = shotMediaUrlInput.value.trim();
+    payload.media_url = mediaUrl || null;
+  }
+  const plans = collectPlanDrafts();
+  if (plans.length > 0) {
+    payload.plans = plans;
+  }
+  if (previewContainer) {
+    previewContainer.innerHTML = '';
+    const helper = document.createElement('p');
+    helper.className = 'helper';
+    helper.textContent = 'Gerando pré-visualização...';
+    previewContainer.appendChild(helper);
+  }
+  if (previewEmpty) {
+    previewEmpty.hidden = true;
+  }
+  state.previewLoading = true;
+  updatePlanControls();
+  try {
+    const response = await fetchJSON(`/api/shots/${encodeURIComponent(state.editingShot.id)}/preview`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    renderPreview(response?.preview ?? null);
+  } catch (error) {
+    console.error('[shots] erro ao gerar preview', error);
+    if (previewContainer) {
+      previewContainer.innerHTML = '';
+      const helper = document.createElement('p');
+      helper.className = 'helper helper--error';
+      helper.textContent = error instanceof Error ? error.message : 'Erro ao gerar pré-visualização.';
+      previewContainer.appendChild(helper);
+    }
+  } finally {
+    state.previewLoading = false;
+    updatePlanControls();
+  }
+}
+
+async function openShotModalForEdit(shotId) {
+  if (!shotId) {
+    return;
+  }
+  const fallback = state.shots.find((item) => String(item?.id) === String(shotId)) || null;
+  try {
+    const response = await fetchJSON(`/api/shots/${encodeURIComponent(shotId)}`);
+    const shot = response?.shot ?? fallback ?? null;
+    if (!shot) {
+      throw new Error('Disparo não encontrado.');
+    }
+    const plans = Array.isArray(response?.plans) ? response.plans : [];
+    const index = state.shots.findIndex((item) => String(item?.id) === String(shot.id));
+    if (index >= 0) {
+      state.shots[index] = { ...state.shots[index], ...shot };
+    }
+    openShotModal(shot, plans);
+  } catch (error) {
+    console.error('[shots] erro ao carregar disparo', error);
+    if (fallback) {
+      openShotModal(fallback, []);
+      alert(error instanceof Error ? error.message : 'Erro ao carregar planos do disparo.');
+    } else {
+      alert(error instanceof Error ? error.message : 'Erro ao carregar disparo.');
+    }
+  }
 }
 
 function setShotScheduled(date, timeString) {
@@ -380,7 +1033,7 @@ function setShotScheduled(date, timeString) {
   }
 }
 
-function openShotModal(shot = null) {
+function openShotModal(shot = null, plans = null) {
   resetShotForm();
   state.editingShot = shot;
   if (shotModalTitle) {
@@ -425,7 +1078,18 @@ function openShotModal(shot = null) {
       }
     }
   }
+  if (plans !== null) {
+    setPlans(plans);
+  } else if (shot?.id) {
+    void loadPlansForShot(shot.id);
+  } else {
+    setPlans([]);
+  }
+  clearPreview();
   openDialog(shotModal);
+  queueMicrotask(() => {
+    shotTargetInput?.focus();
+  });
 }
 
 function hideShotDatepicker() {
@@ -809,8 +1473,7 @@ function handleShotActions(event) {
   const shotId = target.getAttribute('data-id');
   switch (action) {
     case 'edit': {
-      const shot = state.shots.find((item) => String(item?.id) === String(shotId));
-      openShotModal(shot || null);
+      void openShotModalForEdit(shotId);
       break;
     }
     case 'delete':
@@ -887,6 +1550,27 @@ function handleDocumentClick(event) {
   }
 }
 
+function handleShotFormKeydown(event) {
+  if (event.key !== 'Enter' || event.isComposing) {
+    return;
+  }
+  if (event.defaultPrevented) {
+    return;
+  }
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  if (target.tagName === 'TEXTAREA') {
+    return;
+  }
+  if (target.closest('#shot-plans-section')) {
+    return;
+  }
+  event.preventDefault();
+  shotForm?.requestSubmit();
+}
+
 if (tokenInput) {
   tokenInput.addEventListener('input', (event) => {
     setAdminToken(event.target.value);
@@ -929,15 +1613,40 @@ if (shotsGrid) {
 if (shotForm) {
   shotForm.addEventListener('submit', saveShot);
   shotForm.addEventListener('click', handleShotDatepickerClick);
+  shotForm.addEventListener('keydown', handleShotFormKeydown);
 }
 
 if (shotModal) {
+  shotModal.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeDialog(shotModal);
+  });
+  shotModal.addEventListener('close', () => {
+    hideShotDatepicker();
+  });
   shotModal.addEventListener('click', (event) => {
     const target = event.target;
     if (target instanceof HTMLElement && target.dataset.action === 'close') {
       closeDialog(shotModal);
     }
   });
+}
+
+if (planAddButton) {
+  planAddButton.addEventListener('click', handleAddPlan);
+}
+
+if (planReorderButton) {
+  planReorderButton.addEventListener('click', handlePlanReorder);
+}
+
+if (plansList) {
+  plansList.addEventListener('input', handlePlanInputChange);
+  plansList.addEventListener('click', handlePlanListClick);
+}
+
+if (previewButton) {
+  previewButton.addEventListener('click', handlePreviewClick);
 }
 
 if (scheduleForm) {
@@ -974,6 +1683,8 @@ if (scheduleTimeInput) {
     ).padStart(2, '0')}`;
   });
 }
+
+updatePlanControls();
 
 setupShotPicker();
 setupSchedulePicker();
