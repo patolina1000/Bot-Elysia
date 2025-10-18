@@ -12,10 +12,10 @@ import {
 import { recordShotSent, bulkRecordShotsSent, type RecordShotSentParams } from '../../db/shotsSent.js';
 import { selectAudience } from './audienceSelector.js';
 import { updateTelegramContactChatState } from '../../services/TelegramContactsService';
-import { buildPlansKeyboard } from '../../services/bot/plans.js';
 import { shotsService } from '../ShotsService.js';
 import type { PoolClient } from 'pg';
 import { ShotsMessageBuilder } from './ShotsMessageBuilder.js';
+import { getShotWithPlans, type ShotWithPlansResult } from '../../repositories/ShotsRepo.js';
 
 const LOCK_KEY = 4839202; // Different from downsells worker
 const WORKER_INTERVAL_MS = 10000; // Check every 10 seconds
@@ -41,19 +41,16 @@ async function releaseLock(): Promise<void> {
   });
 }
 
+type ShotPlansContext = ShotWithPlansResult | null;
+
 async function sendMessageByType(
   bot: any,
   telegramId: number,
   job: ShotQueueJob,
-  botSlug: string
+  botSlug: string,
+  plansContext: ShotPlansContext
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Carrega os planos ativos para montar CTA
-    const keyboard = await buildPlansKeyboard(botSlug).catch((err) => {
-      logger.warn({ err, bot_slug: botSlug }, '[SHOTS][WORKER] failed to build plans keyboard');
-      return null;
-    });
-
     const introResult = await ShotsMessageBuilder.sendShotIntro(bot, telegramId, {
       bot_slug: job.bot_slug,
       copy: job.copy,
@@ -61,22 +58,22 @@ async function sendMessageByType(
       media_url: job.media_url,
     });
 
-    const trimmedCopyLength = typeof job.copy === 'string' ? job.copy.trim().length : 0;
+    const hasPlans = plansContext && plansContext.plans.length > 0;
 
-    const shouldSendCta =
-      keyboard &&
-      introResult.completed &&
-      !(introResult.textMessages.length === 0 && trimmedCopyLength > 0);
-
-    if (shouldSendCta) {
-      await sendSafe(
-        () =>
-          bot.api.sendMessage(telegramId, 'Clique abaixo para continuar:', {
-            reply_markup: keyboard,
-          }),
-        botSlug,
-        telegramId
+    if (hasPlans) {
+      const planResult = await ShotsMessageBuilder.sendShotPlans(
+        bot,
+        telegramId,
+        plansContext.shot,
+        plansContext.plans
       );
+
+      if (!planResult.completed) {
+        logger.warn(
+          { bot_slug: botSlug, telegram_id: telegramId },
+          '[SHOTS][WORKER] failed to send some plan messages'
+        );
+      }
     }
 
     return { success: true };
@@ -101,7 +98,8 @@ async function sendMessageByType(
 async function processBatch(
   bot: any,
   job: ShotQueueJob,
-  audienceSlice: { telegram_id: number }[]
+  audienceSlice: { telegram_id: number }[],
+  plansContext: ShotPlansContext
 ): Promise<SendResult[]> {
   const results: SendResult[] = [];
   const jobLogger = logger.child({
@@ -117,7 +115,13 @@ async function processBatch(
     // Send concurrently within chunk
     const chunkResults = await Promise.all(
       chunk.map(async (member) => {
-        const result = await sendMessageByType(bot, member.telegram_id, job, job.bot_slug);
+        const result = await sendMessageByType(
+          bot,
+          member.telegram_id,
+          job,
+          job.bot_slug,
+          plansContext
+        );
         
         if (!result.success) {
           if (result.error === 'blocked') {
@@ -215,6 +219,17 @@ async function handleJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
     // Get bot instance
     const bot = await getOrCreateBotBySlug(job.bot_slug);
 
+    let plansContext: ShotPlansContext = null;
+    try {
+      plansContext = await getShotWithPlans(job.id);
+    } catch (plansErr) {
+      jobLogger.warn({ err: plansErr }, '[SHOTS][PLANS] failed to load plans');
+    }
+
+    if (!plansContext || plansContext.plans.length === 0) {
+      jobLogger.info('[SHOTS][PLANS] none');
+    }
+
     const enqueueResult = await shotsService.enqueueShotRecipients(job.id);
     jobLogger.info(
       {
@@ -259,7 +274,7 @@ async function handleJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
         '[SHOTS][WORKER] processing batch'
       );
 
-      const results = await processBatch(bot, job, batch);
+      const results = await processBatch(bot, job, batch, plansContext);
 
       // Aggregate results
       const sent = results.filter((r) => r.status === 'sent').length;
