@@ -5,7 +5,11 @@ import {
   getTelegramIdsForPixGenerated,
 } from '../repositories/ShotsAudienceRepo.js';
 
-const INSERT_BATCH_SIZE = 500;
+const DEFAULT_INSERT_BATCH_SIZE = 500;
+const INSERT_BATCH_SIZE = (() => {
+  const value = Number.parseInt(process.env.SHOTS_ENQUEUE_BATCH_SIZE ?? '', 10);
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_INSERT_BATCH_SIZE;
+})();
 
 export type NormalizedShotTarget = 'all_started' | 'pix_generated';
 
@@ -35,23 +39,29 @@ function normalizeShotTarget(target: string | null): NormalizedShotTarget {
   }
 }
 
-function normalizeScheduledAt(value: Date | string | null): Date {
+function normalizeScheduledAt(value: Date | string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+
   if (value instanceof Date) {
     return value;
   }
+
   if (typeof value === 'string') {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) {
       return parsed;
     }
+    return null;
   }
-  if (value && typeof (value as any).toISOString === 'function') {
+
+  if (typeof (value as any).toISOString === 'function') {
     const parsed = new Date((value as any).toISOString());
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
-  return new Date();
+
+  return null;
 }
 
 async function fetchShot(shotId: number): Promise<ShotRow> {
@@ -88,26 +98,20 @@ export class ShotsService {
 
     const shotRow = await fetchShot(shotId);
 
+    if (!shotRow.bot_slug) {
+      throw new Error(`Shot ${shotId} is missing bot_slug`);
+    }
+
     const target = normalizeShotTarget(shotRow.target);
     const scheduledAt = normalizeScheduledAt(shotRow.scheduled_at);
     const botSlug = shotRow.bot_slug;
 
-    const shotLogger = logger.child({
-      scope: 'ShotsService',
-      shot_id: shotId,
-      bot_slug: botSlug,
-      target,
-    });
-
     const audience = await fetchAudience(botSlug, target);
     const candidates = audience.length;
 
-    shotLogger.info({ candidates }, '[SHOTS][QUEUE] candidatos carregados');
-
     if (candidates === 0) {
-      shotLogger.info(
-        { candidates: 0, inserted: 0, duplicates: 0 },
-        '[SHOTS][QUEUE] nenhum candidato para enfileirar'
+      logger.info(
+        `[SHOTS][ENQUEUE] shot=${shotId} bot=${botSlug} target=${target} cand=0 ins=0 dup=0.`
       );
       return { candidates: 0, inserted: 0, duplicates: 0 };
     }
@@ -145,22 +149,11 @@ export class ShotsService {
 
       const insertedInChunk = chunkResult.rowCount ?? 0;
       inserted += insertedInChunk;
-
-      shotLogger.debug(
-        {
-          chunk_start: i,
-          chunk_size: chunk.length,
-          inserted: insertedInChunk,
-        },
-        '[SHOTS][QUEUE] lote inserido'
-      );
     }
 
     const duplicates = Math.max(0, candidates - inserted);
-
-    shotLogger.info(
-      { candidates, inserted, duplicates },
-      '[SHOTS][QUEUE] enfileiramento concluído'
+    logger.info(
+      `[SHOTS][ENQUEUE] shot=${shotId} bot=${botSlug} target=${target} cand=${candidates} ins=${inserted} dup=${duplicates}.`
     );
 
     return { candidates, inserted, duplicates };
