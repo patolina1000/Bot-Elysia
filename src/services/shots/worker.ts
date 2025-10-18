@@ -13,6 +13,7 @@ import { recordShotSent, bulkRecordShotsSent, type RecordShotSentParams } from '
 import { selectAudience } from './audienceSelector.js';
 import { updateTelegramContactChatState } from '../../services/TelegramContactsService';
 import { buildPlansKeyboard } from '../../services/bot/plans.js';
+import { shotsService } from '../ShotsService.js';
 import type { PoolClient } from 'pg';
 
 const LOCK_KEY = 4839202; // Different from downsells worker
@@ -237,11 +238,20 @@ async function handleJob(job: ShotQueueJob, client: PoolClient): Promise<void> {
     // Get bot instance
     const bot = await getOrCreateBotBySlug(job.bot_slug);
 
+    const enqueueResult = await shotsService.enqueueShotRecipients(job.id);
+    jobLogger.info(
+      {
+        candidates: enqueueResult.candidates,
+        inserted: enqueueResult.inserted,
+        duplicates: enqueueResult.duplicates,
+      },
+      '[SHOTS][ENQUEUE] recipients enqueued'
+    );
+
     // Select audience
     const audience = await selectAudience({
       bot_slug: job.bot_slug,
       target: job.target,
-      recencyDays: 90, // Optional: only users active in last 90 days
     });
 
     jobLogger.info(
