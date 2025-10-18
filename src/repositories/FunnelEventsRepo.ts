@@ -31,16 +31,16 @@ function sanitizeError(errorMessage?: string): string | undefined {
 
 async function insertFunnelEvent(params: {
   eventId: string;
-  eventName: 'shot_sent' | 'shot_error';
+  event: 'shot_sent' | 'shot_error';
   telegramId: bigint;
   meta: Record<string, unknown>;
 }): Promise<void> {
   const telegramIdParam = params.telegramId.toString();
   await pool.query(
-    `INSERT INTO funnel_events (event_id, event_name, telegram_id, meta)
+    `INSERT INTO funnel_events (event_id, event, telegram_id, meta)
      VALUES ($1, $2, $3, $4::jsonb)
      ON CONFLICT (event_id) DO NOTHING`,
-    [params.eventId, params.eventName, telegramIdParam, JSON.stringify(params.meta)]
+    [params.eventId, params.event, telegramIdParam, JSON.stringify(params.meta)]
   );
 }
 
@@ -60,7 +60,7 @@ export class FunnelEventsRepo {
 
     await insertFunnelEvent({
       eventId,
-      eventName: 'shot_sent',
+      event: 'shot_sent',
       telegramId: params.telegramId,
       meta,
     });
@@ -90,7 +90,7 @@ export class FunnelEventsRepo {
 
     await insertFunnelEvent({
       eventId,
-      eventName: 'shot_error',
+      event: 'shot_error',
       telegramId: params.telegramId,
       meta,
     });

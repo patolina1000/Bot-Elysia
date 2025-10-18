@@ -51,13 +51,13 @@ async function fetchTelegramIds(
 }
 
 export function getTelegramIdsForAllStarted(botSlug: string): Promise<bigint[]> {
-  return fetchTelegramIds(botSlug, 'all_started', "fe.event_name = 'bot_start'");
+  return fetchTelegramIds(botSlug, 'all_started', "fe.event = 'bot_start'");
 }
 
 export function getTelegramIdsForPixGenerated(botSlug: string): Promise<bigint[]> {
   return fetchTelegramIds(
     botSlug,
     'pix_generated',
-    "fe.event_name IN ('pix_created', 'purchase')"
+    "fe.event IN ('pix_created', 'purchase')"
   );
 }
