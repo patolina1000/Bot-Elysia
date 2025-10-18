@@ -10,18 +10,18 @@ function ensureEnv(): void {
   process.env.NODE_ENV ??= 'development';
 }
 
-let pool: typeof import('../../src/db/pool.ts')['pool'];
-let logger: typeof import('../../src/logger.ts')['logger'];
-let getTelegramIdsForAllStarted: typeof import('../../src/repositories/ShotsAudienceRepo.ts')['getTelegramIdsForAllStarted'];
-let getTelegramIdsForPixGenerated: typeof import('../../src/repositories/ShotsAudienceRepo.ts')['getTelegramIdsForPixGenerated'];
+let pool: typeof import('../../src/db/pool.js')['pool'];
+let logger: typeof import('../../src/logger.js')['logger'];
+let getTelegramIdsForAllStarted: typeof import('../../src/repositories/ShotsAudienceRepo.js')['getTelegramIdsForAllStarted'];
+let getTelegramIdsForPixGenerated: typeof import('../../src/repositories/ShotsAudienceRepo.js')['getTelegramIdsForPixGenerated'];
 
 test.before(async () => {
   ensureEnv();
-  const poolModule = await import('../../src/db/pool.ts');
+  const poolModule = await import('../../src/db/pool.js');
   pool = poolModule.pool;
-  const loggerModule = await import('../../src/logger.ts');
+  const loggerModule = await import('../../src/logger.js');
   logger = loggerModule.logger;
-  const repoModule = await import('../../src/repositories/ShotsAudienceRepo.ts');
+  const repoModule = await import('../../src/repositories/ShotsAudienceRepo.js');
   getTelegramIdsForAllStarted = repoModule.getTelegramIdsForAllStarted;
   getTelegramIdsForPixGenerated = repoModule.getTelegramIdsForPixGenerated;
 });
@@ -53,8 +53,13 @@ test('getTelegramIdsForAllStarted maps telegram ids to bigint and skips nulls', 
   const result = await getTelegramIdsForAllStarted('bot-slug');
 
   assert.deepEqual(result, [123456n, 789012n, 345678901234567890n]);
+  const firstDebugCall = debugMock.mock.calls[0];
+  if (!firstDebugCall) {
+    throw new Error('expected debug log for all_started');
+  }
+  const [debugMessage] = firstDebugCall.arguments as [string];
   assert.strictEqual(
-    debugMock.mock.calls[0].arguments[0],
+    debugMessage,
     '[SHOTS][AUDIENCE] target=all_started bot=bot-slug candidates=3 join="OR"'
   );
 });
@@ -65,7 +70,11 @@ test('getTelegramIdsForAllStarted uses the expected SQL filter', async () => {
   await getTelegramIdsForAllStarted('shots-bot');
 
   assert.strictEqual(queryMock.mock.calls.length, 1);
-  const [sql, params] = queryMock.mock.calls[0].arguments;
+  const firstCall = queryMock.mock.calls[0];
+  if (!firstCall) {
+    throw new Error('expected SQL call for all_started filter');
+  }
+  const [sql, params] = firstCall.arguments as unknown as [string, any[]];
   assert.ok(sql.includes("fe.event_name = 'bot_start'"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
   assert.ok(
@@ -136,8 +145,13 @@ test('getTelegramIdsForPixGenerated maps telegram ids to bigint and skips nulls'
   const result = await getTelegramIdsForPixGenerated('bot-slug');
 
   assert.deepEqual(result, [111n, 222n, 333n]);
+  const firstDebugCall = debugMock.mock.calls[0];
+  if (!firstDebugCall) {
+    throw new Error('expected debug log for pix_generated');
+  }
+  const [debugMessage] = firstDebugCall.arguments as [string];
   assert.strictEqual(
-    debugMock.mock.calls[0].arguments[0],
+    debugMessage,
     '[SHOTS][AUDIENCE] target=pix_generated bot=bot-slug candidates=3 join="OR"'
   );
 });
@@ -148,7 +162,11 @@ test('getTelegramIdsForPixGenerated uses the expected SQL filter', async () => {
   await getTelegramIdsForPixGenerated('shots-bot');
 
   assert.strictEqual(queryMock.mock.calls.length, 1);
-  const [sql, params] = queryMock.mock.calls[0].arguments;
+  const firstCall = queryMock.mock.calls[0];
+  if (!firstCall) {
+    throw new Error('expected SQL call for pix_generated filter');
+  }
+  const [sql, params] = firstCall.arguments as unknown as [string, any[]];
   assert.ok(sql.includes("fe.event_name IN ('pix_created', 'purchase')"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
   assert.ok(

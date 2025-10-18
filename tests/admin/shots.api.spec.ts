@@ -5,7 +5,7 @@ import supertest from 'supertest';
 
 declare module globalThis {
   // eslint-disable-next-line no-var
-  var fetch: typeof fetch;
+  var fetch: any;
 }
 
 process.env.PORT ??= '8080';

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import test, { mock } from 'node:test';
 
@@ -13,10 +12,10 @@ function ensureEnv(): void {
   process.env.NODE_ENV ??= 'development';
 }
 
-let ShotsMessageBuilder: typeof import('../../src/services/shots/ShotsMessageBuilder.ts')['ShotsMessageBuilder'];
+let ShotsMessageBuilder: typeof import('../../src/services/shots/ShotsMessageBuilder.js')['ShotsMessageBuilder'];
 test.before(async () => {
   ensureEnv();
-  ({ ShotsMessageBuilder } = await import('../../src/services/shots/ShotsMessageBuilder.ts'));
+  ({ ShotsMessageBuilder } = await import('../../src/services/shots/ShotsMessageBuilder.js'));
 });
 
 test.afterEach(() => {
@@ -55,6 +54,7 @@ test('sends photo with caption when copy fits and renders plans keyboard', async
     media_type: 'photo',
     target: 'all_started',
     scheduled_at: null,
+    created_at: new Date('2025-01-01T00:00:00Z'),
   });
 
   assert.equal(introResult.mediaMessageId, 101);
@@ -77,6 +77,7 @@ test('sends photo with caption when copy fits and renders plans keyboard', async
       media_type: 'photo',
       target: 'all_started',
       scheduled_at: null,
+      created_at: new Date('2025-01-01T00:00:00Z'),
     },
     [
       {
@@ -148,6 +149,7 @@ test('splits long copy into chunks when sending video and no plans available', a
     media_type: 'video',
     target: 'all_started',
     scheduled_at: null,
+    created_at: new Date('2025-01-02T00:00:00Z'),
   });
 
   assert.equal(videoCalls.length, 1);
@@ -165,6 +167,7 @@ test('splits long copy into chunks when sending video and no plans available', a
     media_type: 'video',
     target: 'all_started',
     scheduled_at: null,
+    created_at: new Date('2025-01-02T00:00:00Z'),
   }, []);
 
   assert.deepEqual(planResult, {});
@@ -201,6 +204,7 @@ test('sends audio without caption and generates keyboard for three plans', async
     media_type: 'audio',
     target: 'all_started',
     scheduled_at: null,
+    created_at: new Date('2025-01-03T00:00:00Z'),
   });
 
   assert.equal(audioCalls.length, 1);
@@ -216,6 +220,7 @@ test('sends audio without caption and generates keyboard for three plans', async
     media_type: 'audio',
     target: 'all_started',
     scheduled_at: null,
+    created_at: new Date('2025-01-03T00:00:00Z'),
   }, [
     { id: 10, shot_id: 42, name: 'Plano 1', price_cents: 2990, description: 'Primeiro', sort_order: 1 },
     { id: 11, shot_id: 42, name: 'Plano 2', price_cents: 3990, description: 'Segundo', sort_order: 2 },
@@ -256,6 +261,7 @@ test('falls back to document when photo send fails with bad request', async () =
     media_type: 'photo',
     target: 'all_started',
     scheduled_at: null,
+    created_at: new Date('2025-01-04T00:00:00Z'),
   });
 
   assert.equal(introResult.mediaMessageId, 701);
@@ -264,10 +270,7 @@ test('falls back to document when photo send fails with bad request', async () =
 });
 
 test('does not import legacy plans service', async () => {
-  const filePath = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '../../src/services/shots/ShotsMessageBuilder.ts'
-  );
+  const filePath = path.resolve('src/services/shots/ShotsMessageBuilder.ts');
   const content = await fs.readFile(filePath, 'utf8');
   assert.ok(!content.includes('services/bot/plans.ts'));
 });

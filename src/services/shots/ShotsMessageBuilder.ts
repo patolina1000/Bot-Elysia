@@ -3,7 +3,18 @@ import { sendSafe } from '../../utils/telegramErrorHandler.js';
 import type { ShotPlanRow, ShotRow } from '../../repositories/ShotsRepo.js';
 
 type MediaMethod = 'sendPhoto' | 'sendVideo' | 'sendAudio' | 'sendDocument';
-type ChatAction = 'upload_photo' | 'upload_video' | 'upload_audio' | 'upload_document';
+type ChatAction =
+  | 'typing'
+  | 'upload_photo'
+  | 'upload_video'
+  | 'upload_document'
+  | 'record_video'
+  | 'record_voice'
+  | 'upload_voice'
+  | 'choose_sticker'
+  | 'find_location'
+  | 'record_video_note'
+  | 'upload_video_note';
 
 type MediaSender = {
   chatAction: ChatAction;
@@ -128,7 +139,7 @@ export function mapMediaSender(
     case 'video':
       return { chatAction: 'upload_video', method: 'sendVideo' };
     case 'audio':
-      return { chatAction: 'upload_audio', method: 'sendAudio' };
+      return { chatAction: 'upload_voice', method: 'sendAudio' };
     case 'document':
       return { chatAction: 'upload_document', method: 'sendDocument' };
     default:
@@ -147,12 +158,12 @@ function stripTags(html: string): string {
 }
 
 export interface BotLike {
-  sendChatAction(chatId: number | string, action: ChatAction): Promise<any>;
-  sendPhoto(chatId: number | string, media: any, extra?: any): Promise<any>;
-  sendVideo(chatId: number | string, media: any, extra?: any): Promise<any>;
-  sendAudio(chatId: number | string, media: any, extra?: any): Promise<any>;
-  sendDocument(chatId: number | string, media: any, extra?: any): Promise<any>;
-  sendMessage(chatId: number | string, text: string, extra?: any): Promise<any>;
+  sendChatAction(chatId: number | string, action: ChatAction, ...args: any[]): Promise<any>;
+  sendPhoto(chatId: number | string, media: any, ...args: any[]): Promise<any>;
+  sendVideo(chatId: number | string, media: any, ...args: any[]): Promise<any>;
+  sendAudio(chatId: number | string, media: any, ...args: any[]): Promise<any>;
+  sendDocument(chatId: number | string, media: any, ...args: any[]): Promise<any>;
+  sendMessage(chatId: number | string, text: string, ...args: any[]): Promise<any>;
 }
 
 export class ShotsMessageBuilder {

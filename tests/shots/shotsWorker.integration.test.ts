@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
-import type { ShotQueueJob } from '../../src/db/shotsQueue.ts';
-import type { RecordShotSentParams } from '../../src/db/shotsSent.ts';
-import type { ShotPlanRow, ShotRow } from '../../src/repositories/ShotsRepo.ts';
+import type { ShotQueueJob } from '../../src/db/shotsQueue.js';
+import type { RecordShotSentParams } from '../../src/db/shotsSent.js';
+import type { ShotPlanRow, ShotRow } from '../../src/repositories/ShotsRepo.js';
+import type { BotLike } from '../../src/services/shots/ShotsMessageBuilder.js';
 
 function ensureEnv(): void {
   process.env.PORT ??= '8080';
@@ -15,16 +16,11 @@ function ensureEnv(): void {
 
 type ProcessShotQueueJobFn = (job: ShotQueueJob, client: any) => Promise<void>;
 
-type Dependencies = typeof import('../../src/services/shots/worker.ts')['__dependencies'];
+type Dependencies = typeof import('../../src/services/shots/worker.js')['__dependencies'];
 
 type Scenario = { shot: ShotRow; plans: ShotPlanRow[] };
 
-type FakeApi = {
-  sendChatAction?: (chatId: number, action: string) => Promise<any>;
-  sendPhoto?: (chatId: number, url: string, options?: any) => Promise<any>;
-  sendVideo?: (chatId: number, url: string, options?: any) => Promise<any>;
-  sendMessage: (chatId: number, text: string, options: any) => Promise<any>;
-};
+type FakeApi = BotLike;
 
 let processShotQueueJob: ProcessShotQueueJobFn;
 let dependencies: Dependencies;
@@ -82,9 +78,21 @@ function resetState(): void {
   insertShotErrorCalls = [];
 }
 
+function buildBotLike(overrides: Partial<BotLike> = {}): BotLike {
+  const noop = async (..._args: any[]) => ({ message_id: 0 });
+  return {
+    sendChatAction: async (..._args: any[]) => undefined,
+    sendPhoto: noop,
+    sendVideo: noop,
+    sendAudio: noop,
+    sendDocument: noop,
+    sendMessage: async (..._args: any[]) => ({ message_id: 0 }),
+    ...overrides,
+  };
+}
+
 async function setupLoggerCapture(): Promise<void> {
-  const loggerModule = await import('../../src/logger.ts');
-  const logger = loggerModule.default?.logger ?? (loggerModule as any).logger;
+  const { logger } = await import('../../src/logger.js');
 
   const capture = (args: any[]): void => {
     const maybeMessage = args.at(-1);
@@ -135,7 +143,7 @@ function configureDependencies(fakeClientResult: { telegram_id: number }): void 
     if (!currentBotApi) {
       throw new Error('Bot API not configured');
     }
-    return currentBotApi;
+    return currentBotApi as unknown as any;
   };
 
   dependencies.recordShotSent = async (params: RecordShotSentParams) => {
@@ -210,7 +218,7 @@ function configureDependencies(fakeClientResult: { telegram_id: number }): void 
 
 test.before(async () => {
   ensureEnv();
-  const workerModule = await import('../../src/services/shots/worker.ts');
+  const workerModule = await import('../../src/services/shots/worker.js');
   const exports = (workerModule as any).default ?? workerModule;
   ({ processShotQueueJob, __dependencies: dependencies } = exports.__private__);
   originalDependencies = { ...dependencies };
@@ -242,6 +250,7 @@ test('processShotQueueJob sends intro media and plans with success logs', { conc
     media_type: 'photo',
     scheduled_at: new Date('2024-10-01T10:00:00Z'),
     target: 'all_started',
+    created_at: new Date('2024-09-20T10:00:00Z'),
   };
 
   const plans: ShotPlanRow[] = [
@@ -255,20 +264,20 @@ test('processShotQueueJob sends intro media and plans with success logs', { conc
   const photoCalls: any[] = [];
   const messageCalls: any[] = [];
 
-  const fakeApi: FakeApi = {
-    sendChatAction: async (_chatId, action) => {
+  const fakeApi: FakeApi = buildBotLike({
+    sendChatAction: async (_chatId: number, action: string) => {
       sendChatActions.push(action);
       return true;
     },
-    sendPhoto: async (_chatId, url, options) => {
+    sendPhoto: async (_chatId: number, url: string, options?: any) => {
       photoCalls.push({ url, options });
       return { message_id: 10, url, options };
     },
-    sendMessage: async (_chatId, text, options) => {
+    sendMessage: async (_chatId: number, text: string, options: any) => {
       messageCalls.push({ text, options });
       return { message_id: 20 + messageCalls.length, text, options };
     },
-  };
+  });
 
   currentBotApi = { api: fakeApi };
 
@@ -364,6 +373,7 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
     media_type: null,
     scheduled_at: new Date('2024-12-24T21:00:00Z'),
     target: 'all_started',
+    created_at: new Date('2024-12-01T00:00:00Z'),
   };
 
   const plans: ShotPlanRow[] = [
@@ -376,12 +386,12 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
 
   const messageCalls: any[] = [];
 
-  const fakeApi: FakeApi = {
-    sendMessage: async (_chatId, text, options) => {
+  const fakeApi: FakeApi = buildBotLike({
+    sendMessage: async (_chatId: number, text: string, options: any) => {
       messageCalls.push({ text, options });
       return { message_id: 40 + messageCalls.length, text, options };
     },
-  };
+  });
 
   currentBotApi = { api: fakeApi };
 
@@ -466,6 +476,7 @@ test('processShotQueueJob sends only intro when no plans exist', { concurrency: 
     media_type: 'video',
     scheduled_at: new Date('2025-01-01T00:00:00Z'),
     target: 'all_started',
+    created_at: new Date('2024-12-15T00:00:00Z'),
   };
 
   currentScenario = { shot, plans: [] };
@@ -473,20 +484,20 @@ test('processShotQueueJob sends only intro when no plans exist', { concurrency: 
   const sentActions: any[] = [];
   const messageCalls: any[] = [];
 
-  const fakeApi: FakeApi = {
-    sendChatAction: async (_chatId, action) => {
+  const fakeApi: FakeApi = buildBotLike({
+    sendChatAction: async (_chatId: number, action: string) => {
       sentActions.push({ type: 'action', action });
       return true;
     },
-    sendVideo: async (_chatId, url, options) => {
+    sendVideo: async (_chatId: number, url: string, options?: any) => {
       sentActions.push({ type: 'video', url, options });
       return { message_id: 70, url, options };
     },
-    sendMessage: async (_chatId, text, options) => {
+    sendMessage: async (_chatId: number, text: string, options: any) => {
       messageCalls.push({ text, options });
       return { message_id: 80 + messageCalls.length, text, options };
     },
-  };
+  });
 
   currentBotApi = { api: fakeApi };
 
