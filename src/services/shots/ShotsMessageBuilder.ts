@@ -159,7 +159,8 @@ export class ShotsMessageBuilder {
   static async sendShotIntro(
     bot: BotLike,
     chatId: number | string,
-    shot: ShotRow
+    shot: ShotRow,
+    options?: { corr?: string }
   ): Promise<{ mediaMessageId?: number; textMessageIds: number[] }> {
     const telegramId = resolveTelegramId(chatId);
     const sanitizedCopy = sanitizeHtml(shot.copy ?? '');
@@ -246,9 +247,10 @@ export class ShotsMessageBuilder {
       textMessageIds.push(Number(response.message_id));
     }
 
+    const corrSuffix = options?.corr ? ` corr=${options.corr}` : '';
     logger.info(
       `[SHOTS][SEND][INTRO] chatId=${chatId} media=${hasMedia ? shot.media_type ?? 'none' : 'none'} ` +
-        `captionUsed=${captionUsed ? 'yes' : 'no'} copyChars=${copyLength} parts=${chunks.length}`
+        `captionUsed=${captionUsed ? 'yes' : 'no'} copyChars=${copyLength} parts=${chunks.length}${corrSuffix}`
     );
 
     return { mediaMessageId, textMessageIds };
@@ -258,12 +260,14 @@ export class ShotsMessageBuilder {
     bot: BotLike,
     chatId: number | string,
     shot: ShotRow,
-    plans: ShotPlanRow[]
+    plans: ShotPlanRow[],
+    options?: { corr?: string }
   ): Promise<{ planMessageId?: number }> {
     const telegramId = resolveTelegramId(chatId);
     const validPlans = Array.isArray(plans) ? plans.filter((plan) => plan && plan.name?.trim()) : [];
 
-    logger.info(`[SHOTS][SEND][PLANS] chatId=${chatId} plans=${validPlans.length}`);
+    const corrSuffix = options?.corr ? ` corr=${options.corr}` : '';
+    logger.info(`[SHOTS][SEND][PLANS] chatId=${chatId} plans=${validPlans.length}${corrSuffix}`);
 
     if (validPlans.length === 0) {
       logger.info('[SHOTS][PLANS] none');

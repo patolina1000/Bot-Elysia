@@ -39,6 +39,8 @@ let markErrorCalls: { id: number; error: string; client: any }[] = [];
 let markProcessingCalls: { id: number; client: any }[] = [];
 let scheduleRetryCalls: { id: number; error: string; next_retry_at: Date; client: any }[] = [];
 let requestedBotSlugs: string[] = [];
+let insertShotSentCalls: any[] = [];
+let insertShotErrorCalls: any[] = [];
 
 let originalDependencies: Dependencies;
 
@@ -76,6 +78,8 @@ function resetState(): void {
   markProcessingCalls = [];
   scheduleRetryCalls = [];
   requestedBotSlugs = [];
+  insertShotSentCalls = [];
+  insertShotErrorCalls = [];
 }
 
 async function setupLoggerCapture(): Promise<void> {
@@ -136,6 +140,14 @@ function configureDependencies(fakeClientResult: { telegram_id: number }): void 
 
   dependencies.recordShotSent = async (params: RecordShotSentParams) => {
     recordShotCalls.push(params);
+  };
+
+  dependencies.insertShotSent = async (params: any) => {
+    insertShotSentCalls.push(params);
+  };
+
+  dependencies.insertShotError = async (params: any) => {
+    insertShotErrorCalls.push(params);
   };
 
   dependencies.markShotQueueSuccess = async (id: number, client: any) => {
@@ -212,6 +224,8 @@ test.afterEach(() => {
   dependencies.markShotQueueProcessing = originalDependencies.markShotQueueProcessing;
   dependencies.scheduleShotQueueRetry = originalDependencies.scheduleShotQueueRetry;
   dependencies.recordShotSent = originalDependencies.recordShotSent;
+  dependencies.insertShotSent = originalDependencies.insertShotSent;
+  dependencies.insertShotError = originalDependencies.insertShotError;
   mock.restoreAll();
   resetState();
 });
@@ -298,9 +312,42 @@ test('processShotQueueJob sends intro media and plans with success logs', { conc
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['photo-bot']);
 
-  assert.ok(logMessages.includes('[SHOTS][SEND][INTRO] chatId=998877 media=photo captionUsed=yes copyChars=16 parts=0'));
-  assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=998877 plans=2'));
-  assert.ok(logMessages.includes('[SHOTS][QUEUE][DONE] id=999 status=success attempts=1'));
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][SEND][INTRO] chatId=998877 media=photo captionUsed=yes copyChars=16 parts=0') &&
+        msg.includes('corr=q:999|sh:321|tg:998877')
+    )
+  );
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][SEND][PLANS] chatId=998877 plans=2') &&
+        msg.includes('corr=q:999|sh:321|tg:998877')
+    )
+  );
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][EVENT] name=shot_sent event_id=shs:321:998877') &&
+        msg.includes('corr=q:999|sh:321|tg:998877')
+    )
+  );
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][QUEUE][DONE] id=999 status=success attempts=1') &&
+        msg.includes('corr=q:999|sh:321|tg:998877')
+    )
+  );
+  assert.equal(insertShotSentCalls.length, 1);
+  assert.deepEqual(insertShotSentCalls[0], {
+    shotId: 321,
+    botSlug: 'photo-bot',
+    telegramId: BigInt(998877),
+    target: 'all_started',
+  });
+  assert.equal(insertShotErrorCalls.length, 0);
 });
 
 test('processShotQueueJob handles long copy without media and multiple plans', { concurrency: false }, async () => {
@@ -369,13 +416,42 @@ test('processShotQueueJob handles long copy without media and multiple plans', {
   assert.equal(scheduleRetryCalls.length, 0);
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['text-bot']);
-  assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=123001 plans=3'));
   assert.ok(
-    logMessages.some((msg) =>
-      msg.startsWith('[SHOTS][SEND][INTRO] chatId=123001 media=none captionUsed=no copyChars=4200 parts=')
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][SEND][PLANS] chatId=123001 plans=3') &&
+        msg.includes('corr=q:888|sh:654|tg:123001')
     )
   );
-  assert.ok(logMessages.includes('[SHOTS][QUEUE][DONE] id=888 status=success attempts=1'));
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][SEND][INTRO] chatId=123001 media=none captionUsed=no copyChars=4200 parts=') &&
+        msg.includes('corr=q:888|sh:654|tg:123001')
+    )
+  );
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][EVENT] name=shot_sent event_id=shs:654:123001') &&
+        msg.includes('corr=q:888|sh:654|tg:123001')
+    )
+  );
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][QUEUE][DONE] id=888 status=success attempts=1') &&
+        msg.includes('corr=q:888|sh:654|tg:123001')
+    )
+  );
+  assert.equal(insertShotSentCalls.length, 1);
+  assert.deepEqual(insertShotSentCalls[0], {
+    shotId: 654,
+    botSlug: 'text-bot',
+    telegramId: BigInt(123001),
+    target: 'all_started',
+  });
+  assert.equal(insertShotErrorCalls.length, 0);
 });
 
 test('processShotQueueJob sends only intro when no plans exist', { concurrency: false }, async () => {
@@ -443,7 +519,34 @@ test('processShotQueueJob sends only intro when no plans exist', { concurrency: 
   assert.equal(scheduleRetryCalls.length, 0);
   assert.equal(markErrorCalls.length, 0);
   assert.deepEqual(requestedBotSlugs, ['video-bot']);
-  assert.ok(logMessages.includes('[SHOTS][SEND][PLANS] chatId=445566 plans=0'));
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][SEND][PLANS] chatId=445566 plans=0') &&
+        msg.includes('corr=q:555|sh:777|tg:445566')
+    )
+  );
   assert.ok(logMessages.includes('[SHOTS][PLANS] none'));
-  assert.ok(logMessages.includes('[SHOTS][QUEUE][DONE] id=555 status=success attempts=1'));
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][EVENT] name=shot_sent event_id=shs:777:445566') &&
+        msg.includes('corr=q:555|sh:777|tg:445566')
+    )
+  );
+  assert.ok(
+    logMessages.some(
+      (msg) =>
+        msg.startsWith('[SHOTS][QUEUE][DONE] id=555 status=success attempts=1') &&
+        msg.includes('corr=q:555|sh:777|tg:445566')
+    )
+  );
+  assert.equal(insertShotSentCalls.length, 1);
+  assert.deepEqual(insertShotSentCalls[0], {
+    shotId: 777,
+    botSlug: 'video-bot',
+    telegramId: BigInt(445566),
+    target: 'all_started',
+  });
+  assert.equal(insertShotErrorCalls.length, 0);
 });
