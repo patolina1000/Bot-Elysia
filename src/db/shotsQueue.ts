@@ -257,8 +257,7 @@ export async function markShotQueueProcessing(
      SET status = 'processing',
          attempts = COALESCE(attempts, 0) + 1,
          last_error = NULL,
-         next_retry_at = NULL,
-         updated_at = now()
+         next_retry_at = NULL
      WHERE id = $1
      RETURNING *`,
     [id]
@@ -277,8 +276,7 @@ export async function markShotQueueSuccess(
     `UPDATE shots_queue
      SET status = 'success',
          last_error = NULL,
-         next_retry_at = NULL,
-         updated_at = now()
+         next_retry_at = NULL
      WHERE id = $1
      RETURNING *`,
     [id]
@@ -299,8 +297,7 @@ export async function markShotQueueError(
     `UPDATE shots_queue
      SET status = 'error',
          last_error = $2,
-         next_retry_at = NULL,
-         updated_at = now()
+         next_retry_at = NULL
      WHERE id = $1
      RETURNING *`,
     [id, message]
@@ -322,8 +319,7 @@ export async function scheduleShotQueueRetry(
     `UPDATE shots_queue
      SET status = 'pending',
          last_error = $2,
-         next_retry_at = $3,
-         updated_at = now()
+         next_retry_at = $3
      WHERE id = $1
      RETURNING *`,
     [id, message, nextRetryAt]
@@ -340,8 +336,7 @@ export async function incrementShotQueueAttempt(
 
   const result = await queryable.query(
     `UPDATE shots_queue
-     SET attempts = COALESCE(attempts, 0) + 1,
-         updated_at = now()
+     SET attempts = COALESCE(attempts, 0) + 1
      WHERE id = $1
      RETURNING *`,
     [id]
@@ -354,8 +349,7 @@ export async function resetStuckShotQueueJobs(timeoutMinutes = 30, maxAttempts =
   const result = await pool.query(
     `UPDATE shots_queue
      SET status = 'pending',
-         attempts = COALESCE(attempts, 0) + 1,
-         updated_at = now()
+         attempts = COALESCE(attempts, 0) + 1
      WHERE status IN ('processing', 'running')
        AND updated_at < now() - interval '${timeoutMinutes} minutes'
        AND COALESCE(attempts, attempt_count, 0) < $1
