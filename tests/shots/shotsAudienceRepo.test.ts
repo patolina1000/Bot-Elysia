@@ -75,7 +75,7 @@ test('getTelegramIdsForAllStarted uses the expected SQL filter', async () => {
     throw new Error('expected SQL call for all_started filter');
   }
   const [sql, params] = firstCall.arguments as unknown as [string, any[]];
-  assert.ok(sql.includes("fe.event_name = 'bot_start'"));
+  assert.ok(sql.includes("fe.event = 'bot_start'"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
   assert.ok(
     sql.includes('OR (fe.payload_id IS NOT NULL AND pt.payload_id = fe.payload_id)')
@@ -167,7 +167,7 @@ test('getTelegramIdsForPixGenerated uses the expected SQL filter', async () => {
     throw new Error('expected SQL call for pix_generated filter');
   }
   const [sql, params] = firstCall.arguments as unknown as [string, any[]];
-  assert.ok(sql.includes("fe.event_name IN ('pix_created', 'purchase')"));
+  assert.ok(sql.includes("fe.event IN ('pix_created', 'purchase')"));
   assert.ok(sql.includes("COALESCE(fe.meta->>'bot_slug', pt.bot_slug) = $1"));
   assert.ok(
     sql.includes('OR (fe.payload_id IS NOT NULL AND pt.payload_id = fe.payload_id)')

@@ -10,7 +10,7 @@ type ShotRow = {
 
 type FunnelEventRow = {
   telegram_id: number | null;
-  event_name: string;
+  event: string;
   payload_id?: string | null;
   meta?: { bot_slug?: string | null } | null;
 };
@@ -50,7 +50,7 @@ class FakePool {
 
     if (sql.includes('FROM funnel_events')) {
       const botSlug = params[0] as string;
-      const isAllStarted = sql.includes("fe.event_name = 'bot_start'");
+      const isAllStarted = sql.includes("fe.event = 'bot_start'");
       const allowedEvents = isAllStarted
         ? new Set(['bot_start'])
         : new Set(['pix_created', 'purchase']);
@@ -61,7 +61,7 @@ class FakePool {
         if (event.telegram_id === null || event.telegram_id === undefined) {
           continue;
         }
-        if (!allowedEvents.has(event.event_name)) {
+        if (!allowedEvents.has(event.event)) {
           continue;
         }
 
@@ -187,11 +187,11 @@ test.describe('ShotsService.enqueueShotRecipients integration', { concurrency: f
     });
 
     database.funnelEvents.push(
-      { telegram_id: 1111, event_name: 'bot_start', meta: { bot_slug: 'bot-alpha' } },
-      { telegram_id: 2222, event_name: 'bot_start', meta: { bot_slug: 'bot-alpha' } },
-      { telegram_id: 3333, event_name: 'bot_start', meta: { bot_slug: 'bot-alpha' } },
-      { telegram_id: 4444, event_name: 'bot_start', meta: { bot_slug: 'bot-beta' } },
-      { telegram_id: null, event_name: 'bot_start', meta: { bot_slug: 'bot-alpha' } }
+      { telegram_id: 1111, event: 'bot_start', meta: { bot_slug: 'bot-alpha' } },
+      { telegram_id: 2222, event: 'bot_start', meta: { bot_slug: 'bot-alpha' } },
+      { telegram_id: 3333, event: 'bot_start', meta: { bot_slug: 'bot-alpha' } },
+      { telegram_id: 4444, event: 'bot_start', meta: { bot_slug: 'bot-beta' } },
+      { telegram_id: null, event: 'bot_start', meta: { bot_slug: 'bot-alpha' } }
     );
 
     const result = await service.enqueueShotRecipients(101);
@@ -223,11 +223,11 @@ test.describe('ShotsService.enqueueShotRecipients integration', { concurrency: f
     });
 
     database.funnelEvents.push(
-      { telegram_id: 5001, event_name: 'pix_created', meta: { bot_slug: 'bot-pix' } },
-      { telegram_id: 5002, event_name: 'purchase', meta: { bot_slug: 'bot-pix' } },
-      { telegram_id: 5003, event_name: 'pix_failed', meta: { bot_slug: 'bot-pix' } },
-      { telegram_id: 5004, event_name: 'pix_created', meta: { bot_slug: 'other-bot' } },
-      { telegram_id: 5005, event_name: 'pix_created', payload_id: 'abc', meta: null }
+      { telegram_id: 5001, event: 'pix_created', meta: { bot_slug: 'bot-pix' } },
+      { telegram_id: 5002, event: 'purchase', meta: { bot_slug: 'bot-pix' } },
+      { telegram_id: 5003, event: 'pix_failed', meta: { bot_slug: 'bot-pix' } },
+      { telegram_id: 5004, event: 'pix_created', meta: { bot_slug: 'other-bot' } },
+      { telegram_id: 5005, event: 'pix_created', payload_id: 'abc', meta: null }
     );
 
     database.payloadTracking.push({ telegram_id: 5005, payload_id: 'abc', bot_slug: 'bot-pix' });
@@ -260,8 +260,8 @@ test.describe('ShotsService.enqueueShotRecipients integration', { concurrency: f
     });
 
     database.funnelEvents.push(
-      { telegram_id: 7001, event_name: 'bot_start', meta: { bot_slug: 'bot-repeat' } },
-      { telegram_id: 7002, event_name: 'bot_start', meta: { bot_slug: 'bot-repeat' } }
+      { telegram_id: 7001, event: 'bot_start', meta: { bot_slug: 'bot-repeat' } },
+      { telegram_id: 7002, event: 'bot_start', meta: { bot_slug: 'bot-repeat' } }
     );
 
     const firstResult = await service.enqueueShotRecipients(303);
