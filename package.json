@@ -14,8 +14,8 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/runMigrations.ts",
-    "migrate:verify": "ts-node scripts/verifyMigrations.ts",
-    "migrate:verify:fix-eol": "ts-node scripts/verifyMigrations.ts --fix-eol",
+    "migrate:verify": "tsx scripts/verifyMigrations.ts",
+    "migrate:verify:fix-eol": "tsx scripts/verifyMigrations.ts --fix-eol",
     "jobs:campaigns": "tsx src/jobs/runCampaigns.ts",
     "jobs:housekeeping": "tsx src/jobs/housekeeping.ts",
     "check:core-start": "tsx scripts/check-core-start.ts",
@@ -50,7 +50,6 @@
     "@types/pg": "^8.15.5",
     "@types/uuid": "^9.0.8",
     "tsx": "^4.7.1",
-    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
 }
