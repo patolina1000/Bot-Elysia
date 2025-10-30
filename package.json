@@ -8,8 +8,10 @@
     "node": ">=20 <26"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && npm run copy-sql",
+    "build": "node scripts/buildDist.js",
+    "clean": "node scripts/cleanDist.js",
     "copy-sql": "node scripts/copySql.js",
+    "copy-public": "node scripts/copyPublic.js",
     "check:migrations": "tsx scripts/check-migrations-no-transactions.ts",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
