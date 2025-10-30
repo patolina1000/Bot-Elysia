@@ -1,3 +1,5 @@
+-- NO_TX
+-- motivo: contém statements que não podem ser executados dentro de uma transação única
 -- ============================================================================
 -- Shots schema alignment migration
 -- Aligns shots, shot_plans and shots_queue tables with the new standard

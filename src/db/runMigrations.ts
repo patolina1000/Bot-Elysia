@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { pool } from "./pool";
+import { logger } from "../logger";
 
 // Resolve diretório de migrações de forma robusta (dist e src)
 function resolveMigrationsDir(): string {
@@ -49,18 +50,45 @@ function listRootSqlFiles(dir: string): string[] {
 
 function logSqlContext(sql: string, posStr: string | undefined, file: string) {
   if (!posStr) {
-    console.error(`[migrations] (sem posição) falha em ${file}`);
+    logger.error({ file }, "[migrations] (sem posição) falha");
     return;
   }
   const pos = Number(posStr);
   if (!Number.isFinite(pos)) {
-    console.error(`[migrations] (posição inválida) falha em ${file}`);
+    logger.error({ file, position: posStr }, "[migrations] (posição inválida) falha");
     return;
   }
   const start = Math.max(0, pos - 200);
   const end = Math.min(sql.length, pos + 200);
   const excerpt = sql.slice(start, end);
-  console.error(`[migrations] contexto @${pos} em ${file}:\n---\n${excerpt}\n---`);
+  logger.error({ file, position: pos, excerpt }, "[migrations] contexto de falha");
+}
+
+function isNonTransactionalMigration(filename: string, sql: string): boolean {
+  const loweredSql = sql.toLowerCase();
+  const trimmedSql = loweredSql.trimStart();
+  if (trimmedSql.startsWith("-- no_tx") || trimmedSql.startsWith("--no_tx")) {
+    return true;
+  }
+  if (loweredSql.includes("lock table")) {
+    return true;
+  }
+  if (loweredSql.includes("create index concurrently")) {
+    return true;
+  }
+  if (loweredSql.includes("do $$")) {
+    return true;
+  }
+  if (loweredSql.includes("begin;")) {
+    return true;
+  }
+  if (loweredSql.includes("alter type")) {
+    return true;
+  }
+  if (filename.toLowerCase().includes("shots") && sql.length > 30_000) {
+    return true;
+  }
+  return false;
 }
 
 async function run() {
@@ -83,7 +111,7 @@ async function run() {
       if (existingRows.length) {
         const existingChecksum = existingRows[0].checksum;
         if (existingChecksum === checksumRaw) {
-          console.log(`[migrations] skip ${file} (same checksum)`);
+          logger.info({ file }, "[migrations] skip (same checksum)");
           continue;
         }
         if (existingChecksum === checksumNormalized) {
@@ -91,8 +119,9 @@ async function run() {
             `UPDATE _schema_migrations SET checksum = $1 WHERE filename = $2`,
             [checksumRaw, file]
           );
-          console.log(
-            `[migrations] normalized checksum updated for ${file} (EOL normalized)`
+          logger.info(
+            { file },
+            "[migrations] normalized checksum updated (EOL normalized)"
           );
           continue;
         }
@@ -102,7 +131,30 @@ async function run() {
         );
       }
 
-      console.log(`[migrations] applying ${file}`);
+      if (file.includes("_archived") || file.endsWith(".ignore")) {
+        logger.info({ file }, "Skipping archived migration");
+        continue;
+      }
+
+      const isNoTx = isNonTransactionalMigration(file, sql);
+      logger.info({ file, transactional: !isNoTx }, "Running migration");
+
+      if (isNoTx) {
+        logger.warn({ file }, "Migration marked as NO_TX, running without transaction");
+        try {
+          await client.query(sql);
+          await client.query(
+            `INSERT INTO _schema_migrations (filename, checksum) VALUES ($1, $2)`,
+            [file, checksumRaw]
+          );
+        } catch (e: any) {
+          logger.error({ file, err: e }, "Migration failed");
+          logSqlContext(sql, e?.position, file);
+          throw e;
+        }
+        continue;
+      }
+
       await client.query("BEGIN");
       try {
         await client.query(sql);
@@ -113,19 +165,19 @@ async function run() {
         await client.query("COMMIT");
       } catch (e: any) {
         await client.query("ROLLBACK");
-        console.error(`[migrations] failed at ${file}: ${e?.message || e}`);
+        logger.error({ file, err: e }, "Migration failed");
         logSqlContext(sql, e?.position, file);
         throw e;
       }
     }
 
-    console.log("All migrations completed successfully");
+    logger.info("All migrations completed successfully");
   } finally {
     client.release();
   }
 }
 
 run().catch((e) => {
-  console.error(e);
+  logger.error({ err: e }, "Migration runner failed");
   process.exit(1);
 });
