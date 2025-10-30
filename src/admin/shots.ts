@@ -1,10 +1,20 @@
-import type { Express, Request, Response } from 'express';
+// DEPRECATED: estas rotas existem apenas para compatibilidade com o painel antigo (/admin/shots.html).
+// Toda a lógica real de disparos está em src/api/admin/shots.controller.ts
+import { Router, type Request, type Response } from 'express';
 import { authAdminMiddleware } from '../http/middleware/authAdmin.js';
-import { logger } from '../logger.js';
 import {
-  shotsService,
-  ShotsServiceError,
-} from '../services/ShotsService.js';
+  createShotAction,
+  deleteShotAction,
+  getStatsAction,
+  handleShotsControllerError,
+  listShotsAction,
+  triggerShotAction,
+  updateShotAction,
+} from '../api/admin/shots.controller.js';
+
+const MAX_COPY_LENGTH = 8000;
+const MAX_TITLE_LENGTH = 200;
+const MAX_MEDIA_URL_LENGTH = 2000;
 
 function sanitizeStr(value: unknown, max = 5000): string {
   const str = String(value ?? '').trim();
@@ -15,6 +25,9 @@ function normalizeLegacyTarget(value: unknown): 'all_started' | 'pix_generated' 
   const normalized = sanitizeStr(value, 32).toLowerCase();
   if (normalized === 'pix_created' || normalized === 'pix_generated') {
     return 'pix_generated';
+  }
+  if (normalized === 'started' || normalized === 'all_started') {
+    return 'all_started';
   }
   return 'all_started';
 }
@@ -34,195 +47,121 @@ function parseScheduledAt(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function parseShotId(req: Request): number | null {
-  const shotId = Number(req.params.id);
-  if (!Number.isInteger(shotId) || shotId <= 0) {
-    return null;
-  }
-  return shotId;
+function withLegacyErrorHandling(handler: (req: Request, res: Response) => Promise<void>) {
+  return async (req: Request, res: Response): Promise<void> => {
+    try {
+      await handler(req, res);
+    } catch (err) {
+      const originalJson = res.json.bind(res);
+      res.json = (body: any) => {
+        if (body && typeof body === 'object' && !Array.isArray(body)) {
+          return originalJson({ ok: false, ...body });
+        }
+        return originalJson(body);
+      };
+      handleShotsControllerError(res, err);
+      res.json = originalJson;
+    }
+  };
 }
 
-function handleServiceError(res: Response, err: unknown, scope: string): Response {
-  if (err instanceof ShotsServiceError) {
-    logger.warn({ err, scope }, '[ADMIN][SHOTS][SERVICE_ERROR]');
-    return res.status(err.statusCode).json({
-      ok: false,
-      error: err.code,
-      message: err.message,
-      details: err.details ?? null,
+const router = Router();
+
+router.use(authAdminMiddleware);
+
+router.get(
+  '/',
+  withLegacyErrorHandling(async (req, res) => {
+    const rawBotSlug = req.query?.bot_slug as string | string[] | undefined;
+    const botSlug = sanitizeStr(Array.isArray(rawBotSlug) ? rawBotSlug[0] : rawBotSlug, 200).toLowerCase();
+    const limitValue = Number.parseInt(String(req.query?.limit ?? '50'), 10);
+    const normalizedLimit = Number.isFinite(limitValue) && limitValue > 0 ? Math.min(limitValue, 100) : undefined;
+    const offsetValue = Number.parseInt(String(req.query?.offset ?? '0'), 10);
+    const normalizedOffset = Number.isFinite(offsetValue) && offsetValue >= 0 ? offsetValue : undefined;
+    const search = req.query?.q ?? req.query?.search;
+    const payload = await listShotsAction({
+      bot_slug: botSlug,
+      limit: normalizedLimit,
+      offset: normalizedOffset,
+      q: search ? String(Array.isArray(search) ? search[0] : search) : undefined,
     });
-  }
-  logger.error({ err, scope }, '[ADMIN][SHOTS][UNEXPECTED_ERROR]');
-  return res.status(500).json({
-    ok: false,
-    error: 'internal_error',
-    details: err instanceof Error ? err.message : String(err),
-  });
-}
+    res.json({ ok: true, total: payload.total, items: payload.items });
+  })
+);
 
-export function registerAdminShotsRoutes(app: Express): void {
-  app.post(
-    '/admin/api/shots',
-    authAdminMiddleware,
-    async (req: Request, res: Response): Promise<Response> => {
-      try {
-        const body = req.body ?? {};
+router.post(
+  '/',
+  withLegacyErrorHandling(async (req, res) => {
+    const body = req.body ?? {};
+    const shot = await createShotAction({
+      bot_slug: sanitizeStr(body.bot_slug, 200).toLowerCase(),
+      title: body.title ? sanitizeStr(body.title, MAX_TITLE_LENGTH) : null,
+      copy: sanitizeStr(body.copy, MAX_COPY_LENGTH),
+      target: normalizeLegacyTarget(body.target),
+      media_type: normalizeMediaType(body.media_type),
+      media_url: body.media_url ? sanitizeStr(body.media_url, MAX_MEDIA_URL_LENGTH) : null,
+      scheduled_at: parseScheduledAt(body.scheduled_at),
+    });
+    res.status(201).json({ ok: true, shot });
+  })
+);
 
-        const botSlug = sanitizeStr(body.bot_slug, 200).toLowerCase();
-        if (!botSlug) {
-          return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
-        }
+router.patch(
+  '/:id',
+  withLegacyErrorHandling(async (req, res) => {
+    const body = req.body ?? {};
+    const payload: Record<string, unknown> = {};
 
-        const copy = sanitizeStr(body.copy, 8000);
-        if (!copy) {
-          return res.status(400).json({ ok: false, error: 'copy obrigatória' });
-        }
-
-        const shot = await shotsService.createShot({
-          bot_slug: botSlug,
-          title: body.title ? sanitizeStr(body.title, 200) : null,
-          copy,
-          target: normalizeLegacyTarget(body.target),
-          media_type: normalizeMediaType(body.media_type),
-          media_url: body.media_url ? sanitizeStr(body.media_url, 2000) : null,
-          scheduled_at: parseScheduledAt(body.scheduled_at),
-        });
-
-        logger.info({ shot_id: shot.id, bot_slug: shot.bot_slug }, '[ADMIN][SHOTS][POST] created');
-
-        return res.status(201).json({ ok: true, shot });
-      } catch (err) {
-        return handleServiceError(res, err, 'create');
-      }
+    if (body.copy !== undefined) {
+      payload.copy = sanitizeStr(body.copy, MAX_COPY_LENGTH);
     }
-  );
-
-  app.get(
-    '/admin/api/shots',
-    authAdminMiddleware,
-    async (req: Request, res: Response): Promise<Response> => {
-      try {
-        const rawBotSlug = req.query?.bot_slug as string | string[] | undefined;
-        const botSlug = sanitizeStr(Array.isArray(rawBotSlug) ? rawBotSlug[0] : rawBotSlug, 200).toLowerCase();
-
-        if (!botSlug) {
-          return res.status(400).json({ ok: false, error: 'bot_slug obrigatório' });
-        }
-
-        const limit = Number.parseInt(String(req.query?.limit ?? '50'), 10);
-        const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 50;
-
-        const result = await shotsService.listShots({
-          botSlug,
-          search: null,
-          limit: normalizedLimit,
-          offset: 0,
-        });
-
-        return res.status(200).json({ ok: true, total: result.total, items: result.items });
-      } catch (err) {
-        return handleServiceError(res, err, 'list');
-      }
+    if (body.media_type !== undefined) {
+      payload.media_type = normalizeMediaType(body.media_type);
     }
-  );
-
-  app.patch(
-    '/admin/api/shots/:id',
-    authAdminMiddleware,
-    async (req: Request, res: Response): Promise<Response> => {
-      try {
-        const shotId = parseShotId(req);
-        if (!shotId) {
-          return res.status(400).json({ ok: false, error: 'invalid_id' });
-        }
-
-        const body = req.body ?? {};
-        const updates: Parameters<typeof shotsService.updateShot>[1] = {};
-
-        if (body.copy !== undefined) {
-          const copy = sanitizeStr(body.copy, 8000);
-          if (!copy) {
-            return res.status(400).json({ ok: false, error: 'copy não pode ser vazia' });
-          }
-          updates.copy = copy;
-        }
-
-        if (body.media_type !== undefined) {
-          updates.media_type = normalizeMediaType(body.media_type);
-        }
-
-        if (body.media_url !== undefined) {
-          updates.media_url = body.media_url ? sanitizeStr(body.media_url, 2000) : null;
-        }
-
-        if (body.target !== undefined) {
-          updates.target = normalizeLegacyTarget(body.target);
-        }
-
-        if (body.title !== undefined) {
-          updates.title = body.title ? sanitizeStr(body.title, 200) : null;
-        }
-
-        if (body.bot_slug !== undefined) {
-          updates.bot_slug = sanitizeStr(body.bot_slug, 200).toLowerCase();
-        }
-
-        if (body.scheduled_at !== undefined) {
-          updates.scheduled_at = parseScheduledAt(body.scheduled_at);
-        }
-
-        if (Object.keys(updates).length === 0) {
-          return res.status(400).json({ ok: false, error: 'no_fields_to_update' });
-        }
-
-        const shot = await shotsService.updateShot(shotId, updates);
-
-        logger.info({ shot_id: shotId }, '[ADMIN][SHOTS][PATCH] updated');
-
-        return res.status(200).json({ ok: true, shot });
-      } catch (err) {
-        return handleServiceError(res, err, 'update');
-      }
+    if (body.media_url !== undefined) {
+      payload.media_url = body.media_url ? sanitizeStr(body.media_url, MAX_MEDIA_URL_LENGTH) : null;
     }
-  );
-
-  app.delete(
-    '/admin/api/shots/:id',
-    authAdminMiddleware,
-    async (req: Request, res: Response): Promise<Response> => {
-      try {
-        const shotId = parseShotId(req);
-        if (!shotId) {
-          return res.status(400).json({ ok: false, error: 'invalid_id' });
-        }
-
-        await shotsService.deleteShot(shotId);
-
-        logger.info({ shot_id: shotId }, '[ADMIN][SHOTS][DELETE] deleted');
-
-        return res.status(200).json({ ok: true, deleted_id: shotId });
-      } catch (err) {
-        return handleServiceError(res, err, 'delete');
-      }
+    if (body.target !== undefined) {
+      payload.target = normalizeLegacyTarget(body.target);
     }
-  );
-
-  app.get(
-    '/admin/api/shots/:id/stats',
-    authAdminMiddleware,
-    async (req: Request, res: Response): Promise<Response> => {
-      try {
-        const shotId = parseShotId(req);
-        if (!shotId) {
-          return res.status(400).json({ ok: false, error: 'invalid_id' });
-        }
-
-        const stats = await shotsService.getShotStats(shotId);
-
-        return res.status(200).json({ ok: true, shot_id: shotId, stats });
-      } catch (err) {
-        return handleServiceError(res, err, 'stats');
-      }
+    if (body.title !== undefined) {
+      payload.title = body.title ? sanitizeStr(body.title, MAX_TITLE_LENGTH) : null;
     }
-  );
-}
+    if (body.bot_slug !== undefined) {
+      payload.bot_slug = sanitizeStr(body.bot_slug, 200).toLowerCase();
+    }
+    if (body.scheduled_at !== undefined) {
+      payload.scheduled_at = parseScheduledAt(body.scheduled_at);
+    }
+
+    const shot = await updateShotAction(req.params.id, payload);
+    res.json({ ok: true, shot });
+  })
+);
+
+router.delete(
+  '/:id',
+  withLegacyErrorHandling(async (req, res) => {
+    await deleteShotAction(req.params.id);
+    res.json({ ok: true, deleted_id: Number(req.params.id) });
+  })
+);
+
+router.get(
+  '/:id/stats',
+  withLegacyErrorHandling(async (req, res) => {
+    const stats = await getStatsAction(req.params.id);
+    res.json({ ok: true, shot_id: Number(req.params.id), stats });
+  })
+);
+
+router.post(
+  '/:id/trigger',
+  withLegacyErrorHandling(async (req, res) => {
+    const payload = await triggerShotAction(req.params.id, req.body ?? {});
+    res.json({ ok: true, ...payload });
+  })
+);
+
+export const legacyAdminShotsRouter = router;
+export default router;
