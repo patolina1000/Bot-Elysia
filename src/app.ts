@@ -10,7 +10,7 @@ import { adminBotsRouter } from './admin/bots.js';
 import { createBotRouter } from './admin/createBot.js';
 import { registerAdminDownsellsRoutes } from './admin/downsells.js';
 import { registerAdminPlansRoutes } from './admin/plans.js';
-import { registerAdminShotsRoutes } from './admin/shots.js';
+import { legacyAdminShotsRouter } from './admin/shots.js';
 import { adminMetricsRouter } from './admin/metrics.js';
 
 export function createApp() {
@@ -44,7 +44,8 @@ export function createApp() {
   app.use(adminMetricsRouter);
   registerAdminDownsellsRoutes(app);
   registerAdminPlansRoutes(app);
-  registerAdminShotsRoutes(app);
+  // Legacy admin shots routes simply adapt to the REST controller.
+  app.use('/admin/api/shots', legacyAdminShotsRouter);
 
   // Routes
   app.use(webhookRouter);

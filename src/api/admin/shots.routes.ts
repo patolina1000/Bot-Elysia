@@ -1,31 +1,58 @@
-import { Router } from 'express';
-import { adminAuthMiddleware } from '../middleware/adminAuth.js';
-import { ShotsController } from './shots.controller.js';
-
-const controller = new ShotsController();
-
-function wrap(handler: (req: any, res: any) => Promise<any>) {
-  return (req: any, res: any, next: any) => {
-    handler.call(controller, req, res).catch(next);
-  };
-}
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import { authAdminMiddleware } from '../../http/middleware/authAdmin.js';
+import {
+  createPlan,
+  createShot,
+  deletePlan,
+  deleteShot,
+  getShot,
+  getStats,
+  listPlans,
+  listShots,
+  previewShot,
+  reorderPlans,
+  triggerShot,
+  updatePlan,
+  updateShot,
+} from './shots.controller.js';
 
 export const adminShotsRouter = Router();
 
-adminShotsRouter.use(adminAuthMiddleware);
+adminShotsRouter.use(authAdminMiddleware);
 
-adminShotsRouter.get('/shots', wrap(controller.listShots));
-adminShotsRouter.get('/shots/:id', wrap(controller.getShot));
-adminShotsRouter.post('/shots', wrap(controller.createShot));
-adminShotsRouter.put('/shots/:id', wrap(controller.updateShot));
-adminShotsRouter.delete('/shots/:id', wrap(controller.deleteShot));
+function wrap(handler: (req: Request, res: Response) => Promise<void>) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    handler(req, res).catch(next);
+  };
+}
 
-adminShotsRouter.get('/shots/:id/plans', wrap(controller.listPlans));
-adminShotsRouter.post('/shots/:id/plans', wrap(controller.createPlan));
-adminShotsRouter.put('/shots/:id/plans/:planId', wrap(controller.updatePlan));
-adminShotsRouter.delete('/shots/:id/plans/:planId', wrap(controller.deletePlan));
-adminShotsRouter.post('/shots/:id/plans/reorder', wrap(controller.reorderPlans));
+const basePaths = ['/admin/shots', '/shots'];
 
-adminShotsRouter.post('/shots/:id/trigger', wrap(controller.triggerShot));
-adminShotsRouter.get('/shots/:id/stats', wrap(controller.getStats));
-adminShotsRouter.post('/shots/:id/preview', wrap(controller.preview));
+for (const path of basePaths) {
+  adminShotsRouter.get(path, wrap(listShots));
+  adminShotsRouter.post(path, wrap(createShot));
+}
+
+for (const path of basePaths) {
+  adminShotsRouter.get(`${path}/:id`, wrap(getShot));
+  adminShotsRouter.put(`${path}/:id`, wrap(updateShot));
+  adminShotsRouter.delete(`${path}/:id`, wrap(deleteShot));
+
+  adminShotsRouter.get(`${path}/:id/plans`, wrap(listPlans));
+  adminShotsRouter.post(`${path}/:id/plans`, wrap(createPlan));
+  adminShotsRouter.put(`${path}/:id/plans/:planId`, wrap(updatePlan));
+  adminShotsRouter.delete(`${path}/:id/plans/:planId`, wrap(deletePlan));
+  adminShotsRouter.post(`${path}/:id/plans/reorder`, wrap(reorderPlans));
+
+  adminShotsRouter.post(`${path}/:id/trigger`, wrap(triggerShot));
+  adminShotsRouter.get(`${path}/:id/stats`, wrap(getStats));
+  adminShotsRouter.post(`${path}/:id/preview`, wrap(previewShot));
+}
+
+const scheduleHandler = wrap(async (req, res) => {
+  req.body = { ...(req.body ?? {}), mode: 'schedule' };
+  await triggerShot(req, res);
+});
+
+adminShotsRouter.post('/admin/shots/:id/schedule', scheduleHandler);
+adminShotsRouter.post('/shots/:id/schedule', scheduleHandler);

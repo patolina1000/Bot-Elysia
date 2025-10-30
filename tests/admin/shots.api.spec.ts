@@ -337,9 +337,38 @@ function setupTest() {
 test('requires admin auth token', async () => {
   const { app, restore } = setupTest();
   try {
-    const response = await supertest(app).get('/api/shots');
+    const response = await supertest(app).get('/api/admin/shots');
     assert.equal(response.status, 401);
     assert.equal(response.body.error, 'Missing or invalid authorization header');
+  } finally {
+    restore();
+  }
+});
+
+test('legacy /api/shots alias still works', async () => {
+  const { app, database, restore } = setupTest();
+  try {
+    const createResponse = await supertest(app)
+      .post('/api/admin/shots')
+      .set(AUTH_HEADER)
+      .send({
+        bot_slug: 'bot-alpha',
+        title: 'Alias check',
+        copy: 'Testing alias',
+        target: 'all_started',
+        media_type: 'none',
+      });
+    assert.equal(createResponse.status, 201);
+
+    const listResponse = await supertest(app)
+      .get('/api/shots')
+      .set(AUTH_HEADER)
+      .query({ bot_slug: 'bot-alpha' });
+
+    assert.equal(listResponse.status, 200);
+    assert.equal(listResponse.body.total, 1);
+    assert.equal(Array.isArray(listResponse.body.items), true);
+    assert.equal(database.shots.length, 1);
   } finally {
     restore();
   }
@@ -349,7 +378,7 @@ test('creates shot and lists with aggregated stats', async () => {
   const { app, database, restore } = setupTest();
   try {
     const createResponse = await supertest(app)
-      .post('/api/shots')
+      .post('/api/admin/shots')
       .set(AUTH_HEADER)
       .send({
         bot_slug: 'bot-alpha',
@@ -369,7 +398,7 @@ test('creates shot and lists with aggregated stats', async () => {
     );
 
     const listResponse = await supertest(app)
-      .get('/api/shots')
+      .get('/api/admin/shots')
       .set(AUTH_HEADER)
       .query({ bot_slug: 'bot-alpha' });
 
@@ -390,7 +419,7 @@ test('rejects past schedule on create and update', async () => {
     const future = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
     const createPast = await supertest(app)
-      .post('/api/shots')
+      .post('/api/admin/shots')
       .set(AUTH_HEADER)
       .send({
         bot_slug: 'bot-alpha',
@@ -405,7 +434,7 @@ test('rejects past schedule on create and update', async () => {
     assert.equal(database.shots.length, 0);
 
     const createFuture = await supertest(app)
-      .post('/api/shots')
+      .post('/api/admin/shots')
       .set(AUTH_HEADER)
       .send({
         bot_slug: 'bot-alpha',
@@ -421,7 +450,7 @@ test('rejects past schedule on create and update', async () => {
 
     const shotId = database.shots[0].id;
     const updatePast = await supertest(app)
-      .put(`/api/shots/${shotId}`)
+      .put(`/api/admin/shots/${shotId}`)
       .set(AUTH_HEADER)
       .send({ scheduled_at: past });
 
@@ -457,12 +486,12 @@ test('fetches shot details and updates copy and media', async () => {
       sort_order: 0,
     });
 
-    const getResponse = await supertest(app).get(`/api/shots/${shot.id}`).set(AUTH_HEADER);
+    const getResponse = await supertest(app).get(`/api/admin/shots/${shot.id}`).set(AUTH_HEADER);
     assert.equal(getResponse.status, 200);
     assert.equal(getResponse.body.plans.length, 1);
 
     const updateResponse = await supertest(app)
-      .put(`/api/shots/${shot.id}`)
+      .put(`/api/admin/shots/${shot.id}`)
       .set(AUTH_HEADER)
       .send({ copy: 'New copy', media_type: 'photo', media_url: 'https://example.com/photo.jpg' });
     assert.equal(updateResponse.status, 200);
@@ -492,14 +521,14 @@ test('blocks bot_slug change when queue exists and allows otherwise', async () =
     database.shotsQueue.push({ shot_id: shot.id, status: 'pending' });
 
     const conflictResponse = await supertest(app)
-      .put(`/api/shots/${shot.id}`)
+      .put(`/api/admin/shots/${shot.id}`)
       .set(AUTH_HEADER)
       .send({ bot_slug: 'bot-beta' });
     assert.equal(conflictResponse.status, 409);
 
     database.shotsQueue = [];
     const successResponse = await supertest(app)
-      .put(`/api/shots/${shot.id}`)
+      .put(`/api/admin/shots/${shot.id}`)
       .set(AUTH_HEADER)
       .send({ bot_slug: 'bot-beta' });
     assert.equal(successResponse.status, 200);
@@ -526,11 +555,11 @@ test('delete shot respects successful queue guard', async () => {
     database.shots.push(shot);
     database.shotsQueue.push({ shot_id: shot.id, status: 'success' });
 
-    const conflictResponse = await supertest(app).delete(`/api/shots/${shot.id}`).set(AUTH_HEADER);
+    const conflictResponse = await supertest(app).delete(`/api/admin/shots/${shot.id}`).set(AUTH_HEADER);
     assert.equal(conflictResponse.status, 409);
 
     database.shotsQueue = [];
-    const successResponse = await supertest(app).delete(`/api/shots/${shot.id}`).set(AUTH_HEADER);
+    const successResponse = await supertest(app).delete(`/api/admin/shots/${shot.id}`).set(AUTH_HEADER);
     assert.equal(successResponse.status, 204);
     assert.equal(database.shots.length, 0);
   } finally {
@@ -555,27 +584,27 @@ test('plan CRUD and reorder lifecycle', async () => {
     database.shots.push(shot);
 
     const createPlan = await supertest(app)
-      .post(`/api/shots/${shot.id}/plans`)
+      .post(`/api/admin/shots/${shot.id}/plans`)
       .set(AUTH_HEADER)
       .send({ name: 'Plan 1', price_cents: 5000, description: 'Desc 1' });
     assert.equal(createPlan.status, 201);
     const planId = createPlan.body.plan.id;
 
     const updatePlan = await supertest(app)
-      .put(`/api/shots/${shot.id}/plans/${planId}`)
+      .put(`/api/admin/shots/${shot.id}/plans/${planId}`)
       .set(AUTH_HEADER)
       .send({ price_cents: 7000, description: 'Updated' });
     assert.equal(updatePlan.status, 200);
     assert.equal(database.shotPlans[0].price_cents, 7000);
 
     const plan2 = await supertest(app)
-      .post(`/api/shots/${shot.id}/plans`)
+      .post(`/api/admin/shots/${shot.id}/plans`)
       .set(AUTH_HEADER)
       .send({ name: 'Plan 2', price_cents: 3000 });
     assert.equal(plan2.status, 201);
 
     const reorder = await supertest(app)
-      .post(`/api/shots/${shot.id}/plans/reorder`)
+      .post(`/api/admin/shots/${shot.id}/plans/reorder`)
       .set(AUTH_HEADER)
       .send({ order: database.shotPlans.map((plan) => plan.id).reverse() });
     assert.equal(reorder.status, 200);
@@ -588,7 +617,7 @@ test('plan CRUD and reorder lifecycle', async () => {
     );
 
     const deletePlan = await supertest(app)
-      .delete(`/api/shots/${shot.id}/plans/${planId}`)
+      .delete(`/api/admin/shots/${shot.id}/plans/${planId}`)
       .set(AUTH_HEADER);
     assert.equal(deletePlan.status, 204);
     assert.equal(database.shotPlans.some((plan) => plan.id === planId), false);
@@ -620,7 +649,7 @@ test('trigger now enqueues and schedule validates future date', async () => {
     }));
 
     const nowResponse = await supertest(app)
-      .post(`/api/shots/${shot.id}/trigger`)
+      .post(`/api/admin/shots/${shot.id}/trigger`)
       .set(AUTH_HEADER)
       .send({ mode: 'now' });
     assert.equal(nowResponse.status, 200);
@@ -630,7 +659,7 @@ test('trigger now enqueues and schedule validates future date', async () => {
 
     const futureDate = new Date(Date.now() + 60_000).toISOString();
     const scheduleResponse = await supertest(app)
-      .post(`/api/shots/${shot.id}/trigger`)
+      .post(`/api/admin/shots/${shot.id}/trigger`)
       .set(AUTH_HEADER)
       .send({ mode: 'schedule', scheduled_at: futureDate });
     assert.equal(scheduleResponse.status, 200);
@@ -638,7 +667,7 @@ test('trigger now enqueues and schedule validates future date', async () => {
     assert.equal(enqueueMock.mock.callCount(), 1);
 
     const pastResponse = await supertest(app)
-      .post(`/api/shots/${shot.id}/trigger`)
+      .post(`/api/admin/shots/${shot.id}/trigger`)
       .set(AUTH_HEADER)
       .send({ mode: 'schedule', scheduled_at: new Date(Date.now() - 60_000).toISOString() });
     assert.equal(pastResponse.status, 422);
@@ -670,7 +699,7 @@ test('stats endpoint aggregates queue statuses', async () => {
       { shot_id: shot.id, status: 'skipped' }
     );
 
-    const response = await supertest(app).get(`/api/shots/${shot.id}/stats`).set(AUTH_HEADER);
+    const response = await supertest(app).get(`/api/admin/shots/${shot.id}/stats`).set(AUTH_HEADER);
     assert.equal(response.status, 200);
     assert.deepEqual(response.body.stats, { queued: 1, processing: 1, success: 1, error: 1 });
   } finally {
@@ -703,7 +732,7 @@ test('preview builds media, caption and keyboard summary', async () => {
     });
 
     const response = await supertest(app)
-      .post(`/api/shots/${shot.id}/preview`)
+      .post(`/api/admin/shots/${shot.id}/preview`)
       .set(AUTH_HEADER)
       .send({
         media_type: 'photo',
@@ -747,7 +776,7 @@ test('preview overrides do not persist changes', async () => {
     database.shotPlans.push(plan);
 
     const response = await supertest(app)
-      .post(`/api/shots/${shot.id}/preview`)
+      .post(`/api/admin/shots/${shot.id}/preview`)
       .set(AUTH_HEADER)
       .send({
         copy: 'Nova mensagem',
@@ -789,39 +818,39 @@ test('validation errors and not found cases', async () => {
     database.shots.push(shot);
 
     const invalidShot = await supertest(app)
-      .post('/api/shots')
+      .post('/api/admin/shots')
       .set(AUTH_HEADER)
       .send({ bot_slug: 'missing', copy: 'Test', media_type: 'photo' });
     assert.equal(invalidShot.status, 400);
 
     const missingBot = await supertest(app)
-      .get('/api/shots')
+      .get('/api/admin/shots')
       .set(AUTH_HEADER);
     assert.equal(missingBot.status, 400);
 
     const badPlan = await supertest(app)
-      .post(`/api/shots/${shot.id}/plans`)
+      .post(`/api/admin/shots/${shot.id}/plans`)
       .set(AUTH_HEADER)
       .send({ name: 'Invalid', price_cents: -10 });
     assert.equal(badPlan.status, 400);
 
     const reorderInvalid = await supertest(app)
-      .post(`/api/shots/${shot.id}/plans/reorder`)
+      .post(`/api/admin/shots/${shot.id}/plans/reorder`)
       .set(AUTH_HEADER)
       .send({ order: [999] });
     assert.equal(reorderInvalid.status, 400);
 
-    const notFound = await supertest(app).get('/api/shots/999').set(AUTH_HEADER);
+    const notFound = await supertest(app).get('/api/admin/shots/999').set(AUTH_HEADER);
     assert.equal(notFound.status, 404);
 
     const planNotFound = await supertest(app)
-      .put(`/api/shots/${shot.id}/plans/999`)
+      .put(`/api/admin/shots/${shot.id}/plans/999`)
       .set(AUTH_HEADER)
       .send({ price_cents: 1000 });
     assert.equal(planNotFound.status, 404);
 
     const triggerMissingDate = await supertest(app)
-      .post(`/api/shots/${shot.id}/trigger`)
+      .post(`/api/admin/shots/${shot.id}/trigger`)
       .set(AUTH_HEADER)
       .send({ mode: 'schedule' });
     assert.equal(triggerMissingDate.status, 400);

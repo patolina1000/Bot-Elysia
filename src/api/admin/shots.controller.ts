@@ -85,202 +85,280 @@ function parseDate(value: unknown | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export class ShotsController {
-  constructor(private readonly service: ShotsService = shotsService) {}
-
-  private handleError(res: Response, err: unknown): void {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'VALIDATION_ERROR', details: err.errors });
-      return;
-    }
-    if (err instanceof ShotsServiceError) {
-      res.status(err.statusCode).json({ error: err.code, message: err.message, details: err.details ?? null });
-      return;
-    }
-    logger.error({ err }, '[ADMIN][SHOTS][ERROR]');
-    res.status(500).json({ error: 'INTERNAL_ERROR' });
+function handleError(res: Response, err: unknown): void {
+  if (err instanceof z.ZodError) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: err.errors });
+    return;
   }
-
-  async listShots(req: Request, res: Response): Promise<void> {
-    try {
-      const query = listQuerySchema.parse(req.query);
-      const result = await this.service.listShots({
-        botSlug: query.bot_slug,
-        search: query.q ?? null,
-        limit: query.limit,
-        offset: query.offset,
-      });
-      res.json({
-        total: result.total,
-        limit: query.limit,
-        offset: query.offset,
-        items: result.items,
-      });
-    } catch (err) {
-      this.handleError(res, err);
-    }
+  if (err instanceof ShotsServiceError) {
+    res.status(err.statusCode).json({ error: err.code, message: err.message, details: err.details ?? null });
+    return;
   }
+  logger.error({ err }, '[ADMIN][SHOTS][ERROR]');
+  res.status(500).json({ error: 'INTERNAL_ERROR' });
+}
 
-  async getShot(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const result = await this.service.getShotWithPlans(shotId);
-      res.json(result);
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export type ShotsControllerDependencies = {
+  service?: ShotsService;
+};
 
-  async createShot(req: Request, res: Response): Promise<void> {
-    try {
-      const body = shotBodySchema.parse(req.body ?? {});
-      const scheduledAt = parseDate(body.scheduled_at);
-      const shot = await this.service.createShot({
-        bot_slug: body.bot_slug,
-        title: body.title ?? null,
-        copy: body.copy,
-        target: body.target,
-        media_type: body.media_type,
-        media_url: body.media_url ?? null,
-        scheduled_at: scheduledAt,
-      });
-      res.status(201).json({ shot });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+function getService(deps?: ShotsControllerDependencies): ShotsService {
+  return deps?.service ?? shotsService;
+}
 
-  async updateShot(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const body = shotUpdateSchema.parse(req.body ?? {});
-      const payload: Parameters<ShotsService['updateShot']>[1] = {};
-      if (body.bot_slug !== undefined) payload.bot_slug = body.bot_slug;
-      if (body.title !== undefined) payload.title = body.title ?? null;
-      if (body.copy !== undefined) payload.copy = body.copy;
-      if (body.target !== undefined) payload.target = body.target;
-      if (body.media_type !== undefined) payload.media_type = body.media_type;
-      if (body.media_url !== undefined) payload.media_url = body.media_url ?? null;
-      if (body.scheduled_at !== undefined) payload.scheduled_at = parseDate(body.scheduled_at);
-      const shot = await this.service.updateShot(shotId, payload);
-      res.json({ shot });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function listShotsAction(query: unknown, deps?: ShotsControllerDependencies) {
+  const parsed = listQuerySchema.parse(query);
+  const service = getService(deps);
+  const result = await service.listShots({
+    botSlug: parsed.bot_slug,
+    search: parsed.q ?? null,
+    limit: parsed.limit,
+    offset: parsed.offset,
+  });
+  return {
+    total: result.total,
+    limit: parsed.limit,
+    offset: parsed.offset,
+    items: result.items,
+  };
+}
 
-  async deleteShot(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      await this.service.deleteShot(shotId);
-      res.status(204).send();
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function getShotAction(id: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const service = getService(deps);
+  return service.getShotWithPlans(shotId);
+}
 
-  async listPlans(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const plans = await this.service.listPlans(shotId);
-      res.json({ plans });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function createShotAction(body: unknown, deps?: ShotsControllerDependencies) {
+  const parsed = shotBodySchema.parse(body ?? {});
+  const service = getService(deps);
+  const scheduledAt = parseDate(parsed.scheduled_at);
+  return service.createShot({
+    bot_slug: parsed.bot_slug,
+    title: parsed.title ?? null,
+    copy: parsed.copy,
+    target: parsed.target,
+    media_type: parsed.media_type,
+    media_url: parsed.media_url ?? null,
+    scheduled_at: scheduledAt,
+  });
+}
 
-  async createPlan(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const body = planBodySchema.parse(req.body ?? {});
-      const plan = await this.service.createPlan(shotId, {
-        name: body.name,
-        price_cents: body.price_cents,
-        description: body.description ?? null,
-      });
-      res.status(201).json({ plan });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function updateShotAction(id: unknown, body: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const parsed = shotUpdateSchema.parse(body ?? {});
+  const payload: Parameters<ShotsService['updateShot']>[1] = {};
+  if (parsed.bot_slug !== undefined) payload.bot_slug = parsed.bot_slug;
+  if (parsed.title !== undefined) payload.title = parsed.title ?? null;
+  if (parsed.copy !== undefined) payload.copy = parsed.copy;
+  if (parsed.target !== undefined) payload.target = parsed.target;
+  if (parsed.media_type !== undefined) payload.media_type = parsed.media_type;
+  if (parsed.media_url !== undefined) payload.media_url = parsed.media_url ?? null;
+  if (parsed.scheduled_at !== undefined) payload.scheduled_at = parseDate(parsed.scheduled_at);
+  const service = getService(deps);
+  return service.updateShot(shotId, payload);
+}
 
-  async updatePlan(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const planId = parseId(req.params.planId, 'planId');
-      const body = planBodySchema.partial().parse(req.body ?? {});
-      const payload: Parameters<ShotsService['updatePlan']>[2] = {};
-      if (body.name !== undefined) payload.name = body.name;
-      if (body.price_cents !== undefined) payload.price_cents = body.price_cents;
-      if (body.description !== undefined) payload.description = body.description ?? null;
-      const plan = await this.service.updatePlan(shotId, planId, payload);
-      res.json({ plan });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function deleteShotAction(id: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const service = getService(deps);
+  await service.deleteShot(shotId);
+}
 
-  async deletePlan(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const planId = parseId(req.params.planId, 'planId');
-      await this.service.deletePlan(shotId, planId);
-      res.status(204).send();
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function listPlansAction(id: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const service = getService(deps);
+  return service.listPlans(shotId);
+}
 
-  async reorderPlans(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const body = reorderSchema.parse(req.body ?? {});
-      const plans = await this.service.reorderPlans(shotId, body.order);
-      res.json({ plans });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function createPlanAction(id: unknown, body: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const parsed = planBodySchema.parse(body ?? {});
+  const service = getService(deps);
+  return service.createPlan(shotId, {
+    name: parsed.name,
+    price_cents: parsed.price_cents,
+    description: parsed.description ?? null,
+  });
+}
 
-  async triggerShot(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const body = triggerSchema.parse(req.body ?? {});
-      const scheduledAt = parseDate(body.scheduled_at);
-      const result = await this.service.triggerShot(shotId, {
-        mode: body.mode,
-        scheduled_at: scheduledAt,
-      });
-      res.json({
-        mode: result.mode,
-        scheduled_at: result.scheduled_at ? result.scheduled_at.toISOString() : null,
-        stats: result.stats ?? null,
-      });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function updatePlanAction(
+  id: unknown,
+  planId: unknown,
+  body: unknown,
+  deps?: ShotsControllerDependencies
+) {
+  const shotId = parseId(id);
+  const normalizedPlanId = parseId(planId, 'planId');
+  const parsed = planBodySchema.partial().parse(body ?? {});
+  const payload: Parameters<ShotsService['updatePlan']>[2] = {};
+  if (parsed.name !== undefined) payload.name = parsed.name;
+  if (parsed.price_cents !== undefined) payload.price_cents = parsed.price_cents;
+  if (parsed.description !== undefined) payload.description = parsed.description ?? null;
+  const service = getService(deps);
+  return service.updatePlan(shotId, normalizedPlanId, payload);
+}
 
-  async getStats(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const stats = await this.service.getShotStats(shotId);
-      res.json({ stats });
-    } catch (err) {
-      this.handleError(res, err);
-    }
-  }
+export async function deletePlanAction(id: unknown, planId: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const normalizedPlanId = parseId(planId, 'planId');
+  const service = getService(deps);
+  await service.deletePlan(shotId, normalizedPlanId);
+}
 
-  async preview(req: Request, res: Response): Promise<void> {
-    try {
-      const shotId = parseId(req.params.id);
-      const body = previewSchema.parse(req.body ?? {});
-      const preview = await this.service.previewShot(shotId, body ?? undefined);
-      res.json({ preview });
-    } catch (err) {
-      this.handleError(res, err);
-    }
+export async function reorderPlansAction(id: unknown, body: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const parsed = reorderSchema.parse(body ?? {});
+  const service = getService(deps);
+  return service.reorderPlans(shotId, parsed.order);
+}
+
+export async function triggerShotAction(id: unknown, body: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const parsed = triggerSchema.parse(body ?? {});
+  const service = getService(deps);
+  const scheduledAt = parseDate(parsed.scheduled_at);
+  const result = await service.triggerShot(shotId, {
+    mode: parsed.mode,
+    scheduled_at: scheduledAt,
+  });
+  return {
+    mode: result.mode,
+    scheduled_at: result.scheduled_at ? result.scheduled_at.toISOString() : null,
+    stats: result.stats ?? null,
+  };
+}
+
+export async function getStatsAction(id: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const service = getService(deps);
+  return service.getShotStats(shotId);
+}
+
+export async function previewShotAction(id: unknown, body: unknown, deps?: ShotsControllerDependencies) {
+  const shotId = parseId(id);
+  const parsed = previewSchema.parse(body ?? {});
+  const service = getService(deps);
+  return service.previewShot(shotId, parsed ?? undefined);
+}
+
+export async function listShots(req: Request, res: Response): Promise<void> {
+  try {
+    const payload = await listShotsAction(req.query);
+    res.json(payload);
+  } catch (err) {
+    handleError(res, err);
   }
 }
 
-export const shotsController = new ShotsController();
+export async function getShot(req: Request, res: Response): Promise<void> {
+  try {
+    const payload = await getShotAction(req.params.id);
+    res.json(payload);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function createShot(req: Request, res: Response): Promise<void> {
+  try {
+    const shot = await createShotAction(req.body);
+    res.status(201).json({ shot });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function updateShot(req: Request, res: Response): Promise<void> {
+  try {
+    const shot = await updateShotAction(req.params.id, req.body);
+    res.json({ shot });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function deleteShot(req: Request, res: Response): Promise<void> {
+  try {
+    await deleteShotAction(req.params.id);
+    res.status(204).send();
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function listPlans(req: Request, res: Response): Promise<void> {
+  try {
+    const plans = await listPlansAction(req.params.id);
+    res.json({ plans });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function createPlan(req: Request, res: Response): Promise<void> {
+  try {
+    const plan = await createPlanAction(req.params.id, req.body);
+    res.status(201).json({ plan });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function updatePlan(req: Request, res: Response): Promise<void> {
+  try {
+    const plan = await updatePlanAction(req.params.id, req.params.planId, req.body);
+    res.json({ plan });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function deletePlan(req: Request, res: Response): Promise<void> {
+  try {
+    await deletePlanAction(req.params.id, req.params.planId);
+    res.status(204).send();
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function reorderPlans(req: Request, res: Response): Promise<void> {
+  try {
+    const plans = await reorderPlansAction(req.params.id, req.body);
+    res.json({ plans });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function triggerShot(req: Request, res: Response): Promise<void> {
+  try {
+    const payload = await triggerShotAction(req.params.id, req.body);
+    res.json(payload);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function getStats(req: Request, res: Response): Promise<void> {
+  try {
+    const stats = await getStatsAction(req.params.id);
+    res.json({ stats });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export async function previewShot(req: Request, res: Response): Promise<void> {
+  try {
+    const preview = await previewShotAction(req.params.id, req.body);
+    res.json({ preview });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+export function handleShotsControllerError(res: Response, err: unknown): void {
+  handleError(res, err);
+}
