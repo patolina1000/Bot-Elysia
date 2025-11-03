@@ -3,25 +3,25 @@ export const sqlSnippets = {
   summary: `
     SELECT event, COUNT(*) as count
     FROM funnel_events
-    WHERE bot_id = $1 
-      AND created_at >= $2 
-      AND created_at <= $3
+    WHERE bot_id = $1
+      AND occurred_at >= $2
+      AND occurred_at <= $3
     GROUP BY event
     ORDER BY event
   `,
 
   // Timeseries by granularity (day or hour)
   timeseries: `
-    SELECT 
-      DATE_TRUNC($4, created_at) as period,
+    SELECT
+      DATE_TRUNC($4, occurred_at) as period,
       event,
       COUNT(*) as count
     FROM funnel_events
-    WHERE bot_id = $1 
-      AND created_at >= $2 
-      AND created_at <= $3
+    WHERE bot_id = $1
+      AND occurred_at >= $2
+      AND occurred_at <= $3
     GROUP BY period, event
-    ORDER BY period ASC, event
+    ORDER BY period, event
   `,
 
   // Conversion by telegram users
@@ -31,12 +31,12 @@ export const sqlSnippets = {
         tg_user_id,
         event
       FROM funnel_events
-      WHERE bot_id = $1 
-        AND created_at >= $2 
-        AND created_at <= $3
+      WHERE bot_id = $1
+        AND occurred_at >= $2
+        AND occurred_at <= $3
         AND tg_user_id IS NOT NULL
     )
-    SELECT 
+    SELECT
       event,
       COUNT(DISTINCT tg_user_id) as unique_users
     FROM user_funnel
@@ -50,9 +50,9 @@ export const sqlSnippets = {
       event,
       COUNT(DISTINCT COALESCE(transaction_id, event_id)) as unique_transactions
     FROM funnel_events
-    WHERE bot_id = $1 
-      AND created_at >= $2 
-      AND created_at <= $3
+    WHERE bot_id = $1
+      AND occurred_at >= $2
+      AND occurred_at <= $3
     GROUP BY event
     ORDER BY event
   `,
@@ -64,9 +64,9 @@ export const sqlSnippets = {
       event,
       COUNT(*) as count
     FROM funnel_events
-    WHERE bot_id = $1 
-      AND created_at >= $2 
-      AND created_at <= $3
+    WHERE bot_id = $1
+      AND occurred_at >= $2
+      AND occurred_at <= $3
       AND meta->>$4 IS NOT NULL
     GROUP BY dimension_value, event
     ORDER BY dimension_value, event
