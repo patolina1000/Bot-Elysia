@@ -18,31 +18,31 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shots' AND column_name='title') THEN
-    EXECUTE 'ALTER TABLE public.shots ADD COLUMN title TEXT';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS title TEXT';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shots' AND column_name='copy') THEN
-    EXECUTE 'ALTER TABLE public.shots ADD COLUMN copy TEXT';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS copy TEXT';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shots' AND column_name='media_url') THEN
-    EXECUTE 'ALTER TABLE public.shots ADD COLUMN media_url TEXT';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS media_url TEXT';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shots' AND column_name='media_type') THEN
-    EXECUTE 'ALTER TABLE public.shots ADD COLUMN media_type TEXT';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS media_type TEXT';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shots' AND column_name='target') THEN
-    EXECUTE 'ALTER TABLE public.shots ADD COLUMN target TEXT NOT NULL';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS target TEXT NOT NULL';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shots' AND column_name='scheduled_at') THEN
-    EXECUTE 'ALTER TABLE public.shots ADD COLUMN scheduled_at TIMESTAMPTZ';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shots' AND column_name='created_at') THEN
-    EXECUTE 'ALTER TABLE public.shots ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()';
   END IF;
 END; $$;
 
@@ -63,19 +63,19 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shot_plans' AND column_name='sort_order') THEN
-    EXECUTE 'ALTER TABLE public.shot_plans ADD COLUMN sort_order INT NOT NULL DEFAULT 0';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shot_plans' AND column_name='is_active') THEN
-    EXECUTE 'ALTER TABLE public.shot_plans ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shot_plans' AND column_name='created_at') THEN
-    EXECUTE 'ALTER TABLE public.shot_plans ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='public' AND table_name='shot_plans' AND column_name='updated_at') THEN
-    EXECUTE 'ALTER TABLE public.shot_plans ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT now()';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()';
   END IF;
 END; $$;
 
@@ -89,7 +89,7 @@ BEGIN
     WHERE t.relname = 'shot_plans' AND c.conname = 'shot_plans_shot_id_fkey'
   ) THEN
     EXECUTE '
-      ALTER TABLE public.shot_plans
+      ALTER TABLE IF EXISTS public.shot_plans
         ADD CONSTRAINT shot_plans_shot_id_fkey
         FOREIGN KEY (shot_id)
         REFERENCES public.shots(id)

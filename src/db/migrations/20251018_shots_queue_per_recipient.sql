@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.shots_queue (
 );
 
 -- [MIG][SHOTS_QUEUE] Align mandatory columns, defaults and data types.
-ALTER TABLE public.shots_queue
+ALTER TABLE IF EXISTS public.shots_queue
   ADD COLUMN IF NOT EXISTS id BIGINT,
   ADD COLUMN IF NOT EXISTS shot_id BIGINT,
   ADD COLUMN IF NOT EXISTS bot_slug TEXT,
@@ -74,17 +74,68 @@ ALTER TABLE public.shots_queue
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 
-ALTER TABLE public.shots_queue
-  ALTER COLUMN status TYPE TEXT USING status::TEXT;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'status'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN status TYPE TEXT USING status::TEXT';
+  END IF;
+END; $$;
 
-ALTER TABLE public.shots_queue
-  ALTER COLUMN attempts TYPE INT USING attempts::INT;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'attempts'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN attempts TYPE INT USING attempts::INT';
+  END IF;
+END; $$;
 
-ALTER TABLE public.shots_queue
-  ALTER COLUMN created_at SET DEFAULT now(),
-  ALTER COLUMN updated_at SET DEFAULT now(),
-  ALTER COLUMN status SET DEFAULT 'pending',
-  ALTER COLUMN attempts SET DEFAULT 0;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'created_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN created_at SET DEFAULT now()';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'updated_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN updated_at SET DEFAULT now()';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'status'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN status SET DEFAULT ''pending''';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'attempts'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN attempts SET DEFAULT 0';
+  END IF;
+END; $$;
 
 -- [MIG][SHOTS_QUEUE] Guarantee id column behaves as BIGSERIAL primary key.
 DO $$
@@ -102,7 +153,7 @@ BEGIN
       EXECUTE 'CREATE SEQUENCE public.shots_queue_id_seq';
     END IF;
     EXECUTE 'SELECT setval(''public.shots_queue_id_seq'', COALESCE((SELECT max(id) FROM public.shots_queue),0))';
-    ALTER TABLE public.shots_queue
+    ALTER TABLE IF EXISTS public.shots_queue
       ALTER COLUMN id SET DEFAULT nextval('public.shots_queue_id_seq');
     ALTER SEQUENCE public.shots_queue_id_seq OWNED BY public.shots_queue.id;
   ELSE
@@ -119,7 +170,7 @@ BEGIN
       AND table_name = 'shots_queue'
       AND constraint_type = 'PRIMARY KEY'
   ) THEN
-    ALTER TABLE public.shots_queue
+    ALTER TABLE IF EXISTS public.shots_queue
       ADD PRIMARY KEY (id);
     RAISE NOTICE '[MIG][SHOTS_QUEUE] Added primary key on id.';
   END IF;
@@ -139,7 +190,7 @@ BEGIN
         'id','shot_id','bot_slug','telegram_id','status','attempts','next_retry_at','scheduled_at','last_error','created_at','updated_at'
       )
   LOOP
-    EXECUTE format('ALTER TABLE public.shots_queue DROP COLUMN %I CASCADE', col.column_name);
+    EXECUTE format('ALTER TABLE IF EXISTS public.shots_queue DROP COLUMN IF EXISTS %I CASCADE', col.column_name);
     RAISE NOTICE '[MIG][SHOTS_QUEUE] Dropped legacy column %', col.column_name;
   END LOOP;
 END; $$;
@@ -282,7 +333,7 @@ SET updated_at = now()
 WHERE updated_at IS NULL;
 
 -- [MIG][SHOTS_QUEUE] Enforce NOT NULL constraints after backfill.
-ALTER TABLE public.shots_queue
+ALTER TABLE IF EXISTS public.shots_queue
   ALTER COLUMN shot_id SET NOT NULL,
   ALTER COLUMN bot_slug SET NOT NULL,
   ALTER COLUMN telegram_id SET NOT NULL,
@@ -300,13 +351,20 @@ BEGIN
     WHERE conname = 'shots_queue_status_check'
       AND conrelid = 'public.shots_queue'::regclass
   ) THEN
-    ALTER TABLE public.shots_queue
-      DROP CONSTRAINT shots_queue_status_check;
+    ALTER TABLE IF EXISTS public.shots_queue
+      DROP CONSTRAINT IF EXISTS shots_queue_status_check;
   END IF;
 
-  ALTER TABLE public.shots_queue
-    ADD CONSTRAINT shots_queue_status_check
-    CHECK (status IN ('pending','processing','success','error'));
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'shots_queue_status_check'
+      AND conrelid = 'public.shots_queue'::regclass
+  ) THEN
+    ALTER TABLE IF EXISTS public.shots_queue
+      ADD CONSTRAINT shots_queue_status_check
+      CHECK (status IN ('pending','processing','success','error'));
+  END IF;
 END; $$;
 
 -- [MIG][SHOTS_QUEUE] Ensure fn_touch_updated_at trigger helper exists.

@@ -10,12 +10,12 @@ BEGIN
       AND table_name='funnel_events'
       AND column_name='event_name'
   ) THEN
-    EXECUTE 'ALTER TABLE public.funnel_events RENAME COLUMN event_name TO event';
+    EXECUTE 'ALTER TABLE IF EXISTS public.funnel_events RENAME COLUMN event_name TO event';
   END IF;
 END; $$;
 
 -- 2) Garantir colunas de data/compat
-ALTER TABLE public.funnel_events
+ALTER TABLE IF EXISTS public.funnel_events
   ADD COLUMN IF NOT EXISTS created_at   TIMESTAMPTZ DEFAULT now(),
   ADD COLUMN IF NOT EXISTS occurred_at  TIMESTAMPTZ DEFAULT now();
 

@@ -15,7 +15,7 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema='public' AND table_name='funnel_counters' AND column_name='event_name'
   ) THEN
-    EXECUTE 'ALTER TABLE public.funnel_counters RENAME COLUMN event TO event_name';
+    EXECUTE 'ALTER TABLE IF EXISTS public.funnel_counters RENAME COLUMN event TO event_name';
   END IF;
 END; $$;
 
