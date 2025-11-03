@@ -1,5 +1,5 @@
 -- Campo textual para o nome do botão (plano) do downsell
-ALTER TABLE public.bot_downsells
+ALTER TABLE IF EXISTS public.bot_downsells
   ADD COLUMN IF NOT EXISTS plan_label TEXT;
 
 -- Ajuda para buscas por bot e plan_label

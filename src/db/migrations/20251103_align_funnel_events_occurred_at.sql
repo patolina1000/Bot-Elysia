@@ -2,7 +2,7 @@
 -- Padroniza funnel_events para usar occurred_at nas métricas e remove índice antigo de created_at.
 
 -- Garante coluna occurred_at com default (caso algum ambiente ainda não tenha)
-ALTER TABLE public.funnel_events
+ALTER TABLE IF EXISTS public.funnel_events
   ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ DEFAULT now();
 
 -- Backfill defensivo: se existir algum registro sem occurred_at, usa created_at

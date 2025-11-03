@@ -24,17 +24,27 @@ BEGIN
     WHERE t.relname = 'downsells_queue'
       AND c.conname = 'downsells_queue_downsell_id_fkey'
   ) THEN
-    EXECUTE 'ALTER TABLE public.downsells_queue DROP CONSTRAINT downsells_queue_downsell_id_fkey';
+    EXECUTE 'ALTER TABLE IF EXISTS public.downsells_queue DROP CONSTRAINT IF EXISTS downsells_queue_downsell_id_fkey';
   END IF;
 END; $$;
 
--- Cria a nova FK como NOT VALID para não falhar por linhas antigas
-ALTER TABLE public.downsells_queue
-  ADD CONSTRAINT downsells_queue_downsell_id_fkey
-  FOREIGN KEY (downsell_id)
-  REFERENCES public.bot_downsells(id)
-  ON DELETE CASCADE
-  NOT VALID;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    WHERE t.relname = 'downsells_queue'
+      AND c.conname = 'downsells_queue_downsell_id_fkey'
+  ) THEN
+    ALTER TABLE IF EXISTS public.downsells_queue
+      ADD CONSTRAINT downsells_queue_downsell_id_fkey
+      FOREIGN KEY (downsell_id)
+      REFERENCES public.bot_downsells(id)
+      ON DELETE CASCADE
+      NOT VALID;
+  END IF;
+END; $$;
 
 -- Remove órfãos: filas apontando para downsell inexistente
 DELETE FROM public.downsells_queue q
@@ -43,9 +53,19 @@ WHERE NOT EXISTS (
   WHERE d.id = q.downsell_id
 );
 
--- Agora valida a constraint com o conjunto já saneado
-ALTER TABLE public.downsells_queue
-  VALIDATE CONSTRAINT downsells_queue_downsell_id_fkey;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    WHERE t.relname = 'downsells_queue'
+      AND c.conname = 'downsells_queue_downsell_id_fkey'
+  ) THEN
+    ALTER TABLE IF EXISTS public.downsells_queue
+      VALIDATE CONSTRAINT downsells_queue_downsell_id_fkey;
+  END IF;
+END; $$;
 
 -- (Opcional) Índices úteis se ainda não existirem
 DO $$

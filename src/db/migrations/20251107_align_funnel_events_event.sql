@@ -23,7 +23,7 @@ BEGIN
   ) INTO v_event_name_exists;
 
   IF NOT v_event_exists AND v_event_name_exists THEN
-    EXECUTE 'ALTER TABLE public.funnel_events RENAME COLUMN event_name TO event';
+    EXECUTE 'ALTER TABLE IF EXISTS public.funnel_events RENAME COLUMN event_name TO event';
   END IF;
 END;
 $$;

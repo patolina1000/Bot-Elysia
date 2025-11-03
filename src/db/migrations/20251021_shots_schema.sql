@@ -35,56 +35,73 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'title'
   ) THEN
-    ALTER TABLE public.shots ADD COLUMN title TEXT;
+    ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS title TEXT;
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'copy'
   ) THEN
-    ALTER TABLE public.shots ADD COLUMN copy TEXT;
+    ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS copy TEXT;
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'media_url'
   ) THEN
-    ALTER TABLE public.shots ADD COLUMN media_url TEXT;
+    ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS media_url TEXT;
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'media_type'
   ) THEN
-    ALTER TABLE public.shots ADD COLUMN media_type TEXT;
+    ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS media_type TEXT;
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'target'
   ) THEN
-    ALTER TABLE public.shots ADD COLUMN target TEXT;
+    ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS target TEXT;
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'scheduled_at'
   ) THEN
-    ALTER TABLE public.shots ADD COLUMN scheduled_at TIMESTAMPTZ;
+    ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'shots' AND column_name = 'created_at'
   ) THEN
-    ALTER TABLE public.shots ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    ALTER TABLE IF EXISTS public.shots ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
   END IF;
 END; $$;
 
 -- Enforce NOT NULL and defaults
-ALTER TABLE public.shots
-  ALTER COLUMN bot_slug SET NOT NULL,
-  ALTER COLUMN created_at SET DEFAULT now();
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots'
+      AND column_name = 'bot_slug'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ALTER COLUMN bot_slug SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots'
+      AND column_name = 'created_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots ALTER COLUMN created_at SET DEFAULT now()';
+  END IF;
+END; $$;
 
 -- Media type constraint (photo, video, audio, document, none)
 DO $$
@@ -97,7 +114,7 @@ BEGIN
     -- No-op if constraint already exists
     NULL;
   ELSE
-    ALTER TABLE public.shots
+    ALTER TABLE IF EXISTS public.shots
       ADD CONSTRAINT shots_media_type_check
       CHECK (media_type IS NULL OR media_type IN ('photo', 'video', 'audio', 'document', 'none'));
   END IF;
@@ -113,7 +130,7 @@ BEGIN
   ) THEN
     NULL;
   ELSE
-    ALTER TABLE public.shots
+    ALTER TABLE IF EXISTS public.shots
       ADD CONSTRAINT shots_target_check
       CHECK (target IS NULL OR target IN ('all_started', 'pix_generated'));
   END IF;
@@ -155,13 +172,46 @@ CREATE TABLE IF NOT EXISTS public.shot_plans (
 );
 
 -- Columns & defaults
-ALTER TABLE public.shot_plans
-  ALTER COLUMN price_cents SET DEFAULT 0,
-  ALTER COLUMN price_cents SET NOT NULL,
-  ALTER COLUMN sort_order SET DEFAULT 0,
-  ALTER COLUMN sort_order SET NOT NULL,
-  ALTER COLUMN shot_id SET NOT NULL,
-  ALTER COLUMN name SET NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shot_plans'
+      AND column_name = 'price_cents'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ALTER COLUMN price_cents SET DEFAULT 0';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ALTER COLUMN price_cents SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shot_plans'
+      AND column_name = 'sort_order'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ALTER COLUMN sort_order SET DEFAULT 0';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ALTER COLUMN sort_order SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shot_plans'
+      AND column_name = 'shot_id'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ALTER COLUMN shot_id SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shot_plans'
+      AND column_name = 'name'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shot_plans ALTER COLUMN name SET NOT NULL';
+  END IF;
+END; $$;
 
 -- Foreign key to shots (idempotent)
 DO $$
@@ -171,7 +221,7 @@ BEGIN
     WHERE conname = 'shot_plans_shot_id_fkey'
       AND conrelid = 'public.shot_plans'::regclass
   ) THEN
-    ALTER TABLE public.shot_plans
+    ALTER TABLE IF EXISTS public.shot_plans
       ADD CONSTRAINT shot_plans_shot_id_fkey
       FOREIGN KEY (shot_id)
       REFERENCES public.shots(id)
@@ -207,15 +257,24 @@ BEGIN
       AND column_name = 'status'
       AND data_type = 'USER-DEFINED'
   ) THEN
-    ALTER TABLE public.shots_queue
+    ALTER TABLE IF EXISTS public.shots_queue
       ALTER COLUMN status TYPE TEXT USING status::TEXT;
   END IF;
 END; $$;
 
 -- Attempts defaults and NOT NULL
-ALTER TABLE IF EXISTS public.shots_queue
-  ALTER COLUMN attempts SET DEFAULT 0,
-  ALTER COLUMN attempts SET NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'attempts'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN attempts SET DEFAULT 0';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN attempts SET NOT NULL';
+  END IF;
+END; $$;
 
 -- Keep legacy attempt_count column aligned when present
 DO $$
@@ -227,14 +286,14 @@ BEGIN
       AND table_name = 'shots_queue'
       AND column_name = 'attempt_count'
   ) THEN
-    ALTER TABLE public.shots_queue
+    ALTER TABLE IF EXISTS public.shots_queue
       ALTER COLUMN attempt_count SET DEFAULT 0;
 
     UPDATE public.shots_queue
     SET attempt_count = COALESCE(attempt_count, 0)
     WHERE attempt_count IS NULL;
 
-    ALTER TABLE public.shots_queue
+    ALTER TABLE IF EXISTS public.shots_queue
       ALTER COLUMN attempt_count SET NOT NULL;
   END IF;
 END; $$;
@@ -266,17 +325,52 @@ BEGIN
 END; $$;
 
 -- Guarantee defaults/not nulls for timing columns
-ALTER TABLE IF EXISTS public.shots_queue
-  ALTER COLUMN created_at SET DEFAULT now(),
-  ALTER COLUMN updated_at SET DEFAULT now();
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'created_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN created_at SET DEFAULT now()';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'updated_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN updated_at SET DEFAULT now()';
+  END IF;
+END; $$;
 
 -- Allow scheduled_at to be nullable while preserving data
-ALTER TABLE IF EXISTS public.shots_queue
-  ALTER COLUMN scheduled_at DROP NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'scheduled_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN scheduled_at DROP NOT NULL';
+  END IF;
+END; $$;
 
 -- Status defaults
-ALTER TABLE IF EXISTS public.shots_queue
-  ALTER COLUMN status SET DEFAULT 'pending';
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'status'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN status SET DEFAULT ''pending''';
+  END IF;
+END; $$;
 
 -- Normalize status values and cap to the new domain
 UPDATE public.shots_queue
@@ -405,13 +499,62 @@ WHERE q.shot_id IS NOT NULL
   );
 
 -- Final NOT NULL enforcement after backfills
-ALTER TABLE IF EXISTS public.shots_queue
-  ALTER COLUMN bot_slug SET NOT NULL,
-  ALTER COLUMN telegram_id SET NOT NULL,
-  ALTER COLUMN shot_id SET NOT NULL,
-  ALTER COLUMN attempts SET NOT NULL,
-  ALTER COLUMN created_at SET NOT NULL,
-  ALTER COLUMN updated_at SET NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'bot_slug'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN bot_slug SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'telegram_id'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN telegram_id SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'shot_id'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN shot_id SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'attempts'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN attempts SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'created_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN created_at SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'updated_at'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN updated_at SET NOT NULL';
+  END IF;
+END; $$;
 
 -- Status constraint (pending|processing|success|error)
 DO $$
@@ -421,13 +564,19 @@ BEGIN
     WHERE conname = 'shots_queue_status_check'
       AND conrelid = 'public.shots_queue'::regclass
   ) THEN
-    ALTER TABLE public.shots_queue
-      DROP CONSTRAINT shots_queue_status_check;
+    ALTER TABLE IF EXISTS public.shots_queue
+      DROP CONSTRAINT IF EXISTS shots_queue_status_check;
   END IF;
 
-  ALTER TABLE public.shots_queue
-    ADD CONSTRAINT shots_queue_status_check
-    CHECK (status IN ('pending', 'processing', 'success', 'error'));
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'shots_queue_status_check'
+      AND conrelid = 'public.shots_queue'::regclass
+  ) THEN
+    ALTER TABLE IF EXISTS public.shots_queue
+      ADD CONSTRAINT shots_queue_status_check
+      CHECK (status IN ('pending', 'processing', 'success', 'error'));
+  END IF;
 END; $$;
 
 -- Attempts constraint sync trigger to keep attempt_count compatible
@@ -485,7 +634,7 @@ BEGIN
     WHERE conname = 'shots_queue_shot_id_fkey'
       AND conrelid = 'public.shots_queue'::regclass
   ) THEN
-    ALTER TABLE public.shots_queue
+    ALTER TABLE IF EXISTS public.shots_queue
       ADD CONSTRAINT shots_queue_shot_id_fkey
       FOREIGN KEY (shot_id)
       REFERENCES public.shots(id)

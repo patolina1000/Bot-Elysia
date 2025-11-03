@@ -17,7 +17,7 @@ DO $$ BEGIN
       AND table_name = 'shots_sent'
       AND column_name = 'status'
   ) THEN
-    EXECUTE 'ALTER TABLE public.shots_sent ADD COLUMN status TEXT NOT NULL DEFAULT ''sent'' CHECK (status IN (''sent'', ''skipped'', ''error''))';
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_sent ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT ''sent'' CHECK (status IN (''sent'', ''skipped'', ''error''))';
   END IF;
 END; $$;
 

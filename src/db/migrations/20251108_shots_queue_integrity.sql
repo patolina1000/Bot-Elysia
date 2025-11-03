@@ -73,10 +73,35 @@ BEGIN
   RAISE NOTICE '[MIG][SHOTS_QUEUE] Deleted rows still missing bot_slug: %', deleted_missing_bot;
 END; $$;
 
-ALTER TABLE public.shots_queue
-  ALTER COLUMN shot_id SET NOT NULL,
-  ALTER COLUMN bot_slug SET NOT NULL,
-  ALTER COLUMN telegram_id SET NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'shot_id'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN shot_id SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'bot_slug'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN bot_slug SET NOT NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'shots_queue'
+      AND column_name = 'telegram_id'
+  ) THEN
+    EXECUTE 'ALTER TABLE IF EXISTS public.shots_queue ALTER COLUMN telegram_id SET NOT NULL';
+  END IF;
+END; $$;
 
 -- Remove legacy indexes that conflict with the target naming.
 DO $$

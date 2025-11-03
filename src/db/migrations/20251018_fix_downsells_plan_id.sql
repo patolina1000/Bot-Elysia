@@ -6,7 +6,7 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema='public' AND table_name='bot_downsells' AND column_name='plan_id'
   ) THEN
-    EXECUTE 'ALTER TABLE public.bot_downsells ADD COLUMN plan_id INTEGER NULL';
+    EXECUTE 'ALTER TABLE IF EXISTS public.bot_downsells ADD COLUMN IF NOT EXISTS plan_id INTEGER NULL';
   END IF;
 
   -- FK bot_downsells.plan_id -> bot_plans(id)
@@ -17,7 +17,7 @@ BEGIN
     WHERE t.relname = 'bot_downsells' AND c.conname = 'bot_downsells_plan_id_fkey'
   ) THEN
     EXECUTE '
-      ALTER TABLE public.bot_downsells
+      ALTER TABLE IF EXISTS public.bot_downsells
         ADD CONSTRAINT bot_downsells_plan_id_fkey
         FOREIGN KEY (plan_id)
         REFERENCES public.bot_plans(id)
@@ -32,7 +32,7 @@ BEGIN
     WHERE table_schema='public' AND table_name='bot_downsells'
       AND column_name='price_cents' AND is_nullable = 'NO'
   ) THEN
-    EXECUTE 'ALTER TABLE public.bot_downsells ALTER COLUMN price_cents DROP NOT NULL';
+    EXECUTE 'ALTER TABLE IF EXISTS public.bot_downsells ALTER COLUMN price_cents DROP NOT NULL';
   END IF;
 END; $$;
 

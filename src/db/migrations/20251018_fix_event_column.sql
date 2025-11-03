@@ -9,9 +9,9 @@ BEGIN
       SELECT 1 FROM information_schema.columns
       WHERE table_schema='public' AND table_name='funnel_events' AND column_name='event_name'
     ) THEN
-      EXECUTE 'ALTER TABLE public.funnel_events RENAME COLUMN event_name TO event';
+      EXECUTE 'ALTER TABLE IF EXISTS public.funnel_events RENAME COLUMN event_name TO event';
     ELSE
-      EXECUTE 'ALTER TABLE public.funnel_events ADD COLUMN event TEXT';
+      EXECUTE 'ALTER TABLE IF EXISTS public.funnel_events ADD COLUMN IF NOT EXISTS event TEXT';
     END IF;
   END IF;
 
