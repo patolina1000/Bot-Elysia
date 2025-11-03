@@ -71,11 +71,12 @@ startFeature.command('start', async (ctx) => {
     try {
       const keyboard = await buildPlansKeyboard(ctx.bot_slug);
       if (keyboard) {
-        const settings = await getSettings(ctx.bot_slug).catch(() => ({ bot_slug: ctx.bot_slug, pix_image_url: null, offers_text: null }));
+        let settings: { offers_text: string | null } | null = null;
+        try {
+          settings = await getSettings(ctx.bot_slug);
+        } catch { /* ignore and use fallback */ }
         const offersText = settings?.offers_text?.trim() || 'Escolha uma oferta abaixo:';
-        await ctx.reply(offersText, {
-          reply_markup: keyboard,
-        });
+        await ctx.reply(offersText, { reply_markup: keyboard });
       }
     } catch (plansError) {
       ctx.logger.warn({ err: plansError }, '[START] failed to load plans');
