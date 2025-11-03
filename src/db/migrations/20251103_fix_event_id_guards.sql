@@ -8,13 +8,12 @@ BEGIN
     ALTER TABLE public.funnel_events ADD COLUMN event_id TEXT;
   END IF;
 
-  -- NOT NULL (só se não houver nulos)
+  -- NOT NULL (só se não houver nulos; em banco novo passa sem erro)
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema='public' AND table_name='funnel_events'
       AND column_name='event_id' AND is_nullable='YES'
   ) THEN
-    -- se tiver dado histórico com NULL isso vai falhar; em banco novo passa liso
     ALTER TABLE public.funnel_events ALTER COLUMN event_id SET NOT NULL;
   END IF;
 
