@@ -1,3 +1,4 @@
+import type { InlineKeyboardMarkup } from '@grammyjs/types';
 import { pool } from '../db/pool.js';
 import { logger } from '../logger.js';
 import { selectAudience, type AudienceMember } from '../services/shots/audienceSelector.js';
@@ -82,9 +83,12 @@ async function resolveBotSlug(botId: string): Promise<string | null> {
   return rows[0]?.slug ?? null;
 }
 
-function buildInlineKeyboard(buttons?: Button[]) {
+function buildInlineKeyboard(buttons?: Button[]): InlineKeyboardMarkup | undefined {
   if (!buttons || buttons.length === 0) return undefined;
-  const rows = buttons.map((b) => [{ text: b.text, url: b.url ?? undefined }]);
+  const rows = buttons
+    .filter((button) => Boolean(button.url))
+    .map((button) => [{ text: button.text, url: button.url! }]);
+  if (rows.length === 0) return undefined;
   return { inline_keyboard: rows };
 }
 
