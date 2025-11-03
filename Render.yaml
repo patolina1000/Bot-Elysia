@@ -8,7 +8,7 @@ services:
     region: oregon
     plan: starter
     buildCommand: npm install && npm run build && npm run migrate
-    startCommand: npm start
+    startCommand: '[ "$MIGRATIONS_ACCEPT" = "1" ] && node dist/db/sanity/reconcileMigrations.js --accept; node dist/db/sanity/migrationsStatus.js && node dist/db/runMigrations.js && node dist/server.js'
     envVars:
       - key: PORT
         value: 8080

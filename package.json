@@ -20,6 +20,7 @@
     "migrate:verify:fix-eol": "tsx scripts/verifyMigrations.ts --fix-eol",
     "sanity:migrations": "node dist/db/sanity/migrationsSanity.js",
     "sanity:migrations:status": "node dist/db/sanity/migrationsStatus.js",
+    "sanity:migrations:reconcile": "node dist/db/sanity/reconcileMigrations.js",
     "jobs:campaigns": "tsx src/jobs/runCampaigns.ts",
     "jobs:housekeeping": "tsx src/jobs/housekeeping.ts",
     "check:core-start": "tsx scripts/check-core-start.ts",
