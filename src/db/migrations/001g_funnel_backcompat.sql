@@ -1,6 +1,6 @@
 -- Garante colunas opcionais usadas por FunnelService e índices comuns. Idempotente.
 
-ALTER TABLE IF EXISTS public.funnel_events
+ALTER TABLE public.funnel_events
   ADD COLUMN IF NOT EXISTS price_cents    INTEGER,
   ADD COLUMN IF NOT EXISTS session_id     TEXT,
   ADD COLUMN IF NOT EXISTS payload_id     TEXT,
