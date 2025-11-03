@@ -14,11 +14,10 @@ BEGIN
     WHERE table_schema='public' AND table_name='funnel_events' AND column_name='occurred_at'
   ) THEN
     ALTER TABLE public.funnel_events ADD COLUMN occurred_at timestamptz NOT NULL DEFAULT now();
-    -- se existir created_at e estiver sem occurred_at em linhas antigas, copia um valor razoável
     UPDATE public.funnel_events SET occurred_at = created_at WHERE occurred_at IS NULL;
   END IF;
 
-  -- índice occurred_at (para consultas por tempo)
+  -- índice occurred_at
   IF NOT EXISTS (
     SELECT 1 FROM pg_indexes
     WHERE schemaname='public' AND tablename='funnel_events' AND indexname='ix_funnel_occurred_at'
@@ -26,7 +25,7 @@ BEGIN
     CREATE INDEX ix_funnel_occurred_at ON public.funnel_events (occurred_at);
   END IF;
 
-  -- remover índice antigo em created_at se existir com esse nome
+  -- dropar índice antigo em created_at (se existir)
   IF EXISTS (
     SELECT 1 FROM pg_indexes
     WHERE schemaname='public' AND tablename='funnel_events' AND indexname='ix_funnel_created_at'
