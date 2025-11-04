@@ -26,5 +26,16 @@ ALTER TABLE IF EXISTS public.downsells_sent
 --    Caso ainda não exista:
 ALTER TABLE IF EXISTS public.payment_transactions
   ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}'::jsonb;
-CREATE INDEX IF NOT EXISTS ix_payment_transactions_meta_gin
-  ON public.payment_transactions USING GIN (meta);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'payment_transactions'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS ix_payment_transactions_meta_gin
+      ON public.payment_transactions USING GIN (meta)';
+  END IF;
+END; $$;
