@@ -21,8 +21,7 @@ function resolveMigrationsDir(): string {
 }
 
 const MIGRATIONS_DIR = resolveMigrationsDir();
-const MIGRATIONS_FORCE =
-  process.env.MIGRATIONS_FORCE === "1" || process.env.MIGRATIONS_ACCEPT === "1";
+const MIGRATIONS_FORCE = process.env.MIGRATIONS_FORCE === "1";
 
 async function ensureMigrationsTable() {
   await pool.query(`
