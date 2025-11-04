@@ -21,7 +21,25 @@ function resolveMigrationsDir(): string {
 }
 
 const MIGRATIONS_DIR = resolveMigrationsDir();
-const MIGRATIONS_FORCE = process.env.MIGRATIONS_FORCE === "1";
+
+const MIGRATIONS_FORCE_RAW = process.env.MIGRATIONS_FORCE === "1";
+const MIGRATIONS_FORCE_ACK = process.env.MIGRATIONS_FORCE_ACK === "1";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+if (MIGRATIONS_FORCE_RAW && IS_PRODUCTION && !MIGRATIONS_FORCE_ACK) {
+  logger.error(
+    {
+      MIGRATIONS_FORCE: MIGRATIONS_FORCE_RAW,
+      NODE_ENV: process.env.NODE_ENV,
+    },
+    "[migrations] MIGRATIONS_FORCE está bloqueado em produção. Use reconcileMigrations ou defina MIGRATIONS_FORCE_ACK=1 conscientemente."
+  );
+  throw new Error(
+    "MIGRATIONS_FORCE não é permitido em produção sem MIGRATIONS_FORCE_ACK."
+  );
+}
+
+const MIGRATIONS_FORCE = MIGRATIONS_FORCE_RAW && (!IS_PRODUCTION || MIGRATIONS_FORCE_ACK);
 
 async function ensureMigrationsTable() {
   await pool.query(`
