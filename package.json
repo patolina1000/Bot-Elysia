@@ -14,6 +14,7 @@
     "copy-public": "node scripts/copyPublic.js",
     "check:migrations": "tsx scripts/check-migrations-no-transactions.ts",
     "start": "node dist/server.js",
+    "start:render": "[ \"$MIGRATIONS_ACCEPT\" = \"1\" ] && node dist/db/sanity/reconcileMigrations.js --accept; node dist/db/sanity/migrationsStatus.js && node dist/db/runMigrations.js && node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/runMigrations.ts",
     "migrate:verify": "tsx scripts/verifyMigrations.ts",
