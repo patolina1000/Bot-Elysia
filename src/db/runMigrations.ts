@@ -21,6 +21,8 @@ function resolveMigrationsDir(): string {
 }
 
 const MIGRATIONS_DIR = resolveMigrationsDir();
+const MIGRATIONS_FORCE =
+  process.env.MIGRATIONS_FORCE === "1" || process.env.MIGRATIONS_ACCEPT === "1";
 
 async function ensureMigrationsTable() {
   await pool.query(`
@@ -122,6 +124,17 @@ async function run() {
           logger.info(
             { file },
             "[migrations] normalized checksum updated (EOL normalized)"
+          );
+          continue;
+        }
+        if (MIGRATIONS_FORCE) {
+          logger.warn(
+            {
+              file,
+              dbChecksum: existingChecksum,
+              fileChecksum: checksumRaw,
+            },
+            "[migrations] checksum mismatch (IGNORANDO GUARD POR MIGRATIONS_FORCE)"
           );
           continue;
         }
