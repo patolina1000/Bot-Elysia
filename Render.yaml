@@ -27,6 +27,9 @@ services:
       - key: ADMIN_API_TOKEN
         generateValue: true
         description: "Token para acessar admin APIs (gerado automaticamente)"
+      - key: MIGRATIONS_FORCE_ACK
+        value: "1"
+        description: "Confirma conscientemente o uso de MIGRATIONS_FORCE em produção. Necessário enquanto MIGRATIONS_FORCE=1 estiver configurado."
     healthCheckPath: /health
 
 databases:
